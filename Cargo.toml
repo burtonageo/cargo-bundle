@@ -1,0 +1,9 @@
+[package]
+name = "cargo-bundle"
+version = "0.1.0"
+authors = ["George Burton <burtonageo@gmail.com>"]
+
+[dependencies]
+clap = "^1.5"
+plist = "0.*"
+toml = "^0.1"
