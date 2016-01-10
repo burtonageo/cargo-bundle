@@ -35,7 +35,7 @@ impl CargoSettings {
         }
 
         let _cargo_file = try!(cargo_file.ok_or(Box::from("Could not find Cargo.toml in project directory")));
-        let mut target_dir = project_dir.clone(); 
+        let mut target_dir = project_dir.clone();
 
         target_dir.push("target");
         Ok(CargoSettings {
@@ -87,8 +87,8 @@ impl Settings {
                             return Err(Box::from(format!("{:?} should be a file", path)));
                         }
                     } else {
-                        return Err(Box::from(format!("Invalid format for script value in \
-                                                      Bundle.toml: Expected string, found {:?}",
+                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
+                                                      Expected string, found {:?}",
                                                      value)));
                     }
                 }
@@ -96,11 +96,10 @@ impl Settings {
                     if let Value::String(s) = value {
                         bundle_name = s;
                     } else {
-                        return Err(Box::from(format!("Invalid format for bundle name value in \
-                                                      Bundle.toml: Expected string, found {:?}",
+                        return Err(Box::from(format!("Invalid format for bundle name value in Bundle.toml: \
+                                                      Expected string, found {:?}",
                                                      value)));
                     }
-                    
                 }
                 _ => {}
             }
@@ -135,8 +134,8 @@ fn main() {
             .and_then(|d| Settings::new(d, m))
             .and_then(bundle_project)
             .unwrap_or_else(|e| {
-            println!("{}", e.description());
-            process::exit(1);
-        });
+                println!("{}", e.description());
+                process::exit(1);
+            });
     }
 }
