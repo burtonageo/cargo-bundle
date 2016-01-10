@@ -48,6 +48,7 @@ impl CargoSettings {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
     pub cargo_settings: CargoSettings,
+    pub package_type: Option<PackageType>, // If `None`, use the default package type for this os
     pub is_release: bool,
     pub bundle_name: String,
     pub out_resource_path: PathBuf,
@@ -107,12 +108,20 @@ impl Settings {
 
         Ok(Settings {
             cargo_settings: cargo_settings,
+            package_type: None,
             is_release: matches.is_present("release"),
             bundle_name: bundle_name,
             out_resource_path: PathBuf::from(env!("CARGO_PKG_VERSION")),
             bundle_script: bundle_script
         })
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PackageType {
+    OsxBundle,
+    Deb,
+    Rpm
 }
 
 fn main() {
