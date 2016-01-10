@@ -1,5 +1,7 @@
 # Cargo bundle
 
+__Wrap rust executables in OS-specific app bundles__
+
 ## About
 
  `cargo-bundle` is a tool used to generate installers or app bundles for executables built with `cargo`.
