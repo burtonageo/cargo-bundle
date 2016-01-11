@@ -14,16 +14,17 @@ use std::io::prelude::*;
 use std::marker::{Send, Sync};
 use std::path::{Path, PathBuf};
 use std::process;
-use toml::{Parser, Value};
+use toml::{Parser, Table, Value};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CargoSettings {
     pub project_home_directory: PathBuf,
-    pub project_out_directory: PathBuf
+    pub project_out_directory: PathBuf,
+    pub binary_file: PathBuf
 }
 
 impl CargoSettings {
-    fn new(project_home_directory: &Path) -> Result<Self, Box<Error + Send + Sync>> {
+    fn new(project_home_directory: &Path, is_release: bool) -> Result<Self, Box<Error + Send + Sync>> {
         let project_dir = project_home_directory.to_path_buf();
         let mut cargo_file = None;
         for node in try!(project_dir.read_dir()) {
@@ -34,13 +35,51 @@ impl CargoSettings {
             }
         }
 
-        let _cargo_file = try!(cargo_file.ok_or(Box::from("Could not find Cargo.toml in project directory")));
         let mut target_dir = project_dir.clone();
+        let build_config = if is_release { "release" } else { "debug" };
 
         target_dir.push("target");
+        target_dir.push(build_config);
+
+        if !target_dir.exists() {
+            let mut err_msg = String::from(format!("Could not find correct target dir for {:?} configuration. Please \
+                                                    build your project",
+                                                   build_config));
+
+            if is_release {
+                err_msg.push_str(" with the --release flag.");
+            } else {
+                err_msg.push('.');
+            }
+            return Err(Box::from(err_msg));
+        }
+
+        let cargo_info = try!(cargo_file.ok_or(Box::from("Could not find Cargo.toml in project directory"))
+                                        .and_then(load_toml));
+
+        let mut binary_file = target_dir.clone();
+        for (name, value) in cargo_info {
+            match &name[..] {
+                "name" => {
+                    if let Value::String(s) = value {
+                        binary_file.push(s);
+                        if !binary_file.is_file() {
+                            return Err(Box::from(format!("Built executable should be a file {:?}.", binary_file)));
+                        }
+                    } else {
+                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml:
+                                                      Expected string, found {:?}",
+                                                     value)));
+                    }
+                }
+                _ => {}
+            }
+        }
+
         Ok(CargoSettings {
             project_home_directory: project_dir,
-            project_out_directory: target_dir
+            project_out_directory: target_dir,
+            binary_file: binary_file
         })
     }
 }
@@ -58,7 +97,7 @@ pub struct Settings {
 impl Settings {
     pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> Result<Self, Box<Error + Send + Sync>> {
         let is_release = matches.is_present("release");
-        let cargo_settings = try!(CargoSettings::new(&current_dir));
+        let cargo_settings = try!(CargoSettings::new(&current_dir, is_release));
         let out_res_path = cargo_settings.project_out_directory.clone();
 
         let mut settings = Settings {
@@ -69,23 +108,14 @@ impl Settings {
             out_resource_path: out_res_path,
             bundle_script: None
         };
-        
+
         {
-            let mut toml_str = String::new();
-            let mut toml = {
-                let mut toml_bundle_path = current_dir.clone();
-                toml_bundle_path.push("Bundle.toml");
-            
-                if !toml_bundle_path.exists() {
-                    return Err(Box::from(format!("Could not find Bundle.toml file in path {:?}", current_dir)));
-                }
-            
-                try!(File::open(toml_bundle_path).and_then(|mut file| file.read_to_string(&mut toml_str)));
-                Parser::new(&toml_str)
-            };
-            
-            let table = try!(toml.parse().ok_or(Box::from("Could not parse Toml file")));
-    
+            let table = try!({
+                let mut f = current_dir.clone();
+                f.push("Bundle.toml");
+                load_toml(f)
+            });
+
             for (name, value) in table {
                 match &name[..] {
                     "script" => {
@@ -125,6 +155,17 @@ pub enum PackageType {
     OsxBundle,
     Deb,
     Rpm
+}
+
+fn load_toml(toml_file: PathBuf) -> Result<Table, Box<Error + Send + Sync>> {
+    if !toml_file.exists() {
+        return Err(Box::from(format!("Could not find Bundle.toml file in path {:?}", toml_file)));
+    }
+
+    let mut toml_str = String::new();
+    try!(File::open(toml_file).and_then(|mut file| file.read_to_string(&mut toml_str)));
+
+    Ok(try!(Parser::new(&toml_str).parse().ok_or(Box::from("Could not parse Toml file"))))
 }
 
 fn main() {
