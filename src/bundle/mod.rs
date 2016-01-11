@@ -26,11 +26,10 @@ pub fn bundle_project(settings: Settings) -> Result<(), Box<Error + Send + Sync>
     match settings.package_type {
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
         Some(PackageType::Rpm) => rpm_bundle::bundle_project(&settings),
-        None => {
-            deb_bundle::bundle_project(&settings).and_then(|_| rpm_bundle::bundle_project(&settings))
-        }
+        None => deb_bundle::bundle_project(&settings).and_then(|_| rpm_bundle::bundle_project(&settings)),
         Some(otherwise@_) => {
-            Err(Box::from(format!("Wrong bundle type {:?}, can only be either `deb` or `rpm`", otherwise)))
+            Err(Box::from(format!("Wrong bundle type {:?}, can only be either `deb` or `rpm`",
+                                  otherwise)))
         }
     }
 }
