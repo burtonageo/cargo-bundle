@@ -57,63 +57,66 @@ pub struct Settings {
 
 impl Settings {
     pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> Result<Self, Box<Error + Send + Sync>> {
+        let is_release = matches.is_present("release");
         let cargo_settings = try!(CargoSettings::new(&current_dir));
+        let out_res_path = cargo_settings.project_out_directory.clone();
 
-        let mut toml_str = String::new();
-        let mut toml = {
-            let mut toml_bundle_path = current_dir.clone();
-            toml_bundle_path.push("Bundle.toml");
-
-            if !toml_bundle_path.exists() {
-                return Err(Box::from(format!("Could not find Bundle.toml file in path {:?}", current_dir)));
-            }
-
-            try!(File::open(toml_bundle_path).and_then(|mut file| file.read_to_string(&mut toml_str)));
-            Parser::new(&toml_str)
+        let mut settings = Settings {
+            cargo_settings: cargo_settings,
+            package_type: None,
+            is_release: is_release,
+            bundle_name: String::new(),
+            out_resource_path: out_res_path,
+            bundle_script: None
         };
-
-        let table = try!(toml.parse().ok_or(Box::from("Could not parse Toml file")));
-
-        let mut bundle_script = None;
-        let mut bundle_name = String::new();
-
-        for (name, value) in table {
-            match &name[..] {
-                "script" => {
-                    if let Value::String(s) = value {
-                        let path = PathBuf::from(s);
-                        if path.is_file() {
-                            bundle_script = Some(path);
+        
+        {
+            let mut toml_str = String::new();
+            let mut toml = {
+                let mut toml_bundle_path = current_dir.clone();
+                toml_bundle_path.push("Bundle.toml");
+            
+                if !toml_bundle_path.exists() {
+                    return Err(Box::from(format!("Could not find Bundle.toml file in path {:?}", current_dir)));
+                }
+            
+                try!(File::open(toml_bundle_path).and_then(|mut file| file.read_to_string(&mut toml_str)));
+                Parser::new(&toml_str)
+            };
+            
+            let table = try!(toml.parse().ok_or(Box::from("Could not parse Toml file")));
+    
+            for (name, value) in table {
+                match &name[..] {
+                    "script" => {
+                        if let Value::String(s) = value {
+                            let path = PathBuf::from(s);
+                            if path.is_file() {
+                                settings.bundle_script = Some(path);
+                            } else {
+                                return Err(Box::from(format!("{:?} should be a file", path)));
+                            }
                         } else {
-                            return Err(Box::from(format!("{:?} should be a file", path)));
+                            return Err(Box::from(format!("Invalid format for script value in Bundle.toml:
+                                                          Expected string, found {:?}",
+                                                         value)));
                         }
-                    } else {
-                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
-                                                      Expected string, found {:?}",
-                                                     value)));
                     }
-                }
-                "name" => {
-                    if let Value::String(s) = value {
-                        bundle_name = s;
-                    } else {
-                        return Err(Box::from(format!("Invalid format for bundle name value in Bundle.toml: \
-                                                      Expected string, found {:?}",
-                                                     value)));
+                    "name" => {
+                        if let Value::String(s) = value {
+                            settings.bundle_name = s;
+                        } else {
+                            return Err(Box::from(format!("Invalid format for bundle name value in Bundle.toml:
+                                                          Expected string, found {:?}",
+                                                         value)));
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 
-        Ok(Settings {
-            cargo_settings: cargo_settings,
-            package_type: None,
-            is_release: matches.is_present("release"),
-            bundle_name: bundle_name,
-            out_resource_path: PathBuf::from(env!("CARGO_PKG_VERSION")),
-            bundle_script: bundle_script
-        })
+        Ok(settings)
     }
 }
 
@@ -139,7 +142,7 @@ fn main() {
 
     if let Some(m) = m.subcommand_matches("bundle") {
         env::current_dir()
-            .map_err(|e| Box::new(e) as Box<_>)
+            .map_err(Box::from)
             .and_then(|d| Settings::new(d, m))
             .and_then(bundle_project)
             .unwrap_or_else(|e| {
