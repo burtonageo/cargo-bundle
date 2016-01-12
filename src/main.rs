@@ -100,6 +100,7 @@ pub struct Settings {
     pub package_type: Option<PackageType>, // If `None`, use the default package type for this os
     pub is_release: bool,
     pub bundle_name: String,
+    pub identifier: String, // Unique identifier for the bundle
     pub out_resource_path: PathBuf,
     pub bundle_script: Option<PathBuf>
 }
@@ -147,6 +148,15 @@ impl Settings {
                             settings.bundle_name = s;
                         } else {
                             return Err(Box::from(format!("Invalid format for bundle name value in Bundle.toml:
+                                                          Expected string, found {:?}",
+                                                         value)));
+                        }
+                    }
+                    "identifier" => {
+                        if let Value::String(s) = value {
+                            settings.identifier = s;
+                        } else {
+                            return Err(Box::from(format!("Invalid format for bundle identifier value in Bundle.toml:
                                                           Expected string, found {:?}",
                                                          value)));
                         }
