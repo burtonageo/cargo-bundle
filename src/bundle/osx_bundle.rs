@@ -21,17 +21,20 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
         File::create(f).map_err(Box::from)
     });
 
-    let bin_name = try!(settings.cargo_settings.binary_file.file_name()
-                            .and_then(OsStr::to_str)
-                            .map(|s| s.to_string())
-                            .ok_or(Box::from("Could not get file name of binary file.")));
+    let bin_name = try!(settings.cargo_settings
+                                .binary_file
+                                .file_name()
+                                .and_then(OsStr::to_str)
+                                .map(|s| s.to_string())
+                                .ok_or(Box::from("Could not get file name of binary file.")));
 
     {
         // I wanted this to be a const &'static str, but unfortunately it has to be a string literal.
         // Can't wait to bring on the const fns!
         let contents = format!("\
             <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
-            <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+            <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
+                        \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
             <plist version=\"1.0\">\n\
             <dict>\n\
                 <key>CFBundleDevelopmentRegion</key>\n\
@@ -66,7 +69,12 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
                 <string>{}</string>\n\
             </dict>\n\
             </plist>",
-            bin_name, "", settings.bundle_name, "", "", "");
+                               bin_name,
+                               "",
+                               settings.bundle_name,
+                               "",
+                               "",
+                               "");
 
         try!(plist.write_all(&contents.into_bytes()[..]).map_err(Box::from));
         try!(plist.sync_all().map_err(Box::from));
