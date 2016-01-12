@@ -16,5 +16,5 @@ point.
 
 ## License
 
-This program is licensed under the terms of the GNU General Public license version 3 or later. For the full
-text of this license, please see the [GNU Project website](http://www.gnu.org/licenses/gpl-3.0.en.html).
+This program is licensed either under the terms of the [Apache Software License](http://www.apache.org/licenses/LICENSE-2.0.),
+or the [MIT License](https://opensource.org/licenses/MIT). 
