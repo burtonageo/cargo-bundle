@@ -60,19 +60,29 @@ impl CargoSettings {
         let mut binary_file = target_dir.clone();
         for (name, value) in cargo_info {
             match &name[..] {
-                "name" => {
-                    if let Value::String(s) = value {
-                        binary_file.push(s);
-                        if !binary_file.is_file() {
-                            return Err(Box::from(format!("Built executable should be a file {:?}.", binary_file)));
+                "package" => {
+                    if let Value::Table(table) = value {
+                        for (name, value) in table {
+                            match &name[..] {
+                                "name" => {
+                                    if let Value::String(s) = value {
+                                        binary_file.push(s);
+                                        if !binary_file.is_file() {
+                                            return Err(Box::from(format!("Built executable should be a file {:?}.",
+                                                                         binary_file)));
+                                        }
+                                    } else {
+                                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml:
+                                                                      Expected string, found {:?}",
+                                                                     value)));
+                                    }
+                                }
+                                _ => { }
+                            }
                         }
-                    } else {
-                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml:
-                                                      Expected string, found {:?}",
-                                                     value)));
                     }
                 }
-                _ => {}
+                _ => { }
             }
         }
 
