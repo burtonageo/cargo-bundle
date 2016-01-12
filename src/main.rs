@@ -72,7 +72,7 @@ impl CargoSettings {
                                                                          binary_file)));
                                         }
                                     } else {
-                                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml:
+                                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
                                                                       Expected string, found {:?}",
                                                                      value)));
                                     }
@@ -138,7 +138,7 @@ impl Settings {
                                 return Err(Box::from(format!("{:?} should be a file", path)));
                             }
                         } else {
-                            return Err(Box::from(format!("Invalid format for script value in Bundle.toml:
+                            return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
                                                           Expected string, found {:?}",
                                                          value)));
                         }
@@ -147,7 +147,7 @@ impl Settings {
                         if let Value::String(s) = value {
                             settings.bundle_name = s;
                         } else {
-                            return Err(Box::from(format!("Invalid format for bundle name value in Bundle.toml:
+                            return Err(Box::from(format!("Invalid format for bundle name value in Bundle.toml: \
                                                           Expected string, found {:?}",
                                                          value)));
                         }
@@ -156,7 +156,7 @@ impl Settings {
                         if let Value::String(s) = value {
                             settings.identifier = s;
                         } else {
-                            return Err(Box::from(format!("Invalid format for bundle identifier value in Bundle.toml:
+                            return Err(Box::from(format!("Invalid format for bundle identifier value in Bundle.toml: \
                                                           Expected string, found {:?}",
                                                          value)));
                         }
@@ -196,8 +196,8 @@ fn main() {
                 .bin_name("cargo")
                 .settings(&[AppSettings::GlobalVersion, AppSettings::SubcommandRequired])
                 .subcommand(SubCommand::with_name("bundle").args_from_usage(
-                    "-d --resources-directory [DIR] 'Directory which contains bundle resources (images, etc)'
-                     -r --release 'Build a bundle from a target built in release mode'
+                    "-d --resources-directory [DIR] 'Directory which contains bundle resources (images, etc)'\n\
+                     -r --release 'Build a bundle from a target built in release mode'\n\
                      -f --format [FORMAT] 'Which format to use for the bundle'"))
                 .get_matches();
 
