@@ -16,11 +16,23 @@ use std::path::{Path, PathBuf};
 use std::process;
 use toml::{Parser, Table, Value};
 
+macro_rules! simple_parse {
+    ($assign:expr, $toml_ty:ident, $value:expr, $msg:expr) => (
+        if let Value::$toml_ty(x) = $value {
+            $assign = x;
+        } else {
+            return Err(Box::from(format!($msg, $value)));
+        }
+    )
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CargoSettings {
     pub project_home_directory: PathBuf,
     pub project_out_directory: PathBuf,
-    pub binary_file: PathBuf
+    pub binary_file: PathBuf,
+    pub version: String,
+    pub description: String
 }
 
 impl CargoSettings {
@@ -57,7 +69,14 @@ impl CargoSettings {
         let cargo_info = try!(cargo_file.ok_or(Box::from("Could not find Cargo.toml in project directory"))
                                         .and_then(load_toml));
 
-        let mut binary_file = target_dir.clone();
+        let mut settings = CargoSettings {
+            project_home_directory: project_dir,
+            project_out_directory: target_dir,
+            binary_file: PathBuf::new(),
+            version: String::new(),
+            description: String::new()
+        };
+
         for (name, value) in cargo_info {
             match &name[..] {
                 "package" => {
@@ -66,16 +85,31 @@ impl CargoSettings {
                             match &name[..] {
                                 "name" => {
                                     if let Value::String(s) = value {
-                                        binary_file.push(s);
-                                        if !binary_file.is_file() {
+                                        settings.binary_file = settings.project_out_directory.clone();
+                                        settings.binary_file.push(s);
+                                        if !settings.binary_file.is_file() {
                                             return Err(Box::from(format!("Built executable should be a file {:?}.",
-                                                                         binary_file)));
+                                                                         settings.binary_file)));
                                         }
                                     } else {
                                         return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
                                                                       Expected string, found {:?}",
                                                                      value)));
                                     }
+                                }
+                                "version" => {
+                                    simple_parse!(settings.version,
+                                                  String,
+                                                  value,
+                                                  "Invalid format for version value in Bundle.toml: Expected \
+                                                   string, found {:?}")
+                                }
+                                "description" => {
+                                    simple_parse!(settings.description,
+                                                  String,
+                                                  value,
+                                                  "Invalid format for description value in Bundle.toml: Expected \
+                                                   string, found {:?}")
                                 }
                                 _ => {}
                             }
@@ -86,11 +120,7 @@ impl CargoSettings {
             }
         }
 
-        Ok(CargoSettings {
-            project_home_directory: project_dir,
-            project_out_directory: target_dir,
-            binary_file: binary_file
-        })
+        Ok(settings)
     }
 }
 
@@ -101,6 +131,7 @@ pub struct Settings {
     pub is_release: bool,
     pub bundle_name: String,
     pub identifier: String, // Unique identifier for the bundle
+    pub version_str: Option<String>,
     pub out_resource_path: PathBuf,
     pub bundle_script: Option<PathBuf>
 }
@@ -117,6 +148,7 @@ impl Settings {
             is_release: is_release,
             bundle_name: String::new(),
             identifier: String::new(),
+            version_str: None,
             out_resource_path: out_res_path,
             bundle_script: None
         };
@@ -145,22 +177,18 @@ impl Settings {
                         }
                     }
                     "name" => {
-                        if let Value::String(s) = value {
-                            settings.bundle_name = s;
-                        } else {
-                            return Err(Box::from(format!("Invalid format for bundle name value in Bundle.toml: \
-                                                          Expected string, found {:?}",
-                                                         value)));
-                        }
+                        simple_parse!(settings.bundle_name,
+                                      String,
+                                      value,
+                                      "Invalid format for bundle name value in Bundle.toml: \
+                                       Expected string, found {:?}")
                     }
                     "identifier" => {
-                        if let Value::String(s) = value {
-                            settings.identifier = s;
-                        } else {
-                            return Err(Box::from(format!("Invalid format for bundle identifier value in Bundle.toml: \
-                                                          Expected string, found {:?}",
-                                                         value)));
-                        }
+                        simple_parse!(settings.identifier,
+                                      String,
+                                      value,
+                                      "Invalid format for bundle identifier value in Bundle.toml: \
+                                       Expected string, found {:?}")
                     }
                     _ => {}
                 }
@@ -180,7 +208,7 @@ pub enum PackageType {
 
 fn load_toml(toml_file: PathBuf) -> Result<Table, Box<Error + Send + Sync>> {
     if !toml_file.exists() {
-        return Err(Box::from(format!("Could not find Bundle.toml file in path {:?}", toml_file)));
+        return Err(Box::from(format!("Toml file {:?} does not exist", toml_file)));
     }
 
     let mut toml_str = String::new();
