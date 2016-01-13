@@ -12,7 +12,9 @@ sources such as the internet or other repositories.
  To start using `cargo bundle`, you should create a `Bundle.toml` file in the root directory of your project,
 next to the `Cargo.toml` file. Your `Bundle.toml` describes various attributes of the generated bundle, such
 as its name, icon, description, copyright, as well as any packaging scripts you need to generate extra data.
-The full manifest format is described below.
+The full manifest format is described below. Note that by default, `cargo-bundle` will look at your `Cargo.toml`
+for information such as your package version and description to avoid repeating yourself, but this can be
+overridden.
 
 ## Bundle manifest format
 
