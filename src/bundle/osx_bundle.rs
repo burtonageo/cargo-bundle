@@ -69,11 +69,11 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
                                 </dict>\n\
                                 </plist>",
                                bin_name,
-                               "",
+                               "", // icon file
                                settings.bundle_name,
-                               "",
-                               "",
-                               "");
+                               settings.version_str.as_ref().unwrap_or(&settings.cargo_settings.version),
+                               settings.identifier,
+                               "" /* copyright*/);
 
         try!(plist.write_all(&contents.into_bytes()[..]).map_err(Box::from));
         try!(plist.sync_all().map_err(Box::from));
