@@ -116,6 +116,7 @@ impl Settings {
             package_type: None,
             is_release: is_release,
             bundle_name: String::new(),
+            identifier: String::new(),
             out_resource_path: out_res_path,
             bundle_script: None
         };
