@@ -17,9 +17,9 @@ use std::process;
 use toml::{Parser, Table, Value};
 
 macro_rules! simple_parse {
-    ($assign:expr, $toml_ty:ident, $value:expr, $msg:expr) => (
+    ($toml_ty:ident, $value:expr, $msg:expr) => (
         if let Value::$toml_ty(x) = $value {
-            $assign = x;
+            x
         } else {
             return Err(Box::from(format!($msg, $value)));
         }
@@ -98,18 +98,14 @@ impl CargoSettings {
                                     }
                                 }
                                 "version" => {
-                                    simple_parse!(settings.version,
-                                                  String,
-                                                  value,
-                                                  "Invalid format for version value in Bundle.toml: Expected \
-                                                   string, found {:?}")
+                                    settings.version = simple_parse!(String, value,
+                                                                     "Invalid format for version value in Bundle.toml: \
+                                                                      Expected string, found {:?}")
                                 }
                                 "description" => {
-                                    simple_parse!(settings.description,
-                                                  String,
-                                                  value,
-                                                  "Invalid format for description value in Bundle.toml: Expected \
-                                                   string, found {:?}")
+                                    settings.description = simple_parse!(String, value,
+                                                                         "Invalid format for description value in \
+                                                                          Bundle.toml: Expected string, found {:?}")
                                 }
                                 _ => {}
                             }
@@ -177,18 +173,19 @@ impl Settings {
                         }
                     }
                     "name" => {
-                        simple_parse!(settings.bundle_name,
-                                      String,
-                                      value,
-                                      "Invalid format for bundle name value in Bundle.toml: \
-                                       Expected string, found {:?}")
+                        settings.bundle_name = simple_parse!(String, value,
+                                                             "Invalid format for bundle name value in Bundle.toml: \
+                                                              Expected string, found {:?}")
                     }
                     "identifier" => {
-                        simple_parse!(settings.identifier,
-                                      String,
-                                      value,
-                                      "Invalid format for bundle identifier value in Bundle.toml: \
-                                       Expected string, found {:?}")
+                        settings.identifier = simple_parse!(String, value,
+                                                            "Invalid format for bundle identifier value in \
+                                                             Bundle.toml: Expected string, found {:?}")
+                    }
+                    "version" => {
+                        settings.version_str = Some(simple_parse!(String, value,
+                                                                  "Invalid format for bundle identifier value in \
+                                                                   Bundle.toml: Expected string, found {:?}"))
                     }
                     _ => {}
                 }
