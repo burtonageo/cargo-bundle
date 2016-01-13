@@ -68,12 +68,12 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
                                     <string>{}</string>\n\
                                 </dict>\n\
                                 </plist>",
-                                bin_name,
-                                "",
-                                settings.bundle_name,
-                                "",
-                                "",
-                                "");
+                               bin_name,
+                               "",
+                               settings.bundle_name,
+                               "",
+                               "",
+                               "");
 
         try!(plist.write_all(&contents.into_bytes()[..]).map_err(Box::from));
         try!(plist.sync_all().map_err(Box::from));
