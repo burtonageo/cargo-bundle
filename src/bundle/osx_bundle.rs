@@ -13,12 +13,12 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
         bundle_name
     });
     app_bundle_path.push("Contents");
-    try!(create_dir_all(&app_bundle_path).map_err(Box::from));
+    try!(create_dir_all(&app_bundle_path));
 
     let mut plist = try!({
         let mut f = app_bundle_path.clone();
         f.push("Info.plist");
-        File::create(f).map_err(Box::from)
+        File::create(f)
     });
 
     let bin_name = try!(settings.cargo_settings
@@ -72,17 +72,17 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
                            settings.identifier,
                            "" /* copyright */);
 
-    try!(plist.write_all(&contents.into_bytes()[..]).map_err(Box::from));
-    try!(plist.sync_all().map_err(Box::from));
+    try!(plist.write_all(&contents.into_bytes()[..]));
+    try!(plist.sync_all());
 
     app_bundle_path.push("MacOS");
-    try!(create_dir_all(&app_bundle_path).map_err(Box::from));
+    try!(create_dir_all(&app_bundle_path));
     let bundle_binary = {
         app_bundle_path.push(bin_name);
         app_bundle_path
     };
 
-    try!(fs::copy(&settings.cargo_settings.binary_file, &bundle_binary).map_err(Box::from));
+    try!(fs::copy(&settings.cargo_settings.binary_file, &bundle_binary));
 
     Ok(())
 }
