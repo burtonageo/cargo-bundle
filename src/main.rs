@@ -1,3 +1,4 @@
+extern crate cargo;
 #[macro_use]
 extern crate clap;
 extern crate plist;
