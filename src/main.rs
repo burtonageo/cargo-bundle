@@ -55,6 +55,7 @@ impl CargoSettings {
         target_dir.push(build_config);
 
         if !target_dir.exists() {
+            // TODO(George): Should call `cargo build` here to be friendlier
             let mut err_msg = String::from(format!("Could not find correct target dir for {:?} configuration. Please \
                                                     build your project",
                                                    build_config));
