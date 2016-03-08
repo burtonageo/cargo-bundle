@@ -100,12 +100,14 @@ impl CargoSettings {
                                     }
                                 }
                                 "version" => {
-                                    settings.version = simple_parse!(String, value,
+                                    settings.version = simple_parse!(String,
+                                                                     value,
                                                                      "Invalid format for version value in Bundle.toml: \
                                                                       Expected string, found {:?}")
                                 }
                                 "description" => {
-                                    settings.description = simple_parse!(String, value,
+                                    settings.description = simple_parse!(String,
+                                                                         value,
                                                                          "Invalid format for description value in \
                                                                           Bundle.toml: Expected string, found {:?}")
                                 }
@@ -175,17 +177,20 @@ impl Settings {
                         }
                     }
                     "name" => {
-                        settings.bundle_name = simple_parse!(String, value,
+                        settings.bundle_name = simple_parse!(String,
+                                                             value,
                                                              "Invalid format for bundle name value in Bundle.toml: \
                                                               Expected string, found {:?}")
                     }
                     "identifier" => {
-                        settings.identifier = simple_parse!(String, value,
+                        settings.identifier = simple_parse!(String,
+                                                            value,
                                                             "Invalid format for bundle identifier value in \
                                                              Bundle.toml: Expected string, found {:?}")
                     }
                     "version" => {
-                        settings.version_str = Some(simple_parse!(String, value,
+                        settings.version_str = Some(simple_parse!(String,
+                                                                  value,
                                                                   "Invalid format for bundle identifier value in \
                                                                    Bundle.toml: Expected string, found {:?}"))
                     }
