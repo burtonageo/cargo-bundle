@@ -1,4 +1,3 @@
-extern crate cargo;
 #[macro_use]
 extern crate clap;
 extern crate plist;
@@ -225,7 +224,7 @@ fn main() {
     let m = App::new("cargo-bundle")
                 .author("George Burton <burtonageo@gmail.com>")
                 .about("Bundle rust executables into OS bundles")
-                .version(&format!("v{}", crate_version!()))
+                .version(format!("v{}", crate_version!()).as_str())
                 .bin_name("cargo")
                 .settings(&[AppSettings::GlobalVersion, AppSettings::SubcommandRequired])
                 .subcommand(SubCommand::with_name("bundle").args_from_usage(
