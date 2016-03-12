@@ -31,6 +31,11 @@ will change.
 Woefully incomplete. Do not use yet. The design is so incomplete that patches are not even useful at this
 point.
 
+## Dependencies
+
+In addition to the Cargo dependencies, `cargo bundle` also requires `Cmake` and `OpenSSL`. Occasionally you may find that
+building `OpenSSL` may cause a build error ; to fix this, see [these instructions](https://github.com/alexcrichton/ssh2-rs/issues/28).
+
 ## License
 
 This program is licensed either under the terms of the [Apache Software License](http://www.apache.org/licenses/LICENSE-2.0.),

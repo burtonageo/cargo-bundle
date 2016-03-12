@@ -131,7 +131,7 @@ pub struct Settings {
     pub bundle_name: String,
     pub identifier: String, // Unique identifier for the bundle
     pub version_str: Option<String>,
-    pub out_resource_path: PathBuf,
+    pub resource_path: Option<PathBuf>,
     pub bundle_script: Option<PathBuf>
 }
 
@@ -139,7 +139,6 @@ impl Settings {
     pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> Result<Self, Box<Error + Send + Sync>> {
         let is_release = matches.is_present("release");
         let cargo_settings = try!(CargoSettings::new(&current_dir, is_release));
-        let out_res_path = cargo_settings.project_out_directory.clone();
 
         let mut settings = Settings {
             cargo_settings: cargo_settings,
@@ -148,53 +147,54 @@ impl Settings {
             bundle_name: String::new(),
             identifier: String::new(),
             version_str: None,
-            out_resource_path: out_res_path,
+            resource_path: None,
             bundle_script: None
         };
 
-        {
-            let table = try!({
-                let mut f = current_dir.clone();
-                f.push("Bundle.toml");
-                load_toml(f)
-            });
+        let table = try!({
+            let mut f = current_dir.clone();
+            f.push("Bundle.toml");
+            load_toml(f)
+        });
 
-            for (name, value) in table {
-                match &name[..] {
-                    "script" => {
-                        if let Value::String(s) = value {
-                            let path = PathBuf::from(s);
-                            if path.is_file() {
-                                settings.bundle_script = Some(path);
-                            } else {
-                                return Err(Box::from(format!("{:?} should be a file", path)));
-                            }
+        for (name, value) in table {
+            match &name[..] {
+                "script" => {
+                    if let Value::String(s) = value {
+                        let path = PathBuf::from(s);
+                        if path.is_file() {
+                            settings.bundle_script = Some(path);
                         } else {
-                            return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
-                                                          Expected string, found {:?}",
-                                                         value)));
+                            return Err(Box::from(format!("{:?} should be a file", path)));
                         }
+                    } else {
+                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
+                                                      Expected string, found {:?}",
+                                                     value)));
                     }
-                    "name" => {
-                        settings.bundle_name = simple_parse!(String,
-                                                             value,
-                                                             "Invalid format for bundle name value in Bundle.toml: \
-                                                              Expected string, found {:?}")
-                    }
-                    "identifier" => {
-                        settings.identifier = simple_parse!(String,
-                                                            value,
-                                                            "Invalid format for bundle identifier value in \
-                                                             Bundle.toml: Expected string, found {:?}")
-                    }
-                    "version" => {
-                        settings.version_str = Some(simple_parse!(String,
-                                                                  value,
-                                                                  "Invalid format for bundle identifier value in \
-                                                                   Bundle.toml: Expected string, found {:?}"))
-                    }
-                    _ => {}
                 }
+                "name" => {
+                    settings.bundle_name = simple_parse!(String, value,
+                                                         "Invalid format for bundle name value in Bundle.toml: \
+                                                          Expected string, found {:?}")
+                }
+                "identifier" => {
+                    settings.identifier = simple_parse!(String, value,
+                                                        "Invalid format for bundle identifier value in \
+                                                         Bundle.toml: Expected string, found {:?}")
+                }
+                "version" => {
+                    settings.version_str = Some(simple_parse!(String, value,
+                                                              "Invalid format for bundle identifier value in \
+                                                               Bundle.toml: Expected string, found {:?}"))
+                }
+                "resources" => {
+                    settings.resource_path = Some(PathBuf::from(
+                                                 simple_parse!(String, value,
+                                                              "Invalid format for bundle identifier value in \
+                                                               Bundle.toml: Expected string, found {:?}")))
+                }
+                _ => {}
             }
         }
 
@@ -217,7 +217,7 @@ fn load_toml(toml_file: PathBuf) -> Result<Table, Box<Error + Send + Sync>> {
     let mut toml_str = String::new();
     try!(File::open(toml_file).and_then(|mut file| file.read_to_string(&mut toml_str)));
 
-    Ok(try!(Parser::new(&toml_str).parse().ok_or(Box::from("Could not parse Toml file"))))
+    Ok(try!(Parser::new(&toml_str).parse().ok_or(Box::from("Could not parse Toml file") as Box<Error + Send + Sync>)))
 }
 
 fn main() {

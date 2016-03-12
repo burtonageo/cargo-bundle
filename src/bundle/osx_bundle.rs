@@ -26,7 +26,8 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
                                 .file_name()
                                 .and_then(OsStr::to_str)
                                 .map(|s| s.to_string())
-                                .ok_or(Box::from("Could not get file name of binary file.")));
+                                .ok_or(Box::from("Could not get file name of binary file.")
+                                            as Box<Error + Send + Sync>));
 
     let contents = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
                             <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
@@ -75,13 +76,20 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
     try!(plist.write_all(&contents.into_bytes()[..]));
     try!(plist.sync_all());
 
-    app_bundle_path.push("MacOS");
-    try!(create_dir_all(&app_bundle_path));
-    let bundle_binary = {
-        app_bundle_path.push(bin_name);
-        app_bundle_path
-    };
+    if let &Some(ref resources_dir) = &settings.resource_path {
+        let mut res_path = app_bundle_path.clone();
+        res_path.push("Resources");
+        try!(create_dir_all(&res_path));
+        try!(fs::copy(&resources_dir, &res_path));
+    }
 
+    let mut bin_path = app_bundle_path;
+    bin_path.push("MacOS");
+    try!(create_dir_all(&bin_path));
+    let bundle_binary = {
+        bin_path.push(bin_name);
+        bin_path
+    };
     try!(fs::copy(&settings.cargo_settings.binary_file, &bundle_binary));
 
     Ok(())
