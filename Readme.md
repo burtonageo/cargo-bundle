@@ -16,9 +16,28 @@ The full manifest format is described below. Note that by default, `cargo-bundle
 for information such as your package version and description to avoid repeating yourself, but this can be
 overridden.
 
+ To build a bundle, simply run `cargo bundle` in your project's directory (where the `Bundle.toml` is placed).
+If you would like to bundle a release build, you must add the `--release` flag to your call.
+
+## Flags
+
+ TODO(George): Write this
+
 ## Bundle manifest format
 
-TODO: write this.
+ There are several fields in the `Bundle.toml` file.
+
+ * `name`: The name of the built application. If this is not present, then it will use the `name` value from
+           your `Cargo.toml` file.
+ * `identifier`: Unique identifier for your application. This is a simple string, but it may change so that
+                 you can specify it for individual platforms.
+ * `version`: The version of the application. If this is not present, then it will use the `version` value from
+              your `Cargo.toml` file.
+ * `resources`: List of files or directories which will be copied to the resources section of the bundle. This
+                section must be present, but it can be empty.
+
+ * `script`: This is a reserved field; at the moment it is not used for anything, but may be used to run scripts
+             while packaging the bundle (e.g. download files, compress and encrypt, etc.).
 
 ## Contributing
 
@@ -28,12 +47,12 @@ will change.
 
 ## Status
 
-Woefully incomplete. Do not use yet. The design is so incomplete that patches are not even useful at this
+ Woefully incomplete. Do not use yet. The design is so incomplete that patches are not even useful at this
 point.
 
 ## Dependencies
 
-In addition to the Cargo dependencies, `cargo bundle` also requires `Cmake` and `OpenSSL`. Occasionally you may find that
+ In addition to the Cargo dependencies, `cargo bundle` also requires `Cmake` and `OpenSSL`. Occasionally you may find that
 building `OpenSSL` may cause a build error ; to fix this, see [these instructions](https://github.com/alexcrichton/ssh2-rs/issues/28).
 
 ## License
