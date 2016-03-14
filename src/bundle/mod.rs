@@ -22,8 +22,10 @@ pub fn bundle_project(settings: Settings) -> Result<(), Box<Error + Send + Sync>
         None => Err(Box::from("Native windows bundles not yet supported")),
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
         Some(PackageType::Rpm) => rpm_bundle::bundle_project(&settings),
-        Some(otherwise) => Err(Box::from(format!("Wrong bundle type {:?}, can only be either `deb`, `rpm` or `win`",
-                                         otherwise))),
+        Some(otherwise) => {
+            Err(Box::from(format!("Wrong bundle type {:?}, can only be either `deb`, `rpm` or `win`",
+                                  otherwise)))
+        }
     }
 }
 
