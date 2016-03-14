@@ -3,7 +3,10 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::{self, File, create_dir_all};
 use std::io::prelude::*;
+use std::io;
+use std::path::Path;
 use std::marker::{Send, Sync};
+use walkdir::WalkDir;
 
 pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync>> {
     let mut app_bundle_path = settings.cargo_settings.project_out_directory.clone();
@@ -76,11 +79,14 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
     try!(plist.write_all(&contents.into_bytes()[..]));
     try!(plist.sync_all());
 
-    if let &Some(ref resources_dir) = &settings.resource_path {
-        let mut res_path = app_bundle_path.clone();
-        res_path.push("Resources");
-        try!(create_dir_all(&res_path));
-        try!(fs::copy(&resources_dir, &res_path));
+    if !settings.resource_files.is_empty() {
+        let mut resources_dir = app_bundle_path.clone();
+        resources_dir.push("Resources");
+        try!(create_dir_all(&resources_dir));
+
+        for res_path in &settings.resource_files {
+            try!(copy_path(&res_path, &resources_dir));
+        }
     }
 
     let mut bin_path = app_bundle_path;
@@ -91,6 +97,33 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
         bin_path
     };
     try!(fs::copy(&settings.cargo_settings.binary_file, &bundle_binary));
+
+    Ok(())
+}
+
+fn copy_path(from: &Path, to: &Path) -> Result<(), io::Error> {
+    if from.is_file() {
+        // TODO(burtonageo): This fails if this is a path to a file which has directory components
+        // e.g. from = `/assets/configurations/features-release.json`
+        try!(fs::copy(&from, &to));
+        return Ok(());
+    }
+
+    for entry in WalkDir::new(from) {
+        let entry = try!(entry);
+        let entry = entry.path();
+
+        if entry.is_dir() {
+            continue;
+        }
+
+        let mut entry_destination = to.to_path_buf();
+        entry_destination.push(entry);
+        if let Some(parent) = entry_destination.parent() {
+            try!(fs::create_dir_all(parent));
+        }
+        try!(fs::copy(&entry, &entry_destination));
+    }
 
     Ok(())
 }

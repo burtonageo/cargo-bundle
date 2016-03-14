@@ -2,6 +2,7 @@
 extern crate clap;
 extern crate plist;
 extern crate toml;
+extern crate walkdir;
 
 mod bundle;
 
@@ -131,7 +132,7 @@ pub struct Settings {
     pub bundle_name: String,
     pub identifier: String, // Unique identifier for the bundle
     pub version_str: Option<String>,
-    pub resource_path: Option<PathBuf>,
+    pub resource_files: Vec<PathBuf>,
     pub bundle_script: Option<PathBuf>
 }
 
@@ -147,7 +148,7 @@ impl Settings {
             bundle_name: String::new(),
             identifier: String::new(),
             version_str: None,
-            resource_path: None,
+            resource_files: vec![],
             bundle_script: None
         };
 
@@ -189,13 +190,38 @@ impl Settings {
                                                                Bundle.toml: Expected string, found {:?}"))
                 }
                 "resources" => {
-                    settings.resource_path = Some(PathBuf::from(
-                                                 simple_parse!(String, value,
-                                                              "Invalid format for bundle identifier value in \
-                                                               Bundle.toml: Expected string, found {:?}")))
+                    let files = simple_parse!(Array, value,
+                                              "Invalid format for bundle resource files format in \
+                                               Bundle.toml: Expected array, found {:?}");
+                    settings.resource_files = try!(parse_resource_files(files))
                 }
                 _ => {}
             }
+        }
+
+        fn parse_resource_files(files_array: toml::Array) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
+            let mut out_files = vec![];
+            out_files.reserve(files_array.len());
+            for file in files_array.into_iter()
+                                   .map(|file| {
+                                       if let Value::String(s) = file {
+                                           let path = PathBuf::from(s);
+                                           if !path.exists() {
+                                               return Err(Box::from(
+                                                   format!("Resource file {} does not exist.", path.display())));
+                                           } else {
+                                               Ok(path)
+                                           }
+                                       } else {
+                                           return Err(Box::from("Invalid "))
+                                       }
+                                   }) {
+                match file {
+                    Ok(file) => out_files.push(file),
+                    Err(e) => return Err(e)
+                }
+            }
+            Ok(out_files)
         }
 
         Ok(settings)
