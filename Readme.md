@@ -35,7 +35,6 @@ If you would like to bundle a release build, you must add the `--release` flag t
               your `Cargo.toml` file.
  * `resources`: List of files or directories which will be copied to the resources section of the bundle. This
                 section must be present, but it can be empty.
-
  * `script`: This is a reserved field; at the moment it is not used for anything, but may be used to run scripts
              while packaging the bundle (e.g. download files, compress and encrypt, etc.).
 
