@@ -133,7 +133,8 @@ pub struct Settings {
     pub identifier: String, // Unique identifier for the bundle
     pub version_str: Option<String>,
     pub resource_files: Vec<PathBuf>,
-    pub bundle_script: Option<PathBuf>
+    pub bundle_script: Option<PathBuf>,
+    pub copyright: Option<String>
 }
 
 impl Settings {
@@ -175,22 +176,35 @@ impl Settings {
                     }
                 }
                 "name" => {
-                    settings.bundle_name = simple_parse!(String, value,
+                    settings.bundle_name = simple_parse!(String,
+                                                         value,
                                                          "Invalid format for bundle name value in Bundle.toml: \
                                                           Expected string, found {:?}")
                 }
                 "identifier" => {
-                    settings.identifier = simple_parse!(String, value,
+                    settings.identifier = simple_parse!(String,
+                                                        value,
                                                         "Invalid format for bundle identifier value in \
                                                          Bundle.toml: Expected string, found {:?}")
                 }
                 "version" => {
-                    settings.version_str = Some(simple_parse!(String, value,
+                    settings.version_str = Some(simple_parse!(String,
+                                                              value,
                                                               "Invalid format for bundle identifier value in \
                                                                Bundle.toml: Expected string, found {:?}"))
                 }
+                "copyright" => {
+                    settings.version_str = Some(simple_parse!(String,
+                                                              value,
+                                                              "Invalid format for copyright notice in \
+                         Bundle.toml: Expected string, found {:?}"))
+                }
+                "icon" => {
+                    println!("Icon processing not implemented");
+                }
                 "resources" => {
-                    let files = simple_parse!(Array, value,
+                    let files = simple_parse!(Array,
+                                              value,
                                               "Invalid format for bundle resource files format in \
                                                Bundle.toml: Expected array, found {:?}");
                     settings.resource_files = try!(parse_resource_files(files))
@@ -207,18 +221,18 @@ impl Settings {
                                        if let Value::String(s) = file {
                                            let path = PathBuf::from(s);
                                            if !path.exists() {
-                                               return Err(Box::from(
-                                                   format!("Resource file {} does not exist.", path.display())));
+                                               return Err(Box::from(format!("Resource file {} does not exist.",
+                                                                            path.display())));
                                            } else {
                                                Ok(path)
                                            }
                                        } else {
-                                           return Err(Box::from("Invalid "))
+                                           return Err(Box::from("Invalid format for resource."));
                                        }
                                    }) {
                 match file {
                     Ok(file) => out_files.push(file),
-                    Err(e) => return Err(e)
+                    Err(e) => return Err(e),
                 }
             }
             Ok(out_files)
