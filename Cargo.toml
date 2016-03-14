@@ -7,3 +7,4 @@ authors = ["George Burton <burtonageo@gmail.com>"]
 clap = "^2"
 plist = "0.*"
 toml = "^0.1"
+walkdir = "^0.1"
