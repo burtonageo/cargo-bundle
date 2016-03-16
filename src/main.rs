@@ -150,7 +150,8 @@ impl Settings {
             identifier: String::new(),
             version_str: None,
             resource_files: vec![],
-            bundle_script: None
+            bundle_script: None,
+            copyright: None
         };
 
         let table = try!({
