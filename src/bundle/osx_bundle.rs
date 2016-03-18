@@ -4,22 +4,23 @@ use std::ffi::OsStr;
 use std::fs::{self, File, create_dir_all};
 use std::io::prelude::*;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::marker::{Send, Sync};
 use walkdir::WalkDir;
 
-pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync>> {
+pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
     let mut app_bundle_path = settings.cargo_settings.project_out_directory.clone();
     app_bundle_path.push({
         let mut bundle_name = settings.bundle_name.clone();
         bundle_name.push_str(".app");
         bundle_name
     });
-    app_bundle_path.push("Contents");
-    try!(create_dir_all(&app_bundle_path));
+    let mut bundle_directory = app_bundle_path.clone();
+    bundle_directory.push("Contents");
+    try!(create_dir_all(&bundle_directory));
 
     let mut plist = try!({
-        let mut f = app_bundle_path.clone();
+        let mut f = bundle_directory.clone();
         f.push("Info.plist");
         File::create(f)
     });
@@ -80,7 +81,7 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
     try!(plist.sync_all());
 
     if !settings.resource_files.is_empty() {
-        let mut resources_dir = app_bundle_path.clone();
+        let mut resources_dir = bundle_directory.clone();
         resources_dir.push("Resources");
         try!(create_dir_all(&resources_dir));
 
@@ -89,7 +90,7 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
         }
     }
 
-    let mut bin_path = app_bundle_path;
+    let mut bin_path = bundle_directory;
     bin_path.push("MacOS");
     try!(create_dir_all(&bin_path));
     let bundle_binary = {
@@ -98,7 +99,7 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
     };
     try!(fs::copy(&settings.cargo_settings.binary_file, &bundle_binary));
 
-    Ok(())
+    Ok(vec![app_bundle_path])
 }
 
 fn copy_path(from: &Path, to: &Path) -> Result<(), io::Error> {

@@ -1,6 +1,7 @@
 use {PackageType, Settings};
 use std::error::Error;
 use std::marker::{Send, Sync};
+use std::path::PathBuf;
 
 #[cfg(target_os = "macos")]
 mod osx_bundle;
@@ -8,7 +9,7 @@ mod deb_bundle;
 mod rpm_bundle;
 
 #[cfg(target_os = "macos")]
-pub fn bundle_project(settings: Settings) -> Result<(), Box<Error + Send + Sync>> {
+pub fn bundle_project(settings: Settings) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
     match settings.package_type {
         None | Some(PackageType::OsxBundle) => osx_bundle::bundle_project(&settings),
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
@@ -17,7 +18,7 @@ pub fn bundle_project(settings: Settings) -> Result<(), Box<Error + Send + Sync>
 }
 
 #[cfg(target_os = "windows")]
-pub fn bundle_project(settings: Settings) -> Result<(), Box<Error + Send + Sync>> {
+pub fn bundle_project(settings: Settings) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
     match settings.package_type {
         None => Err(Box::from("Native windows bundles not yet supported")),
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
@@ -30,7 +31,7 @@ pub fn bundle_project(settings: Settings) -> Result<(), Box<Error + Send + Sync>
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-pub fn bundle_project(settings: Settings) -> Result<(), Box<Error + Send + Sync>> {
+pub fn bundle_project(settings: Settings) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
     match settings.package_type {
         None => deb_bundle::bundle_project(&settings).and_then(|_| rpm_bundle::bundle_project(&settings)),
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),

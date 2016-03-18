@@ -275,13 +275,17 @@ fn main() {
                 .get_matches();
 
     if let Some(m) = m.subcommand_matches("bundle") {
-        env::current_dir()
-            .map_err(Box::from)
-            .and_then(|d| Settings::new(d, m))
-            .and_then(bundle_project)
-            .unwrap_or_else(|e| {
-                println!("{}", e.description());
-                process::exit(1);
-            });
+        let output_paths = env::current_dir()
+                               .map_err(Box::from)
+                               .and_then(|d| Settings::new(d, m))
+                               .and_then(bundle_project)
+                               .unwrap_or_else(|e| {
+                                   println!("{}", e.description());
+                                   process::exit(1);
+                               });
+        println!("{} bundles created at:", output_paths.len());
+        for bundle in output_paths {
+            println!("\t{}", bundle.display());
+        }
     }
 }
