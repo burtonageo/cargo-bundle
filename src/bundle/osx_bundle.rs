@@ -74,7 +74,7 @@ pub fn bundle_project(settings: &Settings) -> Result<(), Box<Error + Send + Sync
                            settings.bundle_name,
                            settings.version_str.as_ref().unwrap_or(&settings.cargo_settings.version),
                            settings.identifier,
-                           settings.copyright.unwrap_or_default());
+                           settings.copyright.as_ref().unwrap_or(&String::new()));
 
     try!(plist.write_all(&contents.into_bytes()[..]));
     try!(plist.sync_all());
