@@ -33,7 +33,11 @@ pub fn bundle_project(settings: Settings) -> Result<Vec<PathBuf>, Box<Error + Se
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 pub fn bundle_project(settings: Settings) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
     match settings.package_type {
-        None => deb_bundle::bundle_project(&settings).and_then(|_| rpm_bundle::bundle_project(&settings)),
+        None => deb_bundle::bundle_project(&settings)
+            .and_then(|deb_path| {
+                let rpm_path = try!(rpm_bundle::bundle_project(&settings));
+                Ok(deb_path.extend(rpm_path))
+            }),
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
         Some(PackageType::Rpm) => rpm_bundle::bundle_project(&settings),
         Some(otherwise) => {
