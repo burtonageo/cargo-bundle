@@ -54,20 +54,6 @@ impl CargoSettings {
         target_dir.push("target");
         target_dir.push(build_config);
 
-        if !target_dir.exists() {
-            // TODO(burtonageo): Should call `cargo build` here to be friendlier
-            let mut err_msg = String::from(format!("Could not find correct target dir for {:?} configuration. Please \
-                                                    build your project",
-                                                   build_config));
-
-            if is_release {
-                err_msg.push_str(" with the --release flag.");
-            } else {
-                err_msg.push('.');
-            }
-            return Err(Box::from(err_msg));
-        }
-
         let cargo_info = try!(cargo_file.ok_or(Box::from("Could not find Cargo.toml in project directory"))
                                         .and_then(load_toml));
 
@@ -89,10 +75,6 @@ impl CargoSettings {
                                     if let Value::String(s) = value {
                                         settings.binary_file = settings.project_out_directory.clone();
                                         settings.binary_file.push(s);
-                                        if !settings.binary_file.is_file() {
-                                            return Err(Box::from(format!("Built executable should be a file {:?}.",
-                                                                         settings.binary_file)));
-                                        }
                                     } else {
                                         return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
                                                                       Expected string, found {:?}",
@@ -261,6 +243,25 @@ fn load_toml(toml_file: PathBuf) -> Result<Table, Box<Error + Send + Sync>> {
     Ok(try!(Parser::new(&toml_str).parse().ok_or(Box::from("Could not parse Toml file") as Box<Error + Send + Sync>)))
 }
 
+
+/// run `cargo build` if the binary file does not exist
+fn build_project_if_unbuilt(settings: &Settings) -> Result<(), Box<Error + Send + Sync>> {
+    let mut bin_file = settings.cargo_settings.project_out_directory.clone();
+    bin_file.push(&settings.cargo_settings.binary_file);
+    if !bin_file.exists() {
+        // TODO(burtonageo): Should call `cargo build` here to be friendlier
+        let output = try!(process::Command::new("cargo")
+                              .arg("build")
+                              .arg(if settings.is_release { "--release" } else { "" } )
+                              .output()
+                              .map_err(Box::<Error + Send + Sync>::from));
+        if !output.status.success() {
+            return Err(Box::from("Result of `cargo build` operation was unsuccessful"));
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     let m = App::new("cargo-bundle")
                 .author("George Burton <burtonageo@gmail.com>")
@@ -278,12 +279,17 @@ fn main() {
         let output_paths = env::current_dir()
                                .map_err(Box::from)
                                .and_then(|d| Settings::new(d, m))
+                               .and_then(|s| {
+                                   try!(build_project_if_unbuilt(&s));
+                                   Ok(s)
+                               })
                                .and_then(bundle_project)
                                .unwrap_or_else(|e| {
                                    println!("{}", e.description());
                                    process::exit(1);
                                });
-        println!("{} bundles created at:", output_paths.len());
+        let pluralised = if output_paths.len() == 1 { "bundle" } else { "bundles" };
+        println!("{} {} created at:", output_paths.len(), pluralised);
         for bundle in output_paths {
             println!("\t{}", bundle.display());
         }
