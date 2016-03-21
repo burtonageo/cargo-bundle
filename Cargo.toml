@@ -2,6 +2,10 @@
 name = "cargo-bundle"
 version = "0.0.0"
 authors = ["George Burton <burtonageo@gmail.com>"]
+license = "MIT/Apache"
+keywords = ["bundle", "cargo"]
+repository = "https://github.com/burtonageo/cargo-bundle"
+description = "Wrap rust executables in OS-specific app bundles"
 
 [dependencies]
 clap = "^2"
