@@ -40,7 +40,7 @@ If you would like to bundle a release build, you must add the `--release` flag t
              run scripts while packaging the bundle (e.g. download files, compress and encrypt, etc.).
  * `copyright`: [OPTIONAL] This contains a copyright string associated with your application.
 
-### Example `Bundle.toml:
+### Example `Bundle.toml`:
 
 ```toml
 
