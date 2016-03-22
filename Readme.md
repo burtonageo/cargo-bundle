@@ -54,19 +54,13 @@ copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
 
 ## Contributing
 
- `cargo-bundle` has ambitions to be inclusive project and welcome contributions from anyone. However, this is
-still a half thought-out project (see `Status` section). When I announce this project publicly, then things
-will change.
+ `cargo-bundle` has ambitions to be inclusive project and welcome contributions from anyone. Please abide
+by the rust code of conduct.
 
 ## Status
 
- Woefully incomplete. Do not use yet. The design is so incomplete that patches are not even useful at this
-point.
-
-## Dependencies
-
- In addition to the Cargo dependencies, `cargo bundle` also requires `Cmake` and `OpenSSL`. Occasionally you may find that
-building `OpenSSL` may cause a build error ; to fix this, see [these instructions](https://github.com/alexcrichton/ssh2-rs/issues/28).
+ Very early alpha. Expect the format of the `Bundle.toml` file to change, and there is no guarantee
+of stability.
 
 ## License
 
