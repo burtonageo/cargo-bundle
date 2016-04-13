@@ -41,8 +41,7 @@ impl CargoSettings {
         let project_dir = project_home_directory.to_path_buf();
         let mut cargo_file = None;
         for node in try!(project_dir.read_dir()) {
-            let node = try!(node);
-            let path = node.path();
+            let path = try!(node).path();
             if let Some("Cargo.toml") = path.file_name().and_then(|fl_nm| fl_nm.to_str()) {
                 cargo_file = Some(path.to_path_buf());
             }
@@ -66,35 +65,33 @@ impl CargoSettings {
         };
 
         for (name, value) in cargo_info {
-            match &name[..] {
-                "package" => {
-                    if let Value::Table(table) = value {
-                        for (name, value) in table {
-                            match &name[..] {
-                                "name" => {
-                                    if let Value::String(s) = value {
-                                        settings.binary_file = settings.project_out_directory.clone();
-                                        settings.binary_file.push(s);
-                                    } else {
-                                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
-                                                                      Expected string, found {:?}",
-                                                                     value)));
-                                    }
+            match (&name[..], value) {
+                ("package", Value::Table(table))  => {
+                    for (name, value) in table {
+                        match &name[..] {
+                            "name" => {
+                                if let Value::String(s) = value {
+                                    settings.binary_file = settings.project_out_directory.clone();
+                                    settings.binary_file.push(s);
+                                } else {
+                                    return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
+                                                                  Expected string, found {:?}",
+                                                                 value)));
                                 }
-                                "version" => {
-                                    settings.version = simple_parse!(String,
-                                                                     value,
-                                                                     "Invalid format for version value in Bundle.toml: \
-                                                                      Expected string, found {:?}")
-                                }
-                                "description" => {
-                                    settings.description = simple_parse!(String,
-                                                                         value,
-                                                                         "Invalid format for description value in \
-                                                                          Bundle.toml: Expected string, found {:?}")
-                                }
-                                _ => {}
                             }
+                            "version" => {
+                                settings.version = simple_parse!(String,
+                                                                 value,
+                                                                 "Invalid format for version value in Bundle.toml: \
+                                                                  Expected string, found {:?}")
+                            }
+                            "description" => {
+                                settings.description = simple_parse!(String,
+                                                                     value,
+                                                                     "Invalid format for description value in \
+                                                                      Bundle.toml: Expected string, found {:?}")
+                            }
+                            _ => {}
                         }
                     }
                 }
