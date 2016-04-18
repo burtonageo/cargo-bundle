@@ -197,22 +197,22 @@ impl Settings {
         }
 
         fn parse_resource_files(files_array: toml::Array) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
-            let mut out_files = vec![];
-            out_files.reserve(files_array.len());
-            for file in files_array.into_iter()
-                                   .map(|file| {
-                                       if let Value::String(s) = file {
-                                           let path = PathBuf::from(s);
-                                           if !path.exists() {
-                                               return Err(Box::from(format!("Resource file {} does not exist.",
-                                                                            path.display())));
-                                           } else {
-                                               Ok(path)
-                                           }
-                                       } else {
-                                           return Err(Box::from("Invalid format for resource."));
-                                       }
-                                   }) {
+            let mut out_files = Vec::with_capacity(files_array.len());
+            let convert_fn = |file| {
+                if let Value::String(s) = file {
+                    let path = PathBuf::from(s);
+                    if !path.exists() {
+                        return Err(Box::from(format!("Resource file {} does not exist.",
+                                                     path.display())));
+                    } else {
+                        Ok(path)
+                    }
+                } else {
+                    return Err(Box::from("Invalid format for resource."));
+                }
+            };
+
+            for file in files_array.into_iter().map(convert_fn) {
                 match file {
                     Ok(file) => out_files.push(file),
                     Err(e) => return Err(e),
