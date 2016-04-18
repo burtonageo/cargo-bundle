@@ -202,8 +202,7 @@ impl Settings {
                 if let Value::String(s) = file {
                     let path = PathBuf::from(s);
                     if !path.exists() {
-                        return Err(Box::from(format!("Resource file {} does not exist.",
-                                                     path.display())));
+                        return Err(Box::from(format!("Resource file {} does not exist.", path.display())));
                     } else {
                         Ok(path)
                     }
@@ -240,7 +239,9 @@ fn load_toml(toml_file: PathBuf) -> Result<Table, Box<Error + Send + Sync>> {
     let mut toml_str = String::new();
     try!(File::open(toml_file).and_then(|mut file| file.read_to_string(&mut toml_str)));
 
-    Ok(try!(Parser::new(&toml_str).parse().ok_or(Box::from("Could not parse Toml file") as Box<Error + Send + Sync>)))
+    Ok(try!(Parser::new(&toml_str)
+                .parse()
+                .ok_or(Box::<Error + Send + Sync>::from("Could not parse Toml file"))))
 }
 
 
@@ -252,7 +253,7 @@ fn build_project_if_unbuilt(settings: &Settings) -> Result<(), Box<Error + Send 
         // TODO(burtonageo): Should call `cargo build` here to be friendlier
         let output = try!(process::Command::new("cargo")
                               .arg("build")
-                              .arg(if settings.is_release { "--release" } else { "" } )
+                              .arg(if settings.is_release { "--release" } else { "" })
                               .output()
                               .map_err(Box::<Error + Send + Sync>::from));
         if !output.status.success() {
