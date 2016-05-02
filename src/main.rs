@@ -199,14 +199,14 @@ impl Settings {
                 "version" => {
                     settings.version_str = Some(simple_parse!(String,
                                                               value,
-                                                              "Invalid format for bundle identifier value in \
+                                                              "Invalid format for version value in \
                                                                Bundle.toml: Expected string, found {:?}"))
                 }
                 "copyright" => {
-                    settings.version_str = Some(simple_parse!(String,
-                                                              value,
-                                                              "Invalid format for copyright notice in \
-                                                               Bundle.toml: Expected string, found {:?}"))
+                    settings.copyright = Some(simple_parse!(String,
+                                                            value,
+                                                            "Invalid format for copyright notice in \
+                                                             Bundle.toml: Expected string, found {:?}"))
                 }
                 "icon" => {
                     let icon_path = simple_parse!(String, value,
