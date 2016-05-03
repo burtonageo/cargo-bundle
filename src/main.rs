@@ -33,7 +33,9 @@ pub struct CargoSettings {
     pub project_out_directory: PathBuf,
     pub binary_file: PathBuf,
     pub version: String,
-    pub description: String
+    pub description: String,
+    pub homepage: String,
+    pub authors: Vec<String>
 }
 
 impl CargoSettings {
@@ -61,7 +63,9 @@ impl CargoSettings {
             project_out_directory: target_dir,
             binary_file: PathBuf::new(),
             version: String::new(),
-            description: String::new()
+            description: String::new(),
+            homepage: String::new(),
+            authors: Vec::new()
         };
 
         for (name, value) in cargo_info {
@@ -90,6 +94,29 @@ impl CargoSettings {
                                                                      value,
                                                                      "Invalid format for description value in \
                                                                       Bundle.toml: Expected string, found {:?}")
+                            }
+                            "homepage" => {
+                                settings.homepage = simple_parse!(String,
+                                                                  value,
+                                                                  "Invalid format for description value in \
+                                                                   Bundle.toml: Expected string, found {:?}")
+                            }
+                            "authors" => {
+                                if let Value::Array(a) = value {
+                                    settings.authors = a.into_iter()
+                                                        .filter_map(|v| {
+                                                            if let Value::String(s) = v {
+                                                                Some(s)
+                                                            } else {
+                                                                None
+                                                            }
+                                                        })
+                                                        .collect();
+                                } else {
+                                    return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
+                                                                  Expected array, found {:?}",
+                                                                 value)));
+                                }
                             }
                             _ => {}
                         }
