@@ -71,7 +71,10 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
                             </dict>\n\
                             </plist>",
                            bin_name,
-                           "", // icon file
+                           settings.icon_file.as_ref()
+                                             .and_then(|p| p.file_name())
+                                             .and_then(OsStr::to_str)
+                                             .unwrap_or("???"),
                            settings.bundle_name,
                            settings.version_str.as_ref().unwrap_or(&settings.cargo_settings.version),
                            settings.identifier,
@@ -80,13 +83,24 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
     try!(plist.write_all(&contents.into_bytes()[..]));
     try!(plist.sync_all());
 
-    if !settings.resource_files.is_empty() {
-        let mut resources_dir = bundle_directory.clone();
-        resources_dir.push("Resources");
-        try!(create_dir_all(&resources_dir));
+    let mut resources_dir = bundle_directory.clone();
+    resources_dir.push("Resources");
 
+    if !settings.resource_files.is_empty() || settings.icon_file.is_some() {
+        try!(create_dir_all(&resources_dir));
+    }
+
+    if resources_dir.exists() {
         for res_path in &settings.resource_files {
             try!(copy_path(&res_path, &resources_dir));
+        }
+
+        if let Some(ref icon_file) = settings.icon_file {
+            let mut bundle_icon_file = resources_dir.clone();
+            // icon_file has been verified to be a file in Settings::new
+            bundle_icon_file.push(icon_file.file_name().unwrap());
+            try!(File::create(bundle_icon_file.clone()));
+            try!(fs::copy(&icon_file, &bundle_icon_file));
         }
     }
 
