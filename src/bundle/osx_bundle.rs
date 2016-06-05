@@ -29,7 +29,7 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
                                 .binary_file
                                 .file_name()
                                 .and_then(OsStr::to_str)
-                                .map(|s| s.to_string())
+                                .map(ToString::to_string)
                                 .ok_or(Box::from("Could not get file name of binary file.")
                                             as Box<Error + Send + Sync>));
 
