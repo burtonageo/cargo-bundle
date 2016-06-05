@@ -140,6 +140,7 @@ pub struct Settings {
     pub version_str: Option<String>,
     pub resource_files: Vec<PathBuf>,
     pub bundle_script: Option<PathBuf>,
+    pub icon_file: Option<PathBuf>,
     pub copyright: Option<String>
 }
 
@@ -157,6 +158,7 @@ impl Settings {
             version_str: None,
             resource_files: vec![],
             bundle_script: None,
+            icon_file: None,
             copyright: None
         };
 
@@ -204,10 +206,17 @@ impl Settings {
                     settings.version_str = Some(simple_parse!(String,
                                                               value,
                                                               "Invalid format for copyright notice in \
-                         Bundle.toml: Expected string, found {:?}"))
+                                                               Bundle.toml: Expected string, found {:?}"))
                 }
                 "icon" => {
-                    println!("Icon processing not implemented");
+                    let icon_path = simple_parse!(String, value,
+                                                  "Invalid format for bundle identifier value in \
+                                                   Bundle.toml: Expected string, found {:?}");
+                    let icon_path = PathBuf::from(icon_path);
+                    if !icon_path.is_file() {
+                        return Err(Box::from("The Icon attribute must point to a file"));
+                    }
+                    settings.icon_file = Some(icon_path);
                 }
                 "resources" => {
                     let files = simple_parse!(Array,
