@@ -11,6 +11,7 @@ use clap::{App, AppSettings, ArgMatches, SubCommand};
 use std::env;
 use std::error::Error;
 use std::fs::File;
+use std::io::stderr;
 use std::io::prelude::*;
 use std::marker::{Send, Sync};
 use std::path::{Path, PathBuf};
@@ -319,7 +320,7 @@ fn main() {
                                })
                                .and_then(bundle_project)
                                .unwrap_or_else(|e| {
-                                   println!("{}", e.description());
+                                   let _ = write!(stderr(), "{}", e.description());
                                    process::exit(1);
                                });
         let pluralised = if output_paths.len() == 1 { "bundle" } else { "bundles" };
