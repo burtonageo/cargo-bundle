@@ -34,9 +34,10 @@ pub fn bundle_project(settings: Settings) -> Result<Vec<PathBuf>, Box<Error + Se
 pub fn bundle_project(settings: Settings) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
     match settings.package_type {
         None => {
-            deb_bundle::bundle_project(&settings).and_then(|deb_path| {
-                let rpm_path = try!(rpm_bundle::bundle_project(&settings));
-                Ok(deb_path.extend(rpm_path))
+            deb_bundle::bundle_project(&settings).and_then(|mut deb_path| {
+                let mut rpm_path = try!(rpm_bundle::bundle_project(&settings));
+                deb_path.append(&mut rpm_path);
+                Ok(deb_path)
             })
         }
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
