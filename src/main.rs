@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate clap;
+extern crate icns;
+extern crate image;
 extern crate plist;
 extern crate toml;
 extern crate walkdir;
@@ -71,7 +73,7 @@ impl CargoSettings {
 
         for (name, value) in cargo_info {
             match (&name[..], value) {
-                ("package", Value::Table(table))  => {
+                ("package", Value::Table(table)) => {
                     for (name, value) in table {
                         match &name[..] {
                             "name" => {
@@ -141,7 +143,7 @@ pub struct Settings {
     pub version_str: Option<String>,
     pub resource_files: Vec<PathBuf>,
     pub bundle_script: Option<PathBuf>,
-    pub icon_file: Option<PathBuf>,
+    pub icon_files: Vec<PathBuf>,
     pub copyright: Option<String>
 }
 
@@ -159,7 +161,7 @@ impl Settings {
             version_str: None,
             resource_files: vec![],
             bundle_script: None,
-            icon_file: None,
+            icon_files: vec![],
             copyright: None
         };
 
@@ -210,14 +212,23 @@ impl Settings {
                                                              Bundle.toml: Expected string, found {:?}"))
                 }
                 "icon" => {
-                    let icon_path = simple_parse!(String, value,
-                                                  "Invalid format for bundle identifier value in \
-                                                   Bundle.toml: Expected string, found {:?}");
-                    let icon_path = PathBuf::from(icon_path);
-                    if !icon_path.is_file() {
-                        return Err(Box::from("The Icon attribute must point to a file"));
-                    }
-                    settings.icon_file = Some(icon_path);
+                    settings.icon_files = match value {
+                        Value::String(icon_path) => {
+                            let icon_path = PathBuf::from(icon_path);
+                            if !icon_path.is_file() {
+                                return Err(Box::from("The icon attribute must point to a file"));
+                            }
+                            vec![icon_path]
+                        }
+                        Value::Array(icon_paths) => try!(parse_resource_files(icon_paths)),
+                        _ => {
+                            let msg = format!("Invalid format for bundle icon in \
+                                               Bundle.toml: Expected string or array, \
+                                               found {:?}",
+                                              value);
+                            return Err(Box::from(msg));
+                        }
+                    };
                 }
                 "resources" => {
                     let files = simple_parse!(Array,
