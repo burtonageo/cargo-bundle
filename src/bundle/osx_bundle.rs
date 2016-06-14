@@ -126,8 +126,7 @@ fn copy_path(from: &Path, to: &Path) -> Result<(), io::Error> {
     }
 
     for entry in WalkDir::new(from) {
-        let entry = try!(entry);
-        let entry = entry.path();
+        let entry = try!(entry).path();
 
         if entry.is_dir() {
             continue;
