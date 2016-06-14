@@ -71,10 +71,11 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
                             </dict>\n\
                             </plist>",
                            bin_name,
-                           settings.icon_file.as_ref()
-                                             .and_then(|p| p.file_name())
-                                             .and_then(OsStr::to_str)
-                                             .unwrap_or("???"),
+                           settings.icon_file
+                                   .as_ref()
+                                   .and_then(|p| p.file_name())
+                                   .and_then(OsStr::to_str)
+                                   .unwrap_or("???"),
                            settings.bundle_name,
                            settings.version_str.as_ref().unwrap_or(&settings.cargo_settings.version),
                            settings.identifier,

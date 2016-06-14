@@ -71,7 +71,7 @@ impl CargoSettings {
 
         for (name, value) in cargo_info {
             match (&name[..], value) {
-                ("package", Value::Table(table))  => {
+                ("package", Value::Table(table)) => {
                     for (name, value) in table {
                         match &name[..] {
                             "name" => {
@@ -106,11 +106,7 @@ impl CargoSettings {
                                 if let Value::Array(a) = value {
                                     settings.authors = a.into_iter()
                                                         .filter_map(|v| {
-                                                            if let Value::String(s) = v {
-                                                                Some(s)
-                                                            } else {
-                                                                None
-                                                            }
+                                                            if let Value::String(s) = v { Some(s) } else { None }
                                                         })
                                                         .collect();
                                 } else {
@@ -210,7 +206,8 @@ impl Settings {
                                                              Bundle.toml: Expected string, found {:?}"))
                 }
                 "icon" => {
-                    let icon_path = simple_parse!(String, value,
+                    let icon_path = simple_parse!(String,
+                                                  value,
                                                   "Invalid format for bundle identifier value in \
                                                    Bundle.toml: Expected string, found {:?}");
                     let icon_path = PathBuf::from(icon_path);

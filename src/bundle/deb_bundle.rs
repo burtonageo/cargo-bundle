@@ -20,8 +20,7 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
     let bin_file = try!(fs::File::open(&settings.cargo_settings.binary_file));
     let bin_file_metadata = try!(bin_file.metadata());
 
-    let control_file_contents = format!(
-        "Package: {}\n
+    let control_file_contents = format!("Package: {}\n
          Version: {}\n
          Architecture: {}\n
          Maintainer: {}\n
@@ -36,24 +35,24 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
          Priority: {}\n
          Homepage: {}\n
          Description: {}",
-        settings.bundle_name,
-        settings.cargo_settings.version,
-        env::consts::ARCH, // TODO(burtonageo): Use binary arch rather than host arch
-        settings.cargo_settings.authors.iter().fold(String::new(), |mut acc, s| {
-            acc.push_str(&s);
-            acc
-        }),
-        bin_file_metadata.len(), // TODO(burtonageo): Compute data size
-        "deps",
-        "suggests",
-        "conflicts",
-        "breaks",
-        "replaces",
-        "provides",
-        "section",
-        "priority",
-        get_homepage(&settings.cargo_settings),
-        settings.cargo_settings.description);
+                                        settings.bundle_name,
+                                        settings.cargo_settings.version,
+                                        env::consts::ARCH, // TODO(burtonageo): Use binary arch rather than host arch
+                                        settings.cargo_settings.authors.iter().fold(String::new(), |mut acc, s| {
+                                            acc.push_str(&s);
+                                            acc
+                                        }),
+                                        bin_file_metadata.len(), // TODO(burtonageo): Compute data size
+                                        "deps",
+                                        "suggests",
+                                        "conflicts",
+                                        "breaks",
+                                        "replaces",
+                                        "provides",
+                                        "section",
+                                        "priority",
+                                        get_homepage(&settings.cargo_settings),
+                                        settings.cargo_settings.description);
 
     unimplemented!();
 }
