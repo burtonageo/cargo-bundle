@@ -228,8 +228,7 @@ impl Settings {
         }
 
         fn parse_resource_files(files_array: toml::Array) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
-            let mut out_files = Vec::with_capacity(files_array.len());
-            let convert_fn = |file| {
+            fn to_file_path(file: toml::Value) -> Result<PathBuf, Box<Error + Send + Sync>> {
                 if let Value::String(s) = file {
                     let path = PathBuf::from(s);
                     if !path.exists() {
@@ -242,7 +241,8 @@ impl Settings {
                 }
             };
 
-            for file in files_array.into_iter().map(convert_fn) {
+            let mut out_files = Vec::with_capacity(files_array.len());
+            for file in files_array.into_iter().map(to_file_path) {
                 match file {
                     Ok(file) => out_files.push(file),
                     Err(e) => return Err(e),
