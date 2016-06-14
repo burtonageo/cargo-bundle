@@ -20,21 +20,21 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
     let bin_file = try!(fs::File::open(&settings.cargo_settings.binary_file));
     let bin_file_metadata = try!(bin_file.metadata());
 
-    let control_file_contents = format!("Package: {}\n
-         Version: {}\n
-         Architecture: {}\n
-         Maintainer: {}\n
-         Installed-Size: {}\n
-         Depends: {}\n
-         Suggests: {}\n
-         Conflicts: {}\n
-         Breaks: {}\n
-         Replaces: {}\n
-         Provides: {}\n
-         Section: {}\n
-         Priority: {}\n
-         Homepage: {}\n
-         Description: {}",
+    let control_file_contents = format!("Package: {}\n\
+                                         Version: {}\n\
+                                         Architecture: {}\n\
+                                         Maintainer: {}\n\
+                                         Installed-Size: {}\n\
+                                         Depends: {}\n\
+                                         Suggests: {}\n\
+                                         Conflicts: {}\n\
+                                         Breaks: {}\n\
+                                         Replaces: {}\n\
+                                         Provides: {}\n\
+                                         Section: {}\n\
+                                         Priority: {}\n\
+                                         Homepage: {}\n\
+                                         Description: {}",
                                         settings.bundle_name,
                                         settings.cargo_settings.version,
                                         env::consts::ARCH, // TODO(burtonageo): Use binary arch rather than host arch
