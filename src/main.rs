@@ -1,7 +1,10 @@
 #[macro_use]
 extern crate clap;
+#[macro_use]
+extern crate hyper;
 extern crate plist;
 extern crate toml;
+extern crate url;
 extern crate walkdir;
 
 mod bundle;
@@ -17,6 +20,7 @@ use std::marker::{Send, Sync};
 use std::path::{Path, PathBuf};
 use std::process;
 use toml::{Parser, Table, Value};
+use url::Url;
 
 macro_rules! simple_parse {
     ($toml_ty:ident, $value:expr, $msg:expr) => (
@@ -135,7 +139,7 @@ pub struct Settings {
     pub bundle_name: String,
     pub identifier: String, // Unique identifier for the bundle
     pub version_str: Option<String>,
-    pub resource_files: Vec<PathBuf>,
+    pub resources: Vec<Resource>,
     pub bundle_script: Option<PathBuf>,
     pub icon_file: Option<PathBuf>,
     pub copyright: Option<String>
@@ -153,7 +157,7 @@ impl Settings {
             bundle_name: String::new(),
             identifier: String::new(),
             version_str: None,
-            resource_files: vec![],
+            resources: vec![],
             bundle_script: None,
             icon_file: None,
             copyright: None
@@ -221,20 +225,20 @@ impl Settings {
                                               value,
                                               "Invalid format for bundle resource files format in \
                                                Bundle.toml: Expected array, found {:?}");
-                    settings.resource_files = try!(parse_resource_files(files))
+                    settings.resources = try!(parse_resources(files))
                 }
                 _ => {}
             }
         }
 
-        fn parse_resource_files(files_array: toml::Array) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
-            fn to_file_path(file: toml::Value) -> Result<PathBuf, Box<Error + Send + Sync>> {
+        fn parse_resources(files_array: toml::Array) -> Result<Vec<Resource>, Box<Error + Send + Sync>> {
+            fn to_file_path(file: toml::Value) -> Result<Resource, Box<Error + Send + Sync>> {
                 if let Value::String(s) = file {
                     let path = PathBuf::from(s);
                     if !path.exists() {
                         return Err(Box::from(format!("Resource file {} does not exist.", path.display())));
                     } else {
-                        Ok(path)
+                        Ok(Resource::LocalFile(path))
                     }
                 } else {
                     return Err(Box::from("Invalid format for resource."));
@@ -253,6 +257,12 @@ impl Settings {
 
         Ok(settings)
     }
+
+    /// Get the final list of resource files from the file system. If not all of the
+    /// resource files have been downloaded, it returns `None`.
+    pub fn get_resolved_files(&self) -> Option<Vec<PathBuf>> {
+        unimplemented!();
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -260,6 +270,25 @@ pub enum PackageType {
     OsxBundle,
     Deb,
     Rpm
+}
+
+/// A representation of a Resource file from the `Bundle.toml` file.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Resource {
+    /// A remote resource which will be retreived from a URL.
+    Remote(Url),
+
+    /// A file on the file system.
+    LocalFile(PathBuf)
+}
+
+impl Resource {
+    fn get_local_file(&self) -> Option<&Path> {
+        match *self {
+            Resource::Remote(_) => unimplemented!(),
+            Resource::LocalFile(ref path) => Some(path),
+        }
+    }
 }
 
 fn load_toml(toml_file: PathBuf) -> Result<Table, Box<Error + Send + Sync>> {

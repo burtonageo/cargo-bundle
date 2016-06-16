@@ -9,6 +9,8 @@ description = "Wrap rust executables in OS-specific app bundles"
 
 [dependencies]
 clap = "^2"
+hyper = "0.9.*"
 plist = "0.*"
 toml = "^0.1"
+url = "^1.1"
 walkdir = "^0.1"

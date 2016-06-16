@@ -1,4 +1,4 @@
-use Settings;
+use {Resource, Settings};
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::{self, File, create_dir_all};
@@ -87,13 +87,15 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
     let mut resources_dir = bundle_directory.clone();
     resources_dir.push("Resources");
 
-    if !settings.resource_files.is_empty() || settings.icon_file.is_some() {
+    if !settings.resources.is_empty() || settings.icon_file.is_some() {
         try!(create_dir_all(&resources_dir));
     }
 
     if resources_dir.exists() {
-        for res_path in &settings.resource_files {
-            try!(copy_path(&res_path, &resources_dir));
+        for resource in &settings.resources {
+            if let Resource::LocalFile(ref res_path) = *resource {
+                try!(copy_path(res_path, &resources_dir));
+            }
         }
 
         if let Some(ref icon_file) = settings.icon_file {

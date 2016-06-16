@@ -47,7 +47,7 @@ If you would like to bundle a release build, you must add the `--release` flag t
 name = "ExampleApplication"
 identifier = "com.doe.exampleapplication"
 version = "1.0.0"
-resources = ["assets", "configuration", "secrets/public_key.txt"]
+resources = ["assets", "configuration", "secrets/public_key.txt", "https://janedoe.com/logo.png"]
 copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
 
 ```
