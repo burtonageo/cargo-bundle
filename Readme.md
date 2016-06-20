@@ -31,7 +31,10 @@ If you would like to bundle a release build, you must add the `--release` flag t
            your `Cargo.toml` file.
  * `identifier`: [REQUIRED] Unique identifier for your application. This is a simple string, but it may change so that
                  you can specify it for individual platforms.
- * `icon` : [REQUIRED] The icon used for your application (Unimplemented). TODO(burtonageo): image formats?
+ * `icon`: [REQUIRED] The icon used for your application.  This can either be a single file path (string), or an array
+           of file paths (with images in various sizes/formats); `cargo-bundle` will automatically convert between
+           image formats as necessary for different platforms.  Supported formats include ICNS, ICO, PNG, and anything
+           else that can be decoded by the [`image`](https://crates.io/crates/image) crate.
  * `version`: [OPTIONAL] The version of the application. If this is not present, then it will use the `version`
               value from your `Cargo.toml` file.
  * `resources`: [OPTIONAL] List of files or directories which will be copied to the resources section of the
@@ -46,6 +49,7 @@ If you would like to bundle a release build, you must add the `--release` flag t
 
 name = "ExampleApplication"
 identifier = "com.doe.exampleapplication"
+icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
 version = "1.0.0"
 resources = ["assets", "configuration", "secrets/public_key.txt"]
 copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
