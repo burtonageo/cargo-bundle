@@ -37,8 +37,14 @@ If you would like to bundle a release build, you must add the `--release` flag t
            else that can be decoded by the [`image`](https://crates.io/crates/image) crate.
  * `version`: [OPTIONAL] The version of the application. If this is not present, then it will use the `version`
               value from your `Cargo.toml` file.
- * `resources`: [OPTIONAL] List of files or directories which will be copied to the resources section of the
-                bundle. This section must be present, but it can be empty.
+ * `resources`: [OPTIONAL] Table of files or directories which will be copied to the resources section of the
+                bundle. Each item in this table must have a unique key, and the value can take the form of either:
+                
+                    - path = "/path/to/resource" - This copies the leaf item at `path` to the base of the resources
+                      directory of the bundle,
+                    - from = "/path/to/resource", to = "/final/destination" - This copies the leaf item from the
+                      `from` field, and places it in the folder specified at `to`. Note that the `to`field uses
+                      the resources folder as its root.
  * `script`: [OPTIONAL] This is a reserved field; at the moment it is not used for anything, but may be used to
              run scripts while packaging the bundle (e.g. download files, compress and encrypt, etc.).
  * `copyright`: [OPTIONAL] This contains a copyright string associated with your application.
@@ -53,6 +59,12 @@ icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
 version = "1.0.0"
 resources = ["assets", "configuration", "secrets/public_key.txt"]
 copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
+
+[resources]
+assets = { path = "assets" }
+configuration = { path = "configuration" }
+public_key = { from = "secrets/keys/public_key.txt", to
+
 
 ```
 
