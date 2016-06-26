@@ -129,6 +129,13 @@ impl CargoSettings {
     }
 }
 
+/// A single resource to be copied into the bundle's resources
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum Resource {
+    SinglePath(PathBuf),
+    DestinationSpecified { from: PathBuf, to: PathBuf }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
     pub cargo_settings: CargoSettings,
