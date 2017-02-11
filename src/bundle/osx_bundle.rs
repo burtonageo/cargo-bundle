@@ -34,13 +34,7 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
         File::create(f)
     });
 
-    let bin_name = try!(settings.cargo_settings
-                                .binary_file
-                                .file_name()
-                                .and_then(OsStr::to_str)
-                                .map(ToString::to_string)
-                                .ok_or(Box::from("Could not get file name of binary file.")
-                                            as Box<Error + Send + Sync>));
+    let bin_name = try!(settings.cargo_settings.binary_name());
 
     let contents = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
                             <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
@@ -85,7 +79,7 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
                                            .and_then(OsStr::to_str)
                                            .unwrap_or("???"),
                            settings.bundle_name,
-                           settings.version_str.as_ref().unwrap_or(&settings.cargo_settings.version),
+                           settings.version_string(),
                            settings.identifier,
                            settings.copyright.as_ref().unwrap_or(&String::new()));
 

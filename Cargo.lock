@@ -6,6 +6,7 @@ dependencies = [
  "icns 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "image 0.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "plist 0.0.15 (registry+https://github.com/rust-lang/crates.io-index)",
+ "md5 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.1.30 (registry+https://github.com/rust-lang/crates.io-index)",
  "walkdir 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -160,6 +161,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "lzw"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "md5"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]

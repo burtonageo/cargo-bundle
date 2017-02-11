@@ -2,6 +2,7 @@
 extern crate clap;
 extern crate icns;
 extern crate image;
+extern crate md5;
 extern crate plist;
 extern crate toml;
 extern crate walkdir;
@@ -12,6 +13,7 @@ use bundle::bundle_project;
 use clap::{App, AppSettings, ArgMatches, SubCommand};
 use std::env;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::stderr;
 use std::io::prelude::*;
@@ -126,6 +128,14 @@ impl CargoSettings {
         }
 
         Ok(settings)
+    }
+
+    pub fn binary_name(&self) -> Result<String, Box<Error + Send + Sync>> {
+        self.binary_file
+            .file_name()
+            .and_then(OsStr::to_str)
+            .map(ToString::to_string)
+            .ok_or(Box::from("Could not get file name of binary file."))
     }
 }
 
@@ -262,6 +272,10 @@ impl Settings {
         }
 
         Ok(settings)
+    }
+
+    pub fn version_string(&self) -> &str {
+        self.version_str.as_ref().unwrap_or(&self.cargo_settings.version)
     }
 }
 
