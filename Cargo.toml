@@ -1,6 +1,6 @@
 [package]
 name = "cargo-bundle"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["George Burton <burtonageo@gmail.com>"]
 license = "MIT"
 keywords = ["bundle", "cargo"]
