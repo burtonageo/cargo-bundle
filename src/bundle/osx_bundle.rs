@@ -1,3 +1,22 @@
+// An OSX package is laid out like:
+//
+// foobar.app    # Actually a directory
+//     Contents      # A further subdirectory
+//         Info.plist     # An xml file containing the app's metadata
+//         MacOS          # A directory to hold executable binary files
+//             foobar          # The main binary executable of the app
+//             foobar_helper   # A helper application, possibly provitidng a CLI
+//         Resources      # Data files such as images, sounds, translations and nib files
+//             en.lproj        # Folder containing english translation strings/data
+//         Frameworks     # A directory containing private frameworks (shared libraries)
+//         ...            # Any other optional files the developer wants to place here
+//
+// See https://developer.apple.com/library/content/documentation/CoreFoundation/Conceptual/
+// CFBundles/Introduction/Introduction.html#//apple_ref/doc/uid/10000123i-CH1-SW1 for a
+// full explanation.
+//
+// Currently, cargo-bundle does not support Frameworks, nor does it support placing arbitrary
+// files into the `Contents` directory of the bundle.
 use Settings;
 use icns;
 use image::{self, GenericImage};
