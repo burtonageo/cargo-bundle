@@ -69,7 +69,7 @@ impl CargoSettings {
         target_dir.push(build_config);
 
         let cargo_info = cargo_file.ok_or("cargo.toml is not present in project directory".into())
-                                   .and_then(load_toml)?;
+            .and_then(load_toml)?;
 
         let mut settings = CargoSettings {
             project_home_directory: project_dir,
@@ -92,7 +92,8 @@ impl CargoSettings {
                                     settings.binary_file.push(s);
                                 } else {
                                     bail!("expected field \"name\" to have type \"String\", actually has \
-                                           type {}", value);
+                                           type {}",
+                                          value);
                                 }
                             }
                             "version" => {
@@ -116,13 +117,16 @@ impl CargoSettings {
                             "authors" => {
                                 if let Value::Array(a) = value {
                                     settings.authors = a.into_iter()
-                                                        .filter_map(|v| {
-                                                            if let Value::String(s) = v { Some(s) } else { None }
-                                                        })
-                                                        .collect();
+                                        .filter_map(|v| if let Value::String(s) = v {
+                                            Some(s)
+                                        } else {
+                                            None
+                                        })
+                                        .collect();
                                 } else {
                                     bail!("Invalid format for script value in Bundle.toml: \
-                                           Expected array, found {:?}", value);
+                                           Expected array, found {:?}",
+                                          value);
                                 }
                             }
                             _ => {}
@@ -195,7 +199,8 @@ impl Settings {
                         }
                     } else {
                         bail!("Invalid format for script value in Bundle.toml: \
-                               Expected string, found {:?}", value);
+                               Expected string, found {:?}",
+                              value);
                     }
                 }
                 "name" => {
@@ -234,7 +239,8 @@ impl Settings {
                         Value::Array(icon_paths) => try!(parse_resource_files(icon_paths)),
                         _ => {
                             bail!("Invalid format for bundle icon in Bundle.toml: Expected string or \
-                                   array, found {:?}", value);
+                                   array, found {:?}",
+                                  value);
                         }
                     };
                 }
@@ -302,12 +308,12 @@ fn build_project_if_unbuilt(settings: &Settings) -> Result<()> {
     bin_file.push(&settings.cargo_settings.binary_file);
     if !bin_file.exists() {
         // TODO(burtonageo): Should call `cargo build` here to be friendlier
-        let output = process::Command::new("cargo")
-                        .arg("build")
-                        .arg(if settings.is_release { "--release" } else { "" })
-                        .output()?;
+        let output = process::Command::new("cargo").arg("build")
+            .arg(if settings.is_release { "--release" } else { "" })
+            .output()?;
         if !output.status.success() {
-            bail!("Result of `cargo build` operation was unsuccessful: {}", output.status);
+            bail!("Result of `cargo build` operation was unsuccessful: {}",
+                  output.status);
         }
     }
     Ok(())
@@ -329,15 +335,18 @@ fn run() -> ::Result<()> {
                 .get_matches();
 
     if let Some(m) = m.subcommand_matches("bundle") {
-        let output_paths = env::current_dir()
-                               .map_err(From::from)
-                               .and_then(|d| Settings::new(d, m))
-                               .and_then(|s| {
-                                   try!(build_project_if_unbuilt(&s));
-                                   Ok(s)
-                               })
-                               .and_then(bundle_project)?;
-        let pluralised = if output_paths.len() == 1 { "bundle" } else { "bundles" };
+        let output_paths = env::current_dir().map_err(From::from)
+            .and_then(|d| Settings::new(d, m))
+            .and_then(|s| {
+                try!(build_project_if_unbuilt(&s));
+                Ok(s)
+            })
+            .and_then(bundle_project)?;
+        let pluralised = if output_paths.len() == 1 {
+            "bundle"
+        } else {
+            "bundles"
+        };
         println!("{} {} created at:", output_paths.len(), pluralised);
         for bundle in output_paths {
             println!("\t{}", bundle.display());

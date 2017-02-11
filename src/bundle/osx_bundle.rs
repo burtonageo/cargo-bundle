@@ -3,8 +3,8 @@ use icns;
 use image::{self, GenericImage};
 use std::ffi::OsStr;
 use std::fs::{self, File, create_dir_all};
-use std::io::prelude::*;
 use std::io::{self, BufWriter};
+use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -22,9 +22,8 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let mut resources_dir = bundle_directory.clone();
     resources_dir.push("Resources");
 
-    let bundle_icon_file: Option<PathBuf> = try!(create_icns_file(&settings.bundle_name,
-                                                                  &resources_dir,
-                                                                  &settings.icon_files));
+    let bundle_icon_file: Option<PathBuf> =
+        try!(create_icns_file(&settings.bundle_name, &resources_dir, &settings.icon_files));
 
     let mut plist = {
         let mut f = bundle_directory.clone();
@@ -73,9 +72,9 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
                             </plist>",
                            bin_name,
                            bundle_icon_file.as_ref()
-                                           .and_then(|p| p.file_name())
-                                           .and_then(OsStr::to_str)
-                                           .unwrap_or("???"),
+                               .and_then(|p| p.file_name())
+                               .and_then(OsStr::to_str)
+                               .unwrap_or("???"),
                            settings.bundle_name,
                            settings.version_string(),
                            settings.identifier,
