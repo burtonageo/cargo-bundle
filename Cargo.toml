@@ -9,6 +9,7 @@ description = "Wrap rust executables in OS-specific app bundles"
 
 [dependencies]
 clap = "^2"
+error-chain = "^0.9"
 icns = "^0.2"
 image = "^0.10"
 md5 = "0.1.1"

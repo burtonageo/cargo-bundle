@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate clap;
+#[macro_use]
+extern crate error_chain;
 extern crate icns;
 extern crate image;
 extern crate md5;
@@ -12,22 +14,28 @@ mod bundle;
 use bundle::bundle_project;
 use clap::{App, AppSettings, ArgMatches, SubCommand};
 use std::env;
-use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::stderr;
 use std::io::prelude::*;
-use std::marker::{Send, Sync};
 use std::path::{Path, PathBuf};
 use std::process;
 use toml::{Parser, Table, Value};
+
+error_chain! {
+    foreign_links {
+        Io(::std::io::Error);
+        Image(::image::ImageError);
+        Walkdir(::walkdir::Error);
+    }
+    errors { }
+}
 
 macro_rules! simple_parse {
     ($toml_ty:ident, $value:expr, $msg:expr) => (
         if let Value::$toml_ty(x) = $value {
             x
         } else {
-            return Err(Box::from(format!($msg, $value)));
+            bail!(format!($msg, $value));
         }
     )
 }
@@ -44,11 +52,11 @@ pub struct CargoSettings {
 }
 
 impl CargoSettings {
-    fn new(project_home_directory: &Path, is_release: bool) -> Result<Self, Box<Error + Send + Sync>> {
+    fn new(project_home_directory: &Path, is_release: bool) -> ::Result<Self> {
         let project_dir = project_home_directory.to_path_buf();
         let mut cargo_file = None;
-        for node in try!(project_dir.read_dir()) {
-            let path = try!(node).path();
+        for node in project_dir.read_dir()? {
+            let path = node?.path();
             if let Some("Cargo.toml") = path.file_name().and_then(|fl_nm| fl_nm.to_str()) {
                 cargo_file = Some(path.to_path_buf());
             }
@@ -60,8 +68,8 @@ impl CargoSettings {
         target_dir.push("target");
         target_dir.push(build_config);
 
-        let cargo_info = try!(cargo_file.ok_or(Box::from("Could not find Cargo.toml in project directory"))
-                                        .and_then(load_toml));
+        let cargo_info = cargo_file.ok_or("cargo.toml is not present in project directory".into())
+                                   .and_then(load_toml)?;
 
         let mut settings = CargoSettings {
             project_home_directory: project_dir,
@@ -83,9 +91,8 @@ impl CargoSettings {
                                     settings.binary_file = settings.project_out_directory.clone();
                                     settings.binary_file.push(s);
                                 } else {
-                                    return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
-                                                                  Expected string, found {:?}",
-                                                                 value)));
+                                    bail!("expected field \"name\" to have type \"String\", actually has \
+                                           type {}", value);
                                 }
                             }
                             "version" => {
@@ -114,9 +121,8 @@ impl CargoSettings {
                                                         })
                                                         .collect();
                                 } else {
-                                    return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
-                                                                  Expected array, found {:?}",
-                                                                 value)));
+                                    bail!("Invalid format for script value in Bundle.toml: \
+                                           Expected array, found {:?}", value);
                                 }
                             }
                             _ => {}
@@ -130,12 +136,12 @@ impl CargoSettings {
         Ok(settings)
     }
 
-    pub fn binary_name(&self) -> Result<String, Box<Error + Send + Sync>> {
+    pub fn binary_name(&self) -> Result<String> {
         self.binary_file
             .file_name()
             .and_then(OsStr::to_str)
             .map(ToString::to_string)
-            .ok_or(Box::from("Could not get file name of binary file."))
+            .ok_or("Could not get file name of binary file.".into())
     }
 }
 
@@ -154,7 +160,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> Result<Self, Box<Error + Send + Sync>> {
+    pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> ::Result<Self> {
         let is_release = matches.is_present("release");
         let cargo_settings = try!(CargoSettings::new(&current_dir, is_release));
 
@@ -185,12 +191,11 @@ impl Settings {
                         if path.is_file() {
                             settings.bundle_script = Some(path);
                         } else {
-                            return Err(Box::from(format!("{:?} should be a file", path)));
+                            bail!("{:?} must be a file", path);
                         }
                     } else {
-                        return Err(Box::from(format!("Invalid format for script value in Bundle.toml: \
-                                                      Expected string, found {:?}",
-                                                     value)));
+                        bail!("Invalid format for script value in Bundle.toml: \
+                               Expected string, found {:?}", value);
                     }
                 }
                 "name" => {
@@ -222,17 +227,14 @@ impl Settings {
                         Value::String(icon_path) => {
                             let icon_path = PathBuf::from(icon_path);
                             if !icon_path.is_file() {
-                                return Err(Box::from("The icon attribute must point to a file"));
+                                bail!("The icon attribute must point to a file");
                             }
                             vec![icon_path]
                         }
                         Value::Array(icon_paths) => try!(parse_resource_files(icon_paths)),
                         _ => {
-                            let msg = format!("Invalid format for bundle icon in \
-                                               Bundle.toml: Expected string or array, \
-                                               found {:?}",
-                                              value);
-                            return Err(Box::from(msg));
+                            bail!("Invalid format for bundle icon in Bundle.toml: Expected string or \
+                                   array, found {:?}", value);
                         }
                     };
                 }
@@ -241,36 +243,32 @@ impl Settings {
                                               value,
                                               "Invalid format for bundle resource files format in \
                                                Bundle.toml: Expected array, found {:?}");
-                    settings.resource_files = try!(parse_resource_files(files))
+                    settings.resource_files = parse_resource_files(files)?
                 }
                 _ => {}
             }
         }
 
-        fn parse_resource_files(files_array: toml::Array) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
-            fn to_file_path(file: toml::Value) -> Result<PathBuf, Box<Error + Send + Sync>> {
+        fn parse_resource_files(files_array: toml::Array) -> Result<Vec<PathBuf>> {
+            fn to_file_path(file: toml::Value) -> Result<PathBuf> {
                 if let Value::String(s) = file {
                     let path = PathBuf::from(s);
                     if !path.exists() {
-                        return Err(Box::from(format!("Resource file {} does not exist.", path.display())));
+                        bail!("Resource file {} does not exist.", path.display());
                     } else {
                         Ok(path)
                     }
                 } else {
-                    return Err(Box::from("Invalid format for resource."));
+                    bail!("Invalid format for resource.");
                 }
-            };
+            }
 
             let mut out_files = Vec::with_capacity(files_array.len());
             for file in files_array.into_iter().map(to_file_path) {
-                match file {
-                    Ok(file) => out_files.push(file),
-                    Err(e) => return Err(e),
-                }
+                out_files.push(file?);
             }
             Ok(out_files)
         }
-
         Ok(settings)
     }
 
@@ -286,39 +284,38 @@ pub enum PackageType {
     Rpm
 }
 
-fn load_toml(toml_file: PathBuf) -> Result<Table, Box<Error + Send + Sync>> {
+fn load_toml(toml_file: PathBuf) -> Result<Table> {
     if !toml_file.exists() {
-        return Err(Box::from(format!("Toml file {:?} does not exist", toml_file)));
+        bail!("Toml file {:?} does not exist", toml_file);
     }
 
     let mut toml_str = String::new();
     try!(File::open(toml_file).and_then(|mut file| file.read_to_string(&mut toml_str)));
 
-    Ok(try!(Parser::new(&toml_str)
-                .parse()
-                .ok_or(Box::<Error + Send + Sync>::from("Could not parse Toml file"))))
+    Ok(Parser::new(&toml_str).parse().ok_or(Error::from_kind("Could not parse Toml file".into()))?)
 }
 
 
 /// run `cargo build` if the binary file does not exist
-fn build_project_if_unbuilt(settings: &Settings) -> Result<(), Box<Error + Send + Sync>> {
+fn build_project_if_unbuilt(settings: &Settings) -> Result<()> {
     let mut bin_file = settings.cargo_settings.project_out_directory.clone();
     bin_file.push(&settings.cargo_settings.binary_file);
     if !bin_file.exists() {
         // TODO(burtonageo): Should call `cargo build` here to be friendlier
-        let output = try!(process::Command::new("cargo")
-                              .arg("build")
-                              .arg(if settings.is_release { "--release" } else { "" })
-                              .output()
-                              .map_err(Box::<Error + Send + Sync>::from));
+        let output = process::Command::new("cargo")
+                        .arg("build")
+                        .arg(if settings.is_release { "--release" } else { "" })
+                        .output()?;
         if !output.status.success() {
-            return Err(Box::from("Result of `cargo build` operation was unsuccessful"));
+            bail!("Result of `cargo build` operation was unsuccessful: {}", output.status);
         }
     }
     Ok(())
 }
 
-fn main() {
+quick_main!(run);
+
+fn run() -> ::Result<()> {
     let m = App::new("cargo-bundle")
                 .author("George Burton <burtonageo@gmail.com>")
                 .about("Bundle rust executables into OS bundles")
@@ -333,21 +330,18 @@ fn main() {
 
     if let Some(m) = m.subcommand_matches("bundle") {
         let output_paths = env::current_dir()
-                               .map_err(Box::from)
+                               .map_err(From::from)
                                .and_then(|d| Settings::new(d, m))
                                .and_then(|s| {
                                    try!(build_project_if_unbuilt(&s));
                                    Ok(s)
                                })
-                               .and_then(bundle_project)
-                               .unwrap_or_else(|e| {
-                                   let _ = write!(stderr(), "{}", e.description());
-                                   process::exit(1);
-                               });
+                               .and_then(bundle_project)?;
         let pluralised = if output_paths.len() == 1 { "bundle" } else { "bundles" };
         println!("{} {} created at:", output_paths.len(), pluralised);
         for bundle in output_paths {
             println!("\t{}", bundle.display());
         }
     }
+    Ok(())
 }

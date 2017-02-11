@@ -1,16 +1,14 @@
 use Settings;
 use icns;
 use image::{self, GenericImage};
-use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::{self, File, create_dir_all};
 use std::io::prelude::*;
 use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
-use std::marker::{Send, Sync};
 use walkdir::WalkDir;
 
-pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + Send + Sync>> {
+pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let mut app_bundle_path = settings.cargo_settings.project_out_directory.clone();
     app_bundle_path.push({
         let mut bundle_name = settings.bundle_name.clone();
@@ -19,7 +17,7 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
     });
     let mut bundle_directory = app_bundle_path.clone();
     bundle_directory.push("Contents");
-    try!(create_dir_all(&bundle_directory));
+    create_dir_all(&bundle_directory)?;
 
     let mut resources_dir = bundle_directory.clone();
     resources_dir.push("Resources");
@@ -28,13 +26,13 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
                                                                   &resources_dir,
                                                                   &settings.icon_files));
 
-    let mut plist = try!({
+    let mut plist = {
         let mut f = bundle_directory.clone();
         f.push("Info.plist");
-        File::create(f)
-    });
+        File::create(f)?
+    };
 
-    let bin_name = try!(settings.cargo_settings.binary_name());
+    let bin_name = settings.cargo_settings.binary_name()?;
 
     let contents = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
                             <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
@@ -101,33 +99,33 @@ pub fn bundle_project(settings: &Settings) -> Result<Vec<PathBuf>, Box<Error + S
         bin_path.push(bin_name);
         bin_path
     };
-    try!(fs::copy(&settings.cargo_settings.binary_file, &bundle_binary));
+    fs::copy(&settings.cargo_settings.binary_file, &bundle_binary)?;
 
     Ok(vec![app_bundle_path])
 }
 
-fn copy_path(from: &Path, to: &Path) -> Result<(), io::Error> {
+fn copy_path(from: &Path, to: &Path) -> io::Result<()> {
     if from.is_file() {
         // TODO(burtonageo): This fails if this is a path to a file which has directory components
         // e.g. from = `/assets/configurations/features-release.json`
-        try!(fs::copy(&from, &to));
+        fs::copy(&from, &to)?;
         return Ok(());
     }
 
     for entry in WalkDir::new(from) {
-        let entry = try!(entry);
-        let entry = entry.path();
+        let entry = entry?;
+        let path = entry.path();
 
-        if entry.is_dir() {
+        if path.is_dir() {
             continue;
         }
 
-        let mut entry_destination = to.to_path_buf();
-        entry_destination.push(entry);
-        if let Some(parent) = entry_destination.parent() {
-            try!(fs::create_dir_all(parent));
+        let mut destination = to.to_path_buf();
+        destination.push(path);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
         }
-        try!(fs::copy(&entry, &entry_destination));
+        fs::copy(&path, &destination)?;
     }
 
     Ok(())
@@ -139,7 +137,7 @@ fn copy_path(from: &Path, to: &Path) -> Result<(), io::Error> {
 fn create_icns_file(bundle_name: &String,
                     resources_dir: &PathBuf,
                     icon_paths: &Vec<PathBuf>)
-                    -> Result<Option<PathBuf>, Box<Error + Send + Sync>> {
+                    -> ::Result<Option<PathBuf>> {
     if icon_paths.is_empty() {
         return Ok(None);
     }
@@ -181,7 +179,7 @@ fn create_icns_file(bundle_name: &String,
         return Ok(Some(dest_path));
     }
 
-    Err(Box::from("No usable icon files found."))
+    bail!("No usable icon files found.");
 }
 
 /// Converts an image::DynamicImage into an icns::Image.
