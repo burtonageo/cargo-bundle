@@ -9,7 +9,8 @@ mod rpm_bundle;
 #[cfg(target_os = "macos")]
 pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
     match settings.package_type {
-        None | Some(PackageType::OsxBundle) => osx_bundle::bundle_project(&settings),
+        None |
+        Some(PackageType::OsxBundle) => osx_bundle::bundle_project(&settings),
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
         Some(PackageType::Rpm) => rpm_bundle::bundle_project(&settings),
     }
@@ -22,7 +23,8 @@ pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
         Some(PackageType::Rpm) => rpm_bundle::bundle_project(&settings),
         Some(otherwise) => {
-            bail!("Wrong bundle type {:?}, can only be either `deb`, `rpm` or `win`", otherwise)
+            bail!("Wrong bundle type {:?}, can only be either `deb`, `rpm` or `win`",
+                  otherwise)
         }
     }
 }
@@ -40,7 +42,8 @@ pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
         Some(PackageType::Rpm) => rpm_bundle::bundle_project(&settings),
         Some(otherwise) => {
-            bail!("Wrong bundle type {:?}, can only be either `deb` or `rpm`", otherwise)
+            bail!("Wrong bundle type {:?}, can only be either `deb` or `rpm`",
+                  otherwise)
         }
     }
 }

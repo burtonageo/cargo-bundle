@@ -45,8 +45,8 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let package_dir = {
         let bin_name = settings.cargo_settings.binary_name()?;
         settings.cargo_settings
-                .project_out_directory
-                .join(format!("{}_{}_{}", bin_name, settings.version_string(), arch))
+            .project_out_directory
+            .join(format!("{}_{}_{}", bin_name, settings.version_string(), arch))
     };
 
     // Generate data files.
@@ -123,7 +123,7 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
                                         settings.version_string());
     let desktop_file_name = format!("{}.desktop", bin_name);
     let desktop_file_path = data_dir.join("usr/share/applications")
-                                    .join(desktop_file_name);
+        .join(desktop_file_name);
     create_file_with_data(desktop_file_path, &desktop_file_contents)?;
     Ok(())
 }
@@ -146,10 +146,11 @@ fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> io::Result<()> {
             write!(md5sums_file, "{:02x}", byte)?;
         }
         let rel_path = path.strip_prefix(data_dir).unwrap();
-        let path_str = rel_path.to_str().ok_or_else(|| {
-            let msg = format!("Non-UTF-8 path: {:?}", rel_path);
-            io::Error::new(io::ErrorKind::InvalidData, msg)
-        })?;
+        let path_str = rel_path.to_str()
+            .ok_or_else(|| {
+                let msg = format!("Non-UTF-8 path: {:?}", rel_path);
+                io::Error::new(io::ErrorKind::InvalidData, msg)
+            })?;
         write!(md5sums_file, "  {}\n", path_str)?;
     }
     Ok(())
@@ -170,10 +171,11 @@ fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> ::Result<()>
             let dest_dir = if src_path.is_absolute() {
                 resource_dir.clone()
             } else {
-                resource_dir.join(src_path.parent().ok_or_else(|| {
-                    let msg = format!("Not a file path: {:?}", src_path);
-                    io::Error::new(io::ErrorKind::InvalidInput, msg)
-                })?)
+                resource_dir.join(src_path.parent()
+                    .ok_or_else(|| {
+                        let msg = format!("Not a file path: {:?}", src_path);
+                        io::Error::new(io::ErrorKind::InvalidInput, msg)
+                    })?)
             };
             copy_file_to_dir(src_path, dest_dir)?;
         }
@@ -185,10 +187,11 @@ fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> ::Result<()>
 /// needed.
 fn create_empty_file<P: AsRef<Path>>(path: P) -> io::Result<BufWriter<File>> {
     let file_path = path.as_ref();
-    let dir_path = file_path.parent().ok_or_else(|| {
-        let msg = format!("Not a file path: {:?}", file_path);
-        io::Error::new(io::ErrorKind::InvalidInput, msg)
-    })?;
+    let dir_path = file_path.parent()
+        .ok_or_else(|| {
+            let msg = format!("Not a file path: {:?}", file_path);
+            io::Error::new(io::ErrorKind::InvalidInput, msg)
+        })?;
     create_dir_all(dir_path)?;
     let file = File::create(file_path)?;
     Ok(BufWriter::new(file))
@@ -207,10 +210,11 @@ fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> io::Result<()> 
 fn copy_file_to_dir<P: AsRef<Path>, Q: AsRef<Path>>(file_path: P, dir_path: Q) -> io::Result<()> {
     let file_path = file_path.as_ref();
     let dir_path = dir_path.as_ref();
-    let file_name = file_path.file_name().ok_or_else(|| {
-        let msg = format!("Not a file path: {:?}", file_path);
-        io::Error::new(io::ErrorKind::InvalidInput, msg)
-    })?;
+    let file_name = file_path.file_name()
+        .ok_or_else(|| {
+            let msg = format!("Not a file path: {:?}", file_path);
+            io::Error::new(io::ErrorKind::InvalidInput, msg)
+        })?;
     create_dir_all(dir_path)?;
     fs::copy(file_path, dir_path.join(file_name))?;
     Ok(())
