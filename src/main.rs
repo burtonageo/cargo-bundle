@@ -4,8 +4,10 @@ extern crate clap;
 extern crate error_chain;
 extern crate icns;
 extern crate image;
+extern crate libflate;
 extern crate md5;
 extern crate plist;
+extern crate tar;
 extern crate toml;
 extern crate walkdir;
 
