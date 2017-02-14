@@ -68,6 +68,6 @@ of stability.
 
 ## License
 
-This program is licensed either under the terms of the [Apache Software License](http://www.apache.org/licenses/LICENSE-2.0.),
+This program is licensed either under the terms of the [Apache Software License](http://www.apache.org/licenses/LICENSE-2.0),
 or the [MIT License](https://opensource.org/licenses/MIT).
 

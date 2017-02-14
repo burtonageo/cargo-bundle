@@ -2,7 +2,7 @@
 name = "cargo-bundle"
 version = "0.1.0"
 authors = ["George Burton <burtonageo@gmail.com>"]
-license = "MIT"
+license = "MIT/Apache-2.0"
 keywords = ["bundle", "cargo"]
 repository = "https://github.com/burtonageo/cargo-bundle"
 description = "Wrap rust executables in OS-specific app bundles"
