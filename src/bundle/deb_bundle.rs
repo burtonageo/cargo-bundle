@@ -39,10 +39,6 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
         }
     }
 
-    let bin_file_metadata = {
-        let bin_file = File::open(&settings.cargo_settings.binary_file)?;
-        bin_file.metadata()?
-    };
     let arch = env::consts::ARCH; // TODO(burtonageo): Use binary arch rather than host arch
 
     let package_base_name = {
@@ -88,7 +84,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
                                             acc.push_str(&s);
                                             acc
                                         }),
-                                        bin_file_metadata.len(), // TODO(burtonageo): Compute data size
+                                        total_dir_size(&data_dir)?,
                                         "deps",
                                         "suggests",
                                         "conflicts",
@@ -229,6 +225,16 @@ fn copy_file_to_dir<P: AsRef<Path>, Q: AsRef<Path>>(file_path: P, dir_path: Q) -
     fs::create_dir_all(dir_path)?;
     fs::copy(file_path, dir_path.join(file_name))?;
     Ok(())
+}
+
+/// Computes the total size, in bytes, of the given directory and all of its
+/// contents.
+fn total_dir_size(dir: &Path) -> io::Result<u64> {
+    let mut total: u64 = 0;
+    for entry in WalkDir::new(&dir) {
+        total += entry?.metadata()?.len();
+    }
+    Ok(total)
 }
 
 /// Writes a tar file to the given writer containing the given directory.
