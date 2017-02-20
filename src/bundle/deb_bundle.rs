@@ -17,7 +17,7 @@
 // metadata, as well as generating the md5sums file.  Currently we do not
 // generate postinst or prerm files.
 
-use {CargoSettings, Settings};
+use Settings;
 use ar;
 use libflate::gzip;
 use md5;
@@ -29,17 +29,12 @@ use tar;
 use walkdir::WalkDir;
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
-    fn get_homepage(settings: &CargoSettings) -> &str {
-        if !settings.description.is_empty() {
-            &settings.description
-        } else if !settings.homepage.is_empty() {
-            &settings.homepage
-        } else {
-            &""
-        }
-    }
-
-    let arch = env::consts::ARCH; // TODO(burtonageo): Use binary arch rather than host arch
+    // TODO(burtonageo): Use binary arch rather than host arch
+    let arch = match env::consts::ARCH {
+        "x86" => "i386",
+        "x86_64" => "amd64",
+        other => other,
+    };
 
     let package_base_name = {
         let bin_name = settings.cargo_settings.binary_name()?;
@@ -58,44 +53,11 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
                      data_dir.join("usr/bin"))?;
     transfer_resource_files(settings, &data_dir)?;
     generate_desktop_file(settings, &data_dir)?;
-    // TODO: Generate icon file(s)
+    // TODO(mdsteele): Generate icon file(s)
 
     // Generate control files.
     let control_dir = package_dir.join("control");
-    let control_file_contents = format!("Package: {}\n\
-                                         Version: {}\n\
-                                         Architecture: {}\n\
-                                         Maintainer: {}\n\
-                                         Installed-Size: {}\n\
-                                         Depends: {}\n\
-                                         Suggests: {}\n\
-                                         Conflicts: {}\n\
-                                         Breaks: {}\n\
-                                         Replaces: {}\n\
-                                         Provides: {}\n\
-                                         Section: {}\n\
-                                         Priority: {}\n\
-                                         Homepage: {}\n\
-                                         Description: {}",
-                                        settings.bundle_name,
-                                        settings.cargo_settings.version,
-                                        arch,
-                                        settings.cargo_settings.authors.iter().fold(String::new(), |mut acc, s| {
-                                            acc.push_str(&s);
-                                            acc
-                                        }),
-                                        total_dir_size(&data_dir)?,
-                                        "deps",
-                                        "suggests",
-                                        "conflicts",
-                                        "breaks",
-                                        "replaces",
-                                        "provides",
-                                        "section",
-                                        "priority",
-                                        get_homepage(&settings.cargo_settings),
-                                        settings.cargo_settings.description);
-    create_file_with_data(&control_dir.join("control"), &control_file_contents)?;
+    generate_control_file(settings, arch, &control_dir, &data_dir)?;
     generate_md5sums(&control_dir, &data_dir)?;
 
     // Generate `debian-binary` file; see
@@ -133,6 +95,34 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
         .join(desktop_file_name);
     create_file_with_data(desktop_file_path, &desktop_file_contents)?;
     Ok(())
+}
+
+fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, data_dir: &Path) -> io::Result<()> {
+    // For more information about the format of this file, see
+    // https://www.debian.org/doc/debian-policy/ch-controlfields.html
+    let dest_path = control_dir.join("control");
+    let mut file = create_empty_file(dest_path)?;
+    writeln!(&mut file, "Package: {}", settings.bundle_name)?;
+    writeln!(&mut file, "Version: {}", settings.cargo_settings.version)?;
+    writeln!(&mut file, "Architecture: {}", arch)?;
+    writeln!(&mut file, "Installed-Size: {}", total_dir_size(data_dir)?)?;
+    writeln!(&mut file,
+             "Maintainer: {}",
+             settings.cargo_settings.authors.iter().fold(String::new(), |mut acc, s| {
+                 acc.push_str(&s);
+                 acc
+             }))?;
+    if !settings.cargo_settings.homepage.is_empty() {
+        writeln!(&mut file, "Homepage: {}", settings.cargo_settings.homepage)?;
+    }
+    // TODO(mdsteele): Split description into short and long sections.
+    let mut description = settings.cargo_settings.description.trim();
+    if description.is_empty() {
+        description = "(none)";
+    }
+    writeln!(&mut file, "Description: {}", description)?;
+    writeln!(&mut file, " {}", description)?;
+    file.flush()
 }
 
 /// Create an `md5sums` file in the `control_dir` containing the MD5 checksums
