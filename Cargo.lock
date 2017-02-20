@@ -2,6 +2,7 @@
 name = "cargo-bundle"
 version = "0.1.0"
 dependencies = [
+ "ar 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.19.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "icns 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -17,6 +18,11 @@ dependencies = [
 [[package]]
 name = "ansi_term"
 version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "ar"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -466,6 +472,7 @@ dependencies = [
 
 [metadata]
 "checksum ansi_term 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "23ac7c30002a5accbf7e8987d0632fa6de155b7c3d39d0067317a391e00a2ef6"
+"checksum ar 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f39c3c79dd1689e5124f8738c8a9dc69ecd9aa05ce3a55115a054b49c9525df4"
 "checksum backtrace 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f551bc2ddd53aea015d453ef0b635af89444afa5ed2405dd0b2062ad5d600d80"
 "checksum backtrace-sys 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "a81b49c3aa114aa4d951a12d9e32e27809405c369efef2a75aac70efb1176fae"
 "checksum bitflags 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "aad18937a628ec6abcd26d1489012cc0e18c21798210f491af69ded9b881106d"

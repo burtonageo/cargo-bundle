@@ -1,6 +1,6 @@
 // The structure of a Debian package looks something like this:
 //
-// foobar_1.2.3_i386.deb   # Actually a tar file
+// foobar_1.2.3_i386.deb   # Actually an ar archive
 //     debian-binary           # Specifies deb format version (2.0 in our case)
 //     control.tar.gz          # Contains files controlling the installation:
 //         control                  # Basic package metadata
@@ -18,10 +18,10 @@
 // generate postinst or prerm files.
 
 use {CargoSettings, Settings};
+use ar;
 use libflate::gzip;
 use md5;
 use std::env;
-use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -45,12 +45,16 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     };
     let arch = env::consts::ARCH; // TODO(burtonageo): Use binary arch rather than host arch
 
-    let package_dir = {
+    let package_base_name = {
         let bin_name = settings.cargo_settings.binary_name()?;
-        settings.cargo_settings
-            .project_out_directory
-            .join(format!("{}_{}_{}", bin_name, settings.version_string(), arch))
+        format!("{}_{}_{}", bin_name, settings.version_string(), arch)
     };
+    let package_dir = settings.cargo_settings
+        .project_out_directory
+        .join(&package_base_name);
+    let package_path = settings.cargo_settings
+        .project_out_directory
+        .join(format!("{}.deb", package_base_name));
 
     // Generate data files.
     let data_dir = package_dir.join("data");
@@ -100,13 +104,15 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 
     // Generate `debian-binary` file; see
     // http://www.tldp.org/HOWTO/Debian-Binary-Package-Building-HOWTO/x60.html#AEN66
-    create_file_with_data(package_dir.join("debian-binary"), "2.0\n")?;
+    let debian_binary_path = package_dir.join("debian-binary");
+    create_file_with_data(&debian_binary_path, "2.0\n")?;
 
-    // Apply tar/gzip to create the final package file.
-    tar_and_gzip_dir(control_dir)?;
-    tar_and_gzip_dir(data_dir)?;
-    let deb_package_path = tar_dir_as_deb(package_dir)?;
-    Ok(vec![deb_package_path])
+    // Apply tar/gzip/ar to create the final package file.
+    let control_tar_gz_path = tar_and_gzip_dir(control_dir)?;
+    let data_tar_gz_path = tar_and_gzip_dir(data_dir)?;
+    create_archive(vec![debian_binary_path, control_tar_gz_path, data_tar_gz_path],
+                   &package_path)?;
+    Ok(vec![package_path])
 }
 
 /// Generate the application desktop file and store it under the `data_dir`.
@@ -228,20 +234,14 @@ fn copy_file_to_dir<P: AsRef<Path>, Q: AsRef<Path>>(file_path: P, dir_path: Q) -
 /// Writes a tar file to the given writer containing the given directory.
 fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> io::Result<W> {
     let src_dir = src_dir.as_ref();
-    println!("FIXME create_tar_from_dir {:?}", src_dir);
-    let base_name = src_dir.file_name()
-        .map(PathBuf::from)
-        .ok_or_else(|| {
-            let msg = format!("Directory has no name: {:?}", src_dir);
-            io::Error::new(io::ErrorKind::InvalidInput, msg)
-        })?;
     let mut tar_builder = tar::Builder::new(dest_file);
     for entry in WalkDir::new(&src_dir) {
         let entry = entry?;
         let src_path = entry.path();
-        println!("FIXME entry {:?}", src_path);
-        let src_path_rel = src_path.strip_prefix(&src_dir).unwrap();
-        let dest_path = base_name.join(src_path_rel);
+        if src_path == src_dir {
+            continue;
+        }
+        let dest_path = src_path.strip_prefix(&src_dir).unwrap();
         if entry.file_type().is_dir() {
             tar_builder.append_dir(dest_path, src_path)?;
         } else {
@@ -257,7 +257,6 @@ fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> io
 /// directory and returns the path to the new file.
 fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> io::Result<PathBuf> {
     let src_dir = src_dir.as_ref();
-    println!("FIXME tar_and_gzip_dir {:?}", src_dir);
     let dest_path = src_dir.with_extension("tar.gz");
     let dest_file = create_empty_file(&dest_path)?;
     let gzip_encoder = gzip::Encoder::new(dest_file)?;
@@ -268,20 +267,12 @@ fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> io::Result<PathBuf> {
     Ok(dest_path)
 }
 
-/// Creates a `.deb` file from the given directory (placing the new file within
-/// the given directory's parent directory), then deletes the original
-/// directory and returns the path to the new file.
-fn tar_dir_as_deb<P: AsRef<Path>>(src_dir: P) -> io::Result<PathBuf> {
-    let src_dir = src_dir.as_ref();
-    println!("FIXME tar_dir_as_deb {:?}", src_dir);
-    let dest_path = {
-        let mut ext = src_dir.extension().unwrap_or(OsStr::new("")).to_os_string();
-        ext.push(".deb");
-        src_dir.with_extension(ext)
-    };
-    let dest_file = create_empty_file(&dest_path)?;
-    let mut dest_file = create_tar_from_dir(src_dir, dest_file)?;
-    dest_file.flush()?;
-    fs::remove_dir_all(src_dir)?;
-    Ok(dest_path)
+/// Creates an `ar` archive from the given source files and writes it to the
+/// given destination path.
+fn create_archive(srcs: Vec<PathBuf>, dest: &Path) -> io::Result<()> {
+    let mut builder = ar::Builder::new(create_empty_file(&dest)?);
+    for path in &srcs {
+        builder.append_path(path)?;
+    }
+    builder.into_inner()?.flush()
 }

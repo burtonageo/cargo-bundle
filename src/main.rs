@@ -1,3 +1,4 @@
+extern crate ar;
 #[macro_use]
 extern crate clap;
 #[macro_use]
