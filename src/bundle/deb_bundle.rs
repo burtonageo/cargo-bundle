@@ -1,6 +1,6 @@
 // The structure of a Debian package looks something like this:
 //
-// foobar_1.2.3_i386.deb   # Actually a tar file
+// foobar_1.2.3_i386.deb   # Actually an ar archive
 //     debian-binary           # Specifies deb format version (2.0 in our case)
 //     control.tar.gz          # Contains files controlling the installation:
 //         control                  # Basic package metadata
@@ -17,11 +17,11 @@
 // metadata, as well as generating the md5sums file.  Currently we do not
 // generate postinst or prerm files.
 
-use {CargoSettings, Settings};
+use Settings;
+use ar;
 use libflate::gzip;
 use md5;
 use std::env;
-use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -29,28 +29,23 @@ use tar;
 use walkdir::WalkDir;
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
-    fn get_homepage(settings: &CargoSettings) -> &str {
-        if !settings.description.is_empty() {
-            &settings.description
-        } else if !settings.homepage.is_empty() {
-            &settings.homepage
-        } else {
-            &""
-        }
-    }
-
-    let bin_file_metadata = {
-        let bin_file = File::open(&settings.cargo_settings.binary_file)?;
-        bin_file.metadata()?
+    // TODO(burtonageo): Use binary arch rather than host arch
+    let arch = match env::consts::ARCH {
+        "x86" => "i386",
+        "x86_64" => "amd64",
+        other => other,
     };
-    let arch = env::consts::ARCH; // TODO(burtonageo): Use binary arch rather than host arch
 
-    let package_dir = {
+    let package_base_name = {
         let bin_name = settings.cargo_settings.binary_name()?;
-        settings.cargo_settings
-            .project_out_directory
-            .join(format!("{}_{}_{}", bin_name, settings.version_string(), arch))
+        format!("{}_{}_{}", bin_name, settings.version_string(), arch)
     };
+    let package_dir = settings.cargo_settings
+        .project_out_directory
+        .join(&package_base_name);
+    let package_path = settings.cargo_settings
+        .project_out_directory
+        .join(format!("{}.deb", package_base_name));
 
     // Generate data files.
     let data_dir = package_dir.join("data");
@@ -58,55 +53,24 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
                      data_dir.join("usr/bin"))?;
     transfer_resource_files(settings, &data_dir)?;
     generate_desktop_file(settings, &data_dir)?;
-    // TODO: Generate icon file(s)
+    // TODO(mdsteele): Generate icon file(s)
 
     // Generate control files.
     let control_dir = package_dir.join("control");
-    let control_file_contents = format!("Package: {}\n\
-                                         Version: {}\n\
-                                         Architecture: {}\n\
-                                         Maintainer: {}\n\
-                                         Installed-Size: {}\n\
-                                         Depends: {}\n\
-                                         Suggests: {}\n\
-                                         Conflicts: {}\n\
-                                         Breaks: {}\n\
-                                         Replaces: {}\n\
-                                         Provides: {}\n\
-                                         Section: {}\n\
-                                         Priority: {}\n\
-                                         Homepage: {}\n\
-                                         Description: {}",
-                                        settings.bundle_name,
-                                        settings.cargo_settings.version,
-                                        arch,
-                                        settings.cargo_settings.authors.iter().fold(String::new(), |mut acc, s| {
-                                            acc.push_str(&s);
-                                            acc
-                                        }),
-                                        bin_file_metadata.len(), // TODO(burtonageo): Compute data size
-                                        "deps",
-                                        "suggests",
-                                        "conflicts",
-                                        "breaks",
-                                        "replaces",
-                                        "provides",
-                                        "section",
-                                        "priority",
-                                        get_homepage(&settings.cargo_settings),
-                                        settings.cargo_settings.description);
-    create_file_with_data(&control_dir.join("control"), &control_file_contents)?;
+    generate_control_file(settings, arch, &control_dir, &data_dir)?;
     generate_md5sums(&control_dir, &data_dir)?;
 
     // Generate `debian-binary` file; see
     // http://www.tldp.org/HOWTO/Debian-Binary-Package-Building-HOWTO/x60.html#AEN66
-    create_file_with_data(package_dir.join("debian-binary"), "2.0\n")?;
+    let debian_binary_path = package_dir.join("debian-binary");
+    create_file_with_data(&debian_binary_path, "2.0\n")?;
 
-    // Apply tar/gzip to create the final package file.
-    tar_and_gzip_dir(control_dir)?;
-    tar_and_gzip_dir(data_dir)?;
-    let deb_package_path = tar_dir_as_deb(package_dir)?;
-    Ok(vec![deb_package_path])
+    // Apply tar/gzip/ar to create the final package file.
+    let control_tar_gz_path = tar_and_gzip_dir(control_dir)?;
+    let data_tar_gz_path = tar_and_gzip_dir(data_dir)?;
+    create_archive(vec![debian_binary_path, control_tar_gz_path, data_tar_gz_path],
+                   &package_path)?;
+    Ok(vec![package_path])
 }
 
 /// Generate the application desktop file and store it under the `data_dir`.
@@ -131,6 +95,34 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
         .join(desktop_file_name);
     create_file_with_data(desktop_file_path, &desktop_file_contents)?;
     Ok(())
+}
+
+fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, data_dir: &Path) -> io::Result<()> {
+    // For more information about the format of this file, see
+    // https://www.debian.org/doc/debian-policy/ch-controlfields.html
+    let dest_path = control_dir.join("control");
+    let mut file = create_empty_file(dest_path)?;
+    writeln!(&mut file, "Package: {}", settings.bundle_name)?;
+    writeln!(&mut file, "Version: {}", settings.cargo_settings.version)?;
+    writeln!(&mut file, "Architecture: {}", arch)?;
+    writeln!(&mut file, "Installed-Size: {}", total_dir_size(data_dir)?)?;
+    writeln!(&mut file,
+             "Maintainer: {}",
+             settings.cargo_settings.authors.iter().fold(String::new(), |mut acc, s| {
+                 acc.push_str(&s);
+                 acc
+             }))?;
+    if !settings.cargo_settings.homepage.is_empty() {
+        writeln!(&mut file, "Homepage: {}", settings.cargo_settings.homepage)?;
+    }
+    // TODO(mdsteele): Split description into short and long sections.
+    let mut description = settings.cargo_settings.description.trim();
+    if description.is_empty() {
+        description = "(none)";
+    }
+    writeln!(&mut file, "Description: {}", description)?;
+    writeln!(&mut file, " {}", description)?;
+    file.flush()
 }
 
 /// Create an `md5sums` file in the `control_dir` containing the MD5 checksums
@@ -225,23 +217,27 @@ fn copy_file_to_dir<P: AsRef<Path>, Q: AsRef<Path>>(file_path: P, dir_path: Q) -
     Ok(())
 }
 
+/// Computes the total size, in bytes, of the given directory and all of its
+/// contents.
+fn total_dir_size(dir: &Path) -> io::Result<u64> {
+    let mut total: u64 = 0;
+    for entry in WalkDir::new(&dir) {
+        total += entry?.metadata()?.len();
+    }
+    Ok(total)
+}
+
 /// Writes a tar file to the given writer containing the given directory.
 fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> io::Result<W> {
     let src_dir = src_dir.as_ref();
-    println!("FIXME create_tar_from_dir {:?}", src_dir);
-    let base_name = src_dir.file_name()
-        .map(PathBuf::from)
-        .ok_or_else(|| {
-            let msg = format!("Directory has no name: {:?}", src_dir);
-            io::Error::new(io::ErrorKind::InvalidInput, msg)
-        })?;
     let mut tar_builder = tar::Builder::new(dest_file);
     for entry in WalkDir::new(&src_dir) {
         let entry = entry?;
         let src_path = entry.path();
-        println!("FIXME entry {:?}", src_path);
-        let src_path_rel = src_path.strip_prefix(&src_dir).unwrap();
-        let dest_path = base_name.join(src_path_rel);
+        if src_path == src_dir {
+            continue;
+        }
+        let dest_path = src_path.strip_prefix(&src_dir).unwrap();
         if entry.file_type().is_dir() {
             tar_builder.append_dir(dest_path, src_path)?;
         } else {
@@ -257,7 +253,6 @@ fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> io
 /// directory and returns the path to the new file.
 fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> io::Result<PathBuf> {
     let src_dir = src_dir.as_ref();
-    println!("FIXME tar_and_gzip_dir {:?}", src_dir);
     let dest_path = src_dir.with_extension("tar.gz");
     let dest_file = create_empty_file(&dest_path)?;
     let gzip_encoder = gzip::Encoder::new(dest_file)?;
@@ -268,20 +263,12 @@ fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> io::Result<PathBuf> {
     Ok(dest_path)
 }
 
-/// Creates a `.deb` file from the given directory (placing the new file within
-/// the given directory's parent directory), then deletes the original
-/// directory and returns the path to the new file.
-fn tar_dir_as_deb<P: AsRef<Path>>(src_dir: P) -> io::Result<PathBuf> {
-    let src_dir = src_dir.as_ref();
-    println!("FIXME tar_dir_as_deb {:?}", src_dir);
-    let dest_path = {
-        let mut ext = src_dir.extension().unwrap_or(OsStr::new("")).to_os_string();
-        ext.push(".deb");
-        src_dir.with_extension(ext)
-    };
-    let dest_file = create_empty_file(&dest_path)?;
-    let mut dest_file = create_tar_from_dir(src_dir, dest_file)?;
-    dest_file.flush()?;
-    fs::remove_dir_all(src_dir)?;
-    Ok(dest_path)
+/// Creates an `ar` archive from the given source files and writes it to the
+/// given destination path.
+fn create_archive(srcs: Vec<PathBuf>, dest: &Path) -> io::Result<()> {
+    let mut builder = ar::Builder::new(create_empty_file(&dest)?);
+    for path in &srcs {
+        builder.append_path(path)?;
+    }
+    builder.into_inner()?.flush()
 }
