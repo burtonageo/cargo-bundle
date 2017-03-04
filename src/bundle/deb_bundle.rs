@@ -10,6 +10,7 @@
 //     data.tar.gz             # Contains files to be installed:
 //         usr/bin/foobar                            # Binary executable file
 //         usr/share/applications/foobar.desktop     # Desktop file (for apps)
+//         usr/share/icons/hicolor/...               # Icon files (for apps)
 //         usr/lib/foobar/...                        # Other resource files
 //
 // For cargo-bundle, we put bundle resource files under /usr/lib/package_name/,
@@ -17,11 +18,17 @@
 // metadata, as well as generating the md5sums file.  Currently we do not
 // generate postinst or prerm files.
 
+use super::common::is_retina;
 use Settings;
 use ar;
+use icns;
+use image::{self, GenericImage, ImageDecoder};
+use image::png::{PNGDecoder, PNGEncoder};
 use libflate::gzip;
 use md5;
+use std::collections::BTreeSet;
 use std::env;
+use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -52,8 +59,8 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     copy_file_to_dir(&settings.cargo_settings.binary_file,
                      data_dir.join("usr/bin"))?;
     transfer_resource_files(settings, &data_dir)?;
+    generate_icon_files(settings, &data_dir)?;
     generate_desktop_file(settings, &data_dir)?;
-    // TODO(mdsteele): Generate icon file(s)
 
     // Generate control files.
     let control_dir = package_dir.join("control");
@@ -175,6 +182,62 @@ fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> ::Result<()>
                     })?)
             };
             copy_file_to_dir(src_path, dest_dir)?;
+        }
+    }
+    Ok(())
+}
+
+/// Generate the icon files and store them under the `data_dir`.
+fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> {
+    let file_stem = settings.cargo_settings.binary_name()?;
+    let base_dir = data_dir.join("usr/share/icons/hicolor");
+    let get_dest_path = |width: u32, height: u32, is_high_density: bool| {
+        base_dir.join(format!("{}x{}{}/apps/{}.png",
+                              width,
+                              height,
+                              if is_high_density { "@2x" } else { "" },
+                              file_stem))
+    };
+    let mut sizes = BTreeSet::new();
+    // Prefer PNG files.
+    for icon_path in settings.icon_files.iter().filter(|path| path.extension() == Some(OsStr::new("png"))) {
+        let mut decoder = PNGDecoder::new(File::open(icon_path)?);
+        let (width, height) = decoder.dimensions()?;
+        let is_high_density = is_retina(icon_path);
+        if !sizes.contains(&(width, height, is_high_density)) {
+            sizes.insert((width, height, is_high_density));
+            let dest_path = get_dest_path(width, height, is_high_density);
+            if let Some(parent) = dest_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(icon_path, dest_path)?;
+        }
+    }
+    // Fall back to non-PNG files for any missing sizes.
+    for icon_path in settings.icon_files.iter().filter(|path| path.extension() != Some(OsStr::new("png"))) {
+        if icon_path.extension() == Some(OsStr::new("icns")) {
+            let icon_family = icns::IconFamily::read(File::open(icon_path)?)?;
+            for icon_type in icon_family.available_icons() {
+                let width = icon_type.screen_width();
+                let height = icon_type.screen_height();
+                let is_high_density = icon_type.pixel_density() > 1;
+                if !sizes.contains(&(width, height, is_high_density)) {
+                    sizes.insert((width, height, is_high_density));
+                    let dest_path = get_dest_path(width, height, is_high_density);
+                    let icon = icon_family.get_icon_with_type(icon_type)?;
+                    icon.write_png(create_empty_file(dest_path)?)?;
+                }
+            }
+        } else {
+            let icon = try!(image::open(icon_path));
+            let (width, height) = icon.dimensions();
+            let is_high_density = is_retina(icon_path);
+            if !sizes.contains(&(width, height, is_high_density)) {
+                sizes.insert((width, height, is_high_density));
+                let dest_path = get_dest_path(width, height, is_high_density);
+                let encoder = PNGEncoder::new(create_empty_file(dest_path)?);
+                encoder.encode(&icon.raw_pixels(), width, height, icon.color())?;
+            }
         }
     }
     Ok(())

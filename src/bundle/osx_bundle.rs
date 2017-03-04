@@ -17,6 +17,8 @@
 //
 // Currently, cargo-bundle does not support Frameworks, nor does it support placing arbitrary
 // files into the `Contents` directory of the bundle.
+
+use super::common::is_retina;
 use Settings;
 use icns;
 use image::{self, GenericImage};
@@ -213,15 +215,4 @@ fn make_icns_image(img: image::DynamicImage) -> io::Result<icns::Image> {
         }
     };
     icns::Image::from_data(pixel_format, img.width(), img.height(), img.raw_pixels())
-}
-
-/// Returns true if the path has a filename indicating that it is a high-desity
-/// "retina" icon.  Specifically, returns true the the file stem ends with
-/// "@2x" (a convention specified by the [Apple developer docs](
-/// https://developer.apple.com/library/mac/documentation/GraphicsAnimation/Conceptual/HighResolutionOSX/Optimizing/Optimizing.html)).
-pub fn is_retina(path: &Path) -> bool {
-    path.file_stem()
-        .and_then(OsStr::to_str)
-        .map(|stem| stem.ends_with("@2x"))
-        .unwrap_or(false)
 }
