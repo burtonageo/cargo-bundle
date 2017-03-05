@@ -1,6 +1,7 @@
 use {PackageType, Settings};
 use std::path::PathBuf;
 
+mod common;
 #[cfg(target_os = "macos")]
 mod osx_bundle;
 mod deb_bundle;
