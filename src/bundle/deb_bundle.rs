@@ -122,13 +122,23 @@ fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, da
     if !settings.cargo_settings.homepage.is_empty() {
         writeln!(&mut file, "Homepage: {}", settings.cargo_settings.homepage)?;
     }
-    // TODO(mdsteele): Split description into short and long sections.
-    let mut description = settings.cargo_settings.description.trim();
-    if description.is_empty() {
-        description = "(none)";
+    let mut short_description = settings.short_description().trim();
+    if short_description.is_empty() {
+        short_description = "(none)";
     }
-    writeln!(&mut file, "Description: {}", description)?;
-    writeln!(&mut file, " {}", description)?;
+    let mut long_description = settings.long_description().unwrap_or("").trim();
+    if long_description.is_empty() {
+        long_description = "(none)";
+    }
+    writeln!(&mut file, "Description: {}", short_description)?;
+    for line in long_description.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            writeln!(&mut file, " .")?;
+        } else {
+            writeln!(&mut file, " {}", line)?;
+        }
+    }
     file.flush()
 }
 

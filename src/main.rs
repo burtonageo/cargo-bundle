@@ -163,7 +163,9 @@ pub struct Settings {
     pub resource_files: Vec<PathBuf>,
     pub bundle_script: Option<PathBuf>,
     pub icon_files: Vec<PathBuf>,
-    pub copyright: Option<String>
+    pub copyright: Option<String>,
+    pub short_desc: Option<String>,
+    pub long_desc: Option<String>,
 }
 
 impl Settings {
@@ -181,7 +183,9 @@ impl Settings {
             resource_files: vec![],
             bundle_script: None,
             icon_files: vec![],
-            copyright: None
+            copyright: None,
+            short_desc: None,
+            long_desc: None,
         };
 
         let table = try!({
@@ -228,6 +232,18 @@ impl Settings {
                     settings.copyright = Some(simple_parse!(String,
                                                             value,
                                                             "Invalid format for copyright notice in \
+                                                             Bundle.toml: Expected string, found {:?}"))
+                }
+                "short_description" => {
+                    settings.short_desc = Some(simple_parse!(String,
+                                                             value,
+                                                             "Invalid format for short description in \
+                                                              Bundle.toml: Expected string, found {:?}"))
+                }
+                "long_description" => {
+                    settings.long_desc = Some(simple_parse!(String,
+                                                            value,
+                                                            "Invalid format for long description in \
                                                              Bundle.toml: Expected string, found {:?}"))
                 }
                 "icon" => {
@@ -283,6 +299,14 @@ impl Settings {
 
     pub fn version_string(&self) -> &str {
         self.version_str.as_ref().unwrap_or(&self.cargo_settings.version)
+    }
+
+    pub fn short_description(&self) -> &str {
+        self.short_desc.as_ref().unwrap_or(&self.cargo_settings.description)
+    }
+
+    pub fn long_description(&self) -> Option<&str> {
+        self.long_desc.as_ref().map(String::as_str)
     }
 }
 
