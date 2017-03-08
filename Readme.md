@@ -42,18 +42,26 @@ If you would like to bundle a release build, you must add the `--release` flag t
  * `script`: [OPTIONAL] This is a reserved field; at the moment it is not used for anything, but may be used to
              run scripts while packaging the bundle (e.g. download files, compress and encrypt, etc.).
  * `copyright`: [OPTIONAL] This contains a copyright string associated with your application.
+ * `short_description`: [OPTIONAL] A short, one-line description of the application. If this is not present, then it
+                        will use the `description` value from your `Cargo.toml` file.
+ * `long_description`: [OPTIONAL] A longer, multi-line description of the application.
 
 ### Example `Bundle.toml`:
 
 ```toml
-
 name = "ExampleApplication"
 identifier = "com.doe.exampleapplication"
 icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
 version = "1.0.0"
 resources = ["assets", "configuration", "secrets/public_key.txt"]
 copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
-
+short_description = "An example application."
+long_description = """
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+eiusmod tempor incididunt ut labore et dolore magna aliqua.  Ut
+enim ad minim veniam, quis nostrud exercitation ullamco laboris
+nisi ut aliquip ex ea commodo consequat.
+"""
 ```
 
 ## Contributing
