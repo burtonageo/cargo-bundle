@@ -11,9 +11,8 @@
 //         Frameworks     # A directory containing private frameworks (shared libraries)
 //         ...            # Any other optional files the developer wants to place here
 //
-// See https://developer.apple.com/library/content/documentation/CoreFoundation/Conceptual/
-// CFBundles/Introduction/Introduction.html#//apple_ref/doc/uid/10000123i-CH1-SW1 for a
-// full explanation.
+// See https://developer.apple.com/go/?id=bundle-structure for a full
+// explanation.
 //
 // Currently, cargo-bundle does not support Frameworks, nor does it support placing arbitrary
 // files into the `Contents` directory of the bundle.
