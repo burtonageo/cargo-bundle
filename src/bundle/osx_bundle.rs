@@ -89,6 +89,8 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
                                 <true/>\n\
                                 <key>NSHumanReadableCopyright</key>\n\
                                 <string>{}</string>\n\
+                                <key>NSHighResolutionCapable</key>\n\
+                                <true/>\n\
                             </dict>\n\
                             </plist>",
                            bin_name,
