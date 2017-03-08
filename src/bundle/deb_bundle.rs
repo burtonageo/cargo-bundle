@@ -27,7 +27,6 @@ use image::png::{PNGDecoder, PNGEncoder};
 use libflate::gzip;
 use md5;
 use std::collections::BTreeSet;
-use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
@@ -36,8 +35,7 @@ use tar;
 use walkdir::WalkDir;
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
-    // TODO(burtonageo): Use binary arch rather than host arch
-    let arch = match env::consts::ARCH {
+    let arch = match settings.binary_arch() {
         "x86" => "i386",
         "x86_64" => "amd64",
         other => other,
