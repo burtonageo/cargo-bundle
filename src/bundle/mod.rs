@@ -20,7 +20,7 @@ pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
 #[cfg(target_os = "windows")]
 pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
     match settings.package_type {
-        None => Err(Box::from("Native windows bundles not yet supported")),
+        None => bail!("Native windows bundles not yet supported"),
         Some(PackageType::Deb) => deb_bundle::bundle_project(&settings),
         Some(PackageType::Rpm) => rpm_bundle::bundle_project(&settings),
         Some(otherwise) => {
