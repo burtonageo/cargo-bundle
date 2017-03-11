@@ -9,6 +9,7 @@ extern crate libflate;
 extern crate md5;
 extern crate plist;
 extern crate tar;
+extern crate target_build_utils;
 extern crate toml;
 extern crate walkdir;
 
@@ -22,12 +23,14 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::process;
+use target_build_utils::TargetInfo;
 use toml::{Parser, Table, Value};
 
 error_chain! {
     foreign_links {
         Io(::std::io::Error);
         Image(::image::ImageError);
+        Target(::target_build_utils::Error);
         Walkdir(::walkdir::Error);
     }
     errors { }
@@ -55,7 +58,7 @@ pub struct CargoSettings {
 }
 
 impl CargoSettings {
-    fn new(project_home_directory: &Path, is_release: bool) -> ::Result<Self> {
+    fn new(project_home_directory: &Path, target_triple: Option<&str>, is_release: bool) -> ::Result<Self> {
         let project_dir = project_home_directory.to_path_buf();
         let mut cargo_file = None;
         for node in project_dir.read_dir()? {
@@ -65,11 +68,11 @@ impl CargoSettings {
             }
         }
 
-        let mut target_dir = project_dir.clone();
-        let build_config = if is_release { "release" } else { "debug" };
-
-        target_dir.push("target");
-        target_dir.push(build_config);
+        let mut target_dir = project_home_directory.join("target");
+        if let Some(triple) = target_triple {
+            target_dir.push(triple);
+        }
+        target_dir.push(if is_release { "release" } else { "debug" });
 
         let cargo_info = cargo_file.ok_or("cargo.toml is not present in project directory".into())
             .and_then(load_toml)?;
@@ -152,10 +155,11 @@ impl CargoSettings {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Settings {
     pub cargo_settings: CargoSettings,
     pub package_type: Option<PackageType>, // If `None`, use the default package type for this os
+    pub target: Option<(String, TargetInfo)>,
     pub is_release: bool,
     pub bundle_name: String,
     pub identifier: String, // Unique identifier for the bundle
@@ -165,17 +169,32 @@ pub struct Settings {
     pub icon_files: Vec<PathBuf>,
     pub copyright: Option<String>,
     pub short_desc: Option<String>,
-    pub long_desc: Option<String>,
+    pub long_desc: Option<String>
 }
 
 impl Settings {
     pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> ::Result<Self> {
+        let package_type = match matches.value_of("format") {
+            // Other types we may eventually want to support: ios, apk, win
+            None => None,
+            Some("deb") => Some(PackageType::Deb),
+            Some("osx") => Some(PackageType::OsxBundle),
+            Some("rpm") => Some(PackageType::Rpm),
+            Some(format) => bail!("Unsupported bundle format: {}", format),
+        };
         let is_release = matches.is_present("release");
-        let cargo_settings = try!(CargoSettings::new(&current_dir, is_release));
+        let target = match matches.value_of("target") {
+            Some(triple) => Some((triple.to_string(), TargetInfo::from_str(triple)?)),
+            None => None,
+        };
+        let cargo_settings = CargoSettings::new(&current_dir,
+                                                target.as_ref().map(|&(ref triple, _)| triple.as_str()),
+                                                is_release)?;
 
         let mut settings = Settings {
             cargo_settings: cargo_settings,
-            package_type: None,
+            package_type: package_type,
+            target: target,
             is_release: is_release,
             bundle_name: String::new(),
             identifier: String::new(),
@@ -185,7 +204,7 @@ impl Settings {
             icon_files: vec![],
             copyright: None,
             short_desc: None,
-            long_desc: None,
+            long_desc: None
         };
 
         let table = try!({
@@ -297,6 +316,38 @@ impl Settings {
         Ok(settings)
     }
 
+    /// Returns the architecture for the binary being bundled (e.g. "arm" or
+    /// "x86" or "x86_64").
+    pub fn binary_arch(&self) -> &str {
+        if let Some((_, ref info)) = self.target {
+            info.target_arch()
+        } else {
+            std::env::consts::ARCH
+        }
+    }
+
+    /// If a specific package type was specified by the command-line, returns
+    /// that package type; otherwise, if a target triple was specified by the
+    /// command-line, returns the native package type(s) for that target;
+    /// otherwise, returns the native package type(s) for the host platform.
+    /// Fails if the host/target's native package type is not supported.
+    pub fn package_types(&self) -> Result<Vec<PackageType>> {
+        if let Some(package_type) = self.package_type {
+            Ok(vec![package_type])
+        } else {
+            let target_os = if let Some((_, ref info)) = self.target {
+                info.target_os()
+            } else {
+                std::env::consts::OS
+            };
+            match target_os {
+                "macos" => Ok(vec![PackageType::OsxBundle]),
+                "linux" => Ok(vec![PackageType::Deb]), // TODO: Do Rpm too, once it's implemented.
+                os => bail!("Native {} bundles not yet supported.", os),
+            }
+        }
+    }
+
     pub fn version_string(&self) -> &str {
         self.version_str.as_ref().unwrap_or(&self.cargo_settings.version)
     }
@@ -336,6 +387,11 @@ fn build_project_if_unbuilt(settings: &Settings) -> Result<()> {
     if !bin_file.exists() {
         // TODO(burtonageo): Should call `cargo build` here to be friendlier
         let output = process::Command::new("cargo").arg("build")
+            .arg(if let Some((ref triple, _)) = settings.target {
+                format!("--target={}", triple)
+            } else {
+                "".to_string()
+            })
             .arg(if settings.is_release { "--release" } else { "" })
             .output()?;
         if !output.status.success() {
@@ -358,6 +414,7 @@ fn run() -> ::Result<()> {
                 .subcommand(SubCommand::with_name("bundle").args_from_usage(
                     "-d --resources-directory [DIR] 'Directory which contains bundle resources (images, etc)'\n\
                      -r --release 'Build a bundle from a target built in release mode'\n\
+                     --target [TRIPLE] 'Build a bundle for the target triple'\n\
                      -f --format [FORMAT] 'Which format to use for the bundle'"))
                 .get_matches();
 
