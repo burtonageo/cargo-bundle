@@ -18,7 +18,7 @@
 // metadata, as well as generating the md5sums file.  Currently we do not
 // generate postinst or prerm files.
 
-use super::common::is_retina;
+use super::common;
 use Settings;
 use ar;
 use icns;
@@ -29,7 +29,7 @@ use md5;
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::{self, BufWriter, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use tar;
 use walkdir::WalkDir;
@@ -54,8 +54,8 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 
     // Generate data files.
     let data_dir = package_dir.join("data");
-    copy_file_to_dir(&settings.cargo_settings.binary_file,
-                     data_dir.join("usr/bin"))?;
+    common::copy_to_dir(&settings.cargo_settings.binary_file,
+                        &data_dir.join("usr/bin"))?;
     transfer_resource_files(settings, &data_dir)?;
     generate_icon_files(settings, &data_dir)?;
     generate_desktop_file(settings, &data_dir)?;
@@ -102,11 +102,11 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     Ok(())
 }
 
-fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, data_dir: &Path) -> io::Result<()> {
+fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, data_dir: &Path) -> ::Result<()> {
     // For more information about the format of this file, see
     // https://www.debian.org/doc/debian-policy/ch-controlfields.html
     let dest_path = control_dir.join("control");
-    let mut file = create_empty_file(dest_path)?;
+    let mut file = common::create_file(&dest_path)?;
     writeln!(&mut file, "Package: {}", settings.bundle_name)?;
     writeln!(&mut file, "Version: {}", settings.cargo_settings.version)?;
     writeln!(&mut file, "Architecture: {}", arch)?;
@@ -137,14 +137,15 @@ fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, da
             writeln!(&mut file, " {}", line)?;
         }
     }
-    file.flush()
+    file.flush()?;
+    Ok(())
 }
 
 /// Create an `md5sums` file in the `control_dir` containing the MD5 checksums
 /// for each file within the `data_dir`.
-fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> io::Result<()> {
+fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> ::Result<()> {
     let md5sums_path = control_dir.join("md5sums");
-    let mut md5sums_file = create_empty_file(&md5sums_path)?;
+    let mut md5sums_file = common::create_file(&md5sums_path)?;
     for entry in WalkDir::new(data_dir) {
         let entry = entry?;
         let path = entry.path();
@@ -174,23 +175,7 @@ fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> ::Result<()>
     let bin_name = settings.cargo_settings.binary_name()?;
     let resource_dir = data_dir.join("usr/lib").join(bin_name);
     for res_path in &settings.resource_files {
-        for entry in WalkDir::new(res_path) {
-            let entry = entry?;
-            let src_path = entry.path();
-            if src_path.is_dir() {
-                continue;
-            }
-            let dest_dir = if src_path.is_absolute() {
-                resource_dir.clone()
-            } else {
-                resource_dir.join(src_path.parent()
-                    .ok_or_else(|| {
-                        let msg = format!("Not a file path: {:?}", src_path);
-                        io::Error::new(io::ErrorKind::InvalidInput, msg)
-                    })?)
-            };
-            copy_file_to_dir(src_path, dest_dir)?;
-        }
+        common::copy_to_dir(res_path, &resource_dir)?;
     }
     Ok(())
 }
@@ -211,7 +196,7 @@ fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> 
     for icon_path in settings.icon_files.iter().filter(|path| path.extension() == Some(OsStr::new("png"))) {
         let mut decoder = PNGDecoder::new(File::open(icon_path)?);
         let (width, height) = decoder.dimensions()?;
-        let is_high_density = is_retina(icon_path);
+        let is_high_density = common::is_retina(icon_path);
         if !sizes.contains(&(width, height, is_high_density)) {
             sizes.insert((width, height, is_high_density));
             let dest_path = get_dest_path(width, height, is_high_density);
@@ -233,17 +218,17 @@ fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> 
                     sizes.insert((width, height, is_high_density));
                     let dest_path = get_dest_path(width, height, is_high_density);
                     let icon = icon_family.get_icon_with_type(icon_type)?;
-                    icon.write_png(create_empty_file(dest_path)?)?;
+                    icon.write_png(common::create_file(&dest_path)?)?;
                 }
             }
         } else {
             let icon = try!(image::open(icon_path));
             let (width, height) = icon.dimensions();
-            let is_high_density = is_retina(icon_path);
+            let is_high_density = common::is_retina(icon_path);
             if !sizes.contains(&(width, height, is_high_density)) {
                 sizes.insert((width, height, is_high_density));
                 let dest_path = get_dest_path(width, height, is_high_density);
-                let encoder = PNGEncoder::new(create_empty_file(dest_path)?);
+                let encoder = PNGEncoder::new(common::create_file(&dest_path)?);
                 encoder.encode(&icon.raw_pixels(), width, height, icon.color())?;
             }
         }
@@ -252,45 +237,17 @@ fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> 
 }
 
 /// Create an empty file at the given path, creating any parent directories as
-/// needed.
-fn create_empty_file<P: AsRef<Path>>(path: P) -> io::Result<BufWriter<File>> {
-    let file_path = path.as_ref();
-    let dir_path = file_path.parent()
-        .ok_or_else(|| {
-            let msg = format!("Not a file path: {:?}", file_path);
-            io::Error::new(io::ErrorKind::InvalidInput, msg)
-        })?;
-    fs::create_dir_all(dir_path)?;
-    let file = File::create(file_path)?;
-    Ok(BufWriter::new(file))
-}
-
-/// Create an empty file at the given path, creating any parent directories as
 /// needed, then write `data` into the file.
-fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> io::Result<()> {
-    let mut file = create_empty_file(path)?;
+fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> ::Result<()> {
+    let mut file = common::create_file(path.as_ref())?;
     file.write_all(data.as_bytes())?;
-    file.flush()
-}
-
-/// Copy the file at the given path into the given directory, creating any
-/// parent directories as needed.
-fn copy_file_to_dir<P: AsRef<Path>, Q: AsRef<Path>>(file_path: P, dir_path: Q) -> io::Result<()> {
-    let file_path = file_path.as_ref();
-    let dir_path = dir_path.as_ref();
-    let file_name = file_path.file_name()
-        .ok_or_else(|| {
-            let msg = format!("Not a file path: {:?}", file_path);
-            io::Error::new(io::ErrorKind::InvalidInput, msg)
-        })?;
-    fs::create_dir_all(dir_path)?;
-    fs::copy(file_path, dir_path.join(file_name))?;
+    file.flush()?;
     Ok(())
 }
 
 /// Computes the total size, in bytes, of the given directory and all of its
 /// contents.
-fn total_dir_size(dir: &Path) -> io::Result<u64> {
+fn total_dir_size(dir: &Path) -> ::Result<u64> {
     let mut total: u64 = 0;
     for entry in WalkDir::new(&dir) {
         total += entry?.metadata()?.len();
@@ -299,7 +256,7 @@ fn total_dir_size(dir: &Path) -> io::Result<u64> {
 }
 
 /// Writes a tar file to the given writer containing the given directory.
-fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> io::Result<W> {
+fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> ::Result<W> {
     let src_dir = src_dir.as_ref();
     let mut tar_builder = tar::Builder::new(dest_file);
     for entry in WalkDir::new(&src_dir) {
@@ -316,16 +273,17 @@ fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> io
             tar_builder.append_file(dest_path, &mut src_file)?;
         }
     }
-    tar_builder.into_inner()
+    let dest_file = tar_builder.into_inner()?;
+    Ok(dest_file)
 }
 
 /// Creates a `.tar.gz` file from the given directory (placing the new file
 /// within the given directory's parent directory), then deletes the original
 /// directory and returns the path to the new file.
-fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> io::Result<PathBuf> {
+fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> ::Result<PathBuf> {
     let src_dir = src_dir.as_ref();
     let dest_path = src_dir.with_extension("tar.gz");
-    let dest_file = create_empty_file(&dest_path)?;
+    let dest_file = common::create_file(&dest_path)?;
     let gzip_encoder = gzip::Encoder::new(dest_file)?;
     let gzip_encoder = create_tar_from_dir(src_dir, gzip_encoder)?;
     let mut dest_file = gzip_encoder.finish().into_result()?;
@@ -336,10 +294,11 @@ fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> io::Result<PathBuf> {
 
 /// Creates an `ar` archive from the given source files and writes it to the
 /// given destination path.
-fn create_archive(srcs: Vec<PathBuf>, dest: &Path) -> io::Result<()> {
-    let mut builder = ar::Builder::new(create_empty_file(&dest)?);
+fn create_archive(srcs: Vec<PathBuf>, dest: &Path) -> ::Result<()> {
+    let mut builder = ar::Builder::new(common::create_file(&dest)?);
     for path in &srcs {
         builder.append_path(path)?;
     }
-    builder.into_inner()?.flush()
+    builder.into_inner()?.flush()?;
+    Ok(())
 }

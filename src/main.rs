@@ -175,9 +175,10 @@ pub struct Settings {
 impl Settings {
     pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> ::Result<Self> {
         let package_type = match matches.value_of("format") {
-            // Other types we may eventually want to support: ios, apk, win
+            // Other types we may eventually want to support: apk, win
             None => None,
             Some("deb") => Some(PackageType::Deb),
+            Some("ios") => Some(PackageType::IosBundle),
             Some("osx") => Some(PackageType::OsxBundle),
             Some("rpm") => Some(PackageType::Rpm),
             Some(format) => bail!("Unsupported bundle format: {}", format),
@@ -342,6 +343,7 @@ impl Settings {
             };
             match target_os {
                 "macos" => Ok(vec![PackageType::OsxBundle]),
+                "ios" => Ok(vec![PackageType::IosBundle]),
                 "linux" => Ok(vec![PackageType::Deb]), // TODO: Do Rpm too, once it's implemented.
                 os => bail!("Native {} bundles not yet supported.", os),
             }
@@ -364,6 +366,7 @@ impl Settings {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackageType {
     OsxBundle,
+    IosBundle,
     Deb,
     Rpm
 }
