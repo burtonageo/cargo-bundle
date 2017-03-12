@@ -14,16 +14,18 @@ use walkdir;
 pub enum PackageType {
     OsxBundle,
     IosBundle,
+    WindowsMsi,
     Deb,
     Rpm,
 }
 
 impl PackageType {
     pub fn from_short_name(name: &str) -> Option<PackageType> {
-        // Other types we may eventually want to support: apk, win
+        // Other types we may eventually want to support: apk
         match name {
             "deb" => Some(PackageType::Deb),
             "ios" => Some(PackageType::IosBundle),
+            "msi" => Some(PackageType::WindowsMsi),
             "osx" => Some(PackageType::OsxBundle),
             "rpm" => Some(PackageType::Rpm),
             _ => None,
@@ -34,6 +36,7 @@ impl PackageType {
         match *self {
             PackageType::Deb => "deb",
             PackageType::IosBundle => "ios",
+            PackageType::WindowsMsi => "msi",
             PackageType::OsxBundle => "osx",
             PackageType::Rpm => "rpm",
         }
@@ -45,6 +48,7 @@ impl PackageType {
 const ALL_PACKAGE_TYPES: &[PackageType] = &[
     PackageType::Deb,
     PackageType::IosBundle,
+    PackageType::WindowsMsi,
     PackageType::OsxBundle,
     PackageType::Rpm,
 ];
@@ -281,6 +285,7 @@ impl Settings {
                 "macos" => Ok(vec![PackageType::OsxBundle]),
                 "ios" => Ok(vec![PackageType::IosBundle]),
                 "linux" => Ok(vec![PackageType::Deb]), // TODO: Do Rpm too, once it's implemented.
+                "windows" => Ok(vec![PackageType::WindowsMsi]),
                 os => bail!("Native {} bundles not yet supported.", os),
             }
         }
