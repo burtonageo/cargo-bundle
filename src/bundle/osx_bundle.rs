@@ -21,6 +21,7 @@ use super::common::is_retina;
 use Settings;
 use icns;
 use image::{self, GenericImage};
+use std::cmp::min;
 use std::ffi::OsStr;
 use std::fs::{self, File, create_dir_all};
 use std::io::{self, BufWriter};
@@ -176,8 +177,21 @@ fn create_icns_file(bundle_name: &String,
     // Otherwise, read available images and pack them into a new ICNS file.
     let mut family = icns::IconFamily::new();
     for icon_path in icon_paths {
-        let icon = try!(image::open(icon_path));
+        let icon_image = try!(image::open(icon_path));
         let density = if is_retina(icon_path) { 2 } else { 1 };
+
+        let (w, h) = icon_image.dimensions();
+        let orig_size = min(w, h);
+        let next_size_down = 2f32.powf((orig_size as f32).log2().floor()) as u32;
+        let icon = if orig_size > next_size_down {
+            icon_image.resize_exact(
+                next_size_down,
+                next_size_down,
+                image::Lanczos3)
+        } else {
+            icon_image
+        };
+
         // Try to add this image to the icon family.  Ignore images whose sizes
         // don't map to any ICNS icon type; print warnings and skip images that
         // fail to encode.
