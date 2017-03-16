@@ -201,8 +201,6 @@ fn create_icns_file(bundle_name: &String,
                 family.add_icon_with_type(&icon, icon_type).unwrap();
             }
         }
-        // TODO: If none of the icons are of usable sizes, we could also use
-        // the image crate to scale icons to the appropriate sizes.
     }
     if !family.is_empty() {
         try!(create_dir_all(resources_dir));
