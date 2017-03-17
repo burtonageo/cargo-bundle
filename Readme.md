@@ -9,6 +9,10 @@ It supports `.app` bundles for OSX, `.deb` and `.rpm` packages. `msi` installer 
 In addition to bundling executables, it also has facilities to download and package extra data from other
 sources such as the internet or other repositories.
 
+ To install `cargo bundle`, run `cargo install cargo-bundle`. This will add the most recent version of 
+`cargo-bundle` published to [crates.io](https://crates.io/crates/cargo-bundle) as a subcommand to your default 
+`cargo` installation.
+
  To start using `cargo bundle`, you should create a `Bundle.toml` file in the root directory of your project,
 next to the `Cargo.toml` file. Your `Bundle.toml` describes various attributes of the generated bundle, such
 as its name, icon, description, copyright, as well as any packaging scripts you need to generate extra data.
