@@ -93,7 +93,7 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
                                          Version={}\n",
                                         bin_name,
                                         bin_name,
-                                        settings.bundle_name,
+                                        settings.bundle_name(),
                                         settings.version_string());
     let desktop_file_name = format!("{}.desktop", bin_name);
     let desktop_file_path = data_dir.join("usr/share/applications")
@@ -107,7 +107,7 @@ fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, da
     // https://www.debian.org/doc/debian-policy/ch-controlfields.html
     let dest_path = control_dir.join("control");
     let mut file = common::create_file(&dest_path)?;
-    writeln!(&mut file, "Package: {}", settings.bundle_name)?;
+    writeln!(&mut file, "Package: {}", settings.bundle_name())?;
     writeln!(&mut file, "Version: {}", settings.cargo_settings.version)?;
     writeln!(&mut file, "Architecture: {}", arch)?;
     writeln!(&mut file, "Installed-Size: {}", total_dir_size(data_dir)?)?;

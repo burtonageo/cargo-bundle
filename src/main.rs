@@ -50,6 +50,7 @@ macro_rules! simple_parse {
 pub struct CargoSettings {
     pub project_home_directory: PathBuf,
     pub project_out_directory: PathBuf,
+    pub name: String,
     pub binary_file: PathBuf,
     pub version: String,
     pub description: String,
@@ -80,6 +81,7 @@ impl CargoSettings {
         let mut settings = CargoSettings {
             project_home_directory: project_dir,
             project_out_directory: target_dir,
+            name: String::new(),
             binary_file: PathBuf::new(),
             version: String::new(),
             description: String::new(),
@@ -95,7 +97,8 @@ impl CargoSettings {
                             "name" => {
                                 if let Value::String(s) = value {
                                     settings.binary_file = settings.project_out_directory.clone();
-                                    settings.binary_file.push(s);
+                                    settings.binary_file.push(&s);
+                                    settings.name = s;
                                 } else {
                                     bail!("expected field \"name\" to have type \"String\", actually has \
                                            type {}",
@@ -161,7 +164,7 @@ pub struct Settings {
     pub package_type: Option<PackageType>, // If `None`, use the default package type for this os
     pub target: Option<(String, TargetInfo)>,
     pub is_release: bool,
-    pub bundle_name: String,
+    pub name: String,
     pub identifier: String, // Unique identifier for the bundle
     pub version_str: Option<String>,
     pub resource_files: Vec<PathBuf>,
@@ -197,7 +200,7 @@ impl Settings {
             package_type: package_type,
             target: target,
             is_release: is_release,
-            bundle_name: String::new(),
+            name: String::new(),
             identifier: String::new(),
             version_str: None,
             resource_files: vec![],
@@ -231,10 +234,10 @@ impl Settings {
                     }
                 }
                 "name" => {
-                    settings.bundle_name = simple_parse!(String,
-                                                         value,
-                                                         "Invalid format for bundle name value in Bundle.toml: \
-                                                          Expected string, found {:?}")
+                    settings.name = simple_parse!(String,
+                                                  value,
+                                                  "Invalid format for bundle name value in Bundle.toml: \
+                                                   Expected string, found {:?}")
                 }
                 "identifier" => {
                     settings.identifier = simple_parse!(String,
@@ -347,6 +350,14 @@ impl Settings {
                 "linux" => Ok(vec![PackageType::Deb]), // TODO: Do Rpm too, once it's implemented.
                 os => bail!("Native {} bundles not yet supported.", os),
             }
+        }
+    }
+
+    pub fn bundle_name(&self) -> &str {
+        if self.name.is_empty() {
+            &self.cargo_settings.name
+        } else {
+            &self.name
         }
     }
 

@@ -20,7 +20,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
-    let bundle_name = format!("{}.app", settings.bundle_name);
+    let bundle_name = format!("{}.app", settings.bundle_name());
     let bundle_dir = settings.cargo_settings.project_out_directory.join(&bundle_name);
     fs::create_dir_all(&bundle_dir)?;
     for res_path in &settings.resource_files {
@@ -28,7 +28,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     }
     let icon_filenames = generate_icon_files(&bundle_dir, settings)?;
     generate_info_plist(&bundle_dir, settings, &icon_filenames)?;
-    let bin_path = bundle_dir.join(&settings.bundle_name);
+    let bin_path = bundle_dir.join(&settings.bundle_name());
     fs::copy(&settings.cargo_settings.binary_file, bin_path)?;
     Ok(vec![bundle_dir])
 }
@@ -99,7 +99,7 @@ fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &
             <dict>\n")?;
     write!(file,
            "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n",
-           settings.bundle_name)?;
+           settings.bundle_name())?;
     write!(file,
            "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
            settings.identifier)?;
