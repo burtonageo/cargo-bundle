@@ -40,17 +40,18 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
         "x86_64" => "amd64",
         other => other,
     };
-
     let package_base_name = {
         let bin_name = settings.cargo_settings.binary_name()?;
         format!("{}_{}_{}", bin_name, settings.version_string(), arch)
     };
+    let package_name = format!("{}.deb", package_base_name);
+    common::print_bundling(&package_name)?;
     let package_dir = settings.cargo_settings
         .project_out_directory
         .join(&package_base_name);
     let package_path = settings.cargo_settings
         .project_out_directory
-        .join(format!("{}.deb", package_base_name));
+        .join(package_name);
 
     // Generate data files.
     let data_dir = package_dir.join("data");
