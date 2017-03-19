@@ -20,8 +20,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
-    let bundle_name = format!("{}.app", settings.bundle_name());
-    let bundle_dir = settings.cargo_settings.project_out_directory.join(&bundle_name);
+    let app_bundle_name = format!("{}.app", settings.bundle_name());
+    common::print_bundling(&app_bundle_name)?;
+    let bundle_dir = settings.cargo_settings.project_out_directory.join(&app_bundle_name);
     fs::create_dir_all(&bundle_dir)?;
     for res_path in &settings.resource_files {
         common::copy_to_dir(res_path, &bundle_dir.join("Resources"))?;

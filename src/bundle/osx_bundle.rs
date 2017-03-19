@@ -17,7 +17,7 @@
 // Currently, cargo-bundle does not support Frameworks, nor does it support placing arbitrary
 // files into the `Contents` directory of the bundle.
 
-use super::common::is_retina;
+use super::common;
 use Settings;
 use icns;
 use image::{self, GenericImage};
@@ -29,8 +29,10 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
+    let app_bundle_name = format!("{}.app", settings.bundle_name());
+    common::print_bundling(&app_bundle_name)?;
     let mut app_bundle_path = settings.cargo_settings.project_out_directory.clone();
-    app_bundle_path.push(format!("{}.app", settings.bundle_name()));
+    app_bundle_path.push(app_bundle_name);
     let mut bundle_directory = app_bundle_path.clone();
     bundle_directory.push("Contents");
     create_dir_all(&bundle_directory)?;
@@ -174,7 +176,7 @@ fn create_icns_file(bundle_name: &str,
     let mut family = icns::IconFamily::new();
     for icon_path in icon_paths {
         let icon = try!(image::open(icon_path));
-        let density = if is_retina(icon_path) { 2 } else { 1 };
+        let density = if common::is_retina(icon_path) { 2 } else { 1 };
         // Try to add this image to the icon family.  Ignore images whose sizes
         // don't map to any ICNS icon type; print warnings and skip images that
         // fail to encode.

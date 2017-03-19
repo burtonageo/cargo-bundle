@@ -7,9 +7,9 @@ extern crate icns;
 extern crate image;
 extern crate libflate;
 extern crate md5;
-extern crate plist;
 extern crate tar;
 extern crate target_build_utils;
+extern crate term;
 extern crate toml;
 extern crate walkdir;
 
@@ -31,6 +31,7 @@ error_chain! {
         Io(::std::io::Error);
         Image(::image::ImageError);
         Target(::target_build_utils::Error);
+        Term(::term::Error);
         Walkdir(::walkdir::Error);
     }
     errors { }
@@ -394,24 +395,19 @@ fn load_toml(toml_file: PathBuf) -> Result<Table> {
 }
 
 
-/// run `cargo build` if the binary file does not exist
+/// Runs `cargo build` to make sure the binary file is up-to-date.
 fn build_project_if_unbuilt(settings: &Settings) -> Result<()> {
-    let mut bin_file = settings.cargo_settings.project_out_directory.clone();
-    bin_file.push(&settings.cargo_settings.binary_file);
-    if !bin_file.exists() {
-        // TODO(burtonageo): Should call `cargo build` here to be friendlier
-        let output = process::Command::new("cargo").arg("build")
-            .arg(if let Some((ref triple, _)) = settings.target {
-                format!("--target={}", triple)
-            } else {
-                "".to_string()
-            })
-            .arg(if settings.is_release { "--release" } else { "" })
-            .output()?;
-        if !output.status.success() {
-            bail!("Result of `cargo build` operation was unsuccessful: {}",
-                  output.status);
-        }
+    let mut args = vec!["build".to_string()];
+    if let Some((ref triple, _)) = settings.target {
+        args.push(format!("--target={}", triple));
+    }
+    if settings.is_release {
+        args.push("--release".to_string());
+    }
+    let status = process::Command::new("cargo").args(args).status()?;
+    if !status.success() {
+        bail!("Result of `cargo build` operation was unsuccessful: {}",
+              status);
     }
     Ok(())
 }
