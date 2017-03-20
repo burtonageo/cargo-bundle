@@ -7,9 +7,9 @@ extern crate icns;
 extern crate image;
 extern crate libflate;
 extern crate md5;
-extern crate plist;
 extern crate tar;
 extern crate target_build_utils;
+extern crate term;
 extern crate toml;
 extern crate walkdir;
 
@@ -31,6 +31,7 @@ error_chain! {
         Io(::std::io::Error);
         Image(::image::ImageError);
         Target(::target_build_utils::Error);
+        Term(::term::Error);
         Walkdir(::walkdir::Error);
     }
     errors { }
@@ -50,6 +51,7 @@ macro_rules! simple_parse {
 pub struct CargoSettings {
     pub project_home_directory: PathBuf,
     pub project_out_directory: PathBuf,
+    pub name: String,
     pub binary_file: PathBuf,
     pub version: String,
     pub description: String,
@@ -80,6 +82,7 @@ impl CargoSettings {
         let mut settings = CargoSettings {
             project_home_directory: project_dir,
             project_out_directory: target_dir,
+            name: String::new(),
             binary_file: PathBuf::new(),
             version: String::new(),
             description: String::new(),
@@ -95,7 +98,8 @@ impl CargoSettings {
                             "name" => {
                                 if let Value::String(s) = value {
                                     settings.binary_file = settings.project_out_directory.clone();
-                                    settings.binary_file.push(s);
+                                    settings.binary_file.push(&s);
+                                    settings.name = s;
                                 } else {
                                     bail!("expected field \"name\" to have type \"String\", actually has \
                                            type {}",
@@ -161,7 +165,7 @@ pub struct Settings {
     pub package_type: Option<PackageType>, // If `None`, use the default package type for this os
     pub target: Option<(String, TargetInfo)>,
     pub is_release: bool,
-    pub bundle_name: String,
+    pub name: String,
     pub identifier: String, // Unique identifier for the bundle
     pub version_str: Option<String>,
     pub resource_files: Vec<PathBuf>,
@@ -197,7 +201,7 @@ impl Settings {
             package_type: package_type,
             target: target,
             is_release: is_release,
-            bundle_name: String::new(),
+            name: String::new(),
             identifier: String::new(),
             version_str: None,
             resource_files: vec![],
@@ -231,10 +235,10 @@ impl Settings {
                     }
                 }
                 "name" => {
-                    settings.bundle_name = simple_parse!(String,
-                                                         value,
-                                                         "Invalid format for bundle name value in Bundle.toml: \
-                                                          Expected string, found {:?}")
+                    settings.name = simple_parse!(String,
+                                                  value,
+                                                  "Invalid format for bundle name value in Bundle.toml: \
+                                                   Expected string, found {:?}")
                 }
                 "identifier" => {
                     settings.identifier = simple_parse!(String,
@@ -350,6 +354,14 @@ impl Settings {
         }
     }
 
+    pub fn bundle_name(&self) -> &str {
+        if self.name.is_empty() {
+            &self.cargo_settings.name
+        } else {
+            &self.name
+        }
+    }
+
     pub fn version_string(&self) -> &str {
         self.version_str.as_ref().unwrap_or(&self.cargo_settings.version)
     }
@@ -383,24 +395,19 @@ fn load_toml(toml_file: PathBuf) -> Result<Table> {
 }
 
 
-/// run `cargo build` if the binary file does not exist
+/// Runs `cargo build` to make sure the binary file is up-to-date.
 fn build_project_if_unbuilt(settings: &Settings) -> Result<()> {
-    let mut bin_file = settings.cargo_settings.project_out_directory.clone();
-    bin_file.push(&settings.cargo_settings.binary_file);
-    if !bin_file.exists() {
-        // TODO(burtonageo): Should call `cargo build` here to be friendlier
-        let output = process::Command::new("cargo").arg("build")
-            .arg(if let Some((ref triple, _)) = settings.target {
-                format!("--target={}", triple)
-            } else {
-                "".to_string()
-            })
-            .arg(if settings.is_release { "--release" } else { "" })
-            .output()?;
-        if !output.status.success() {
-            bail!("Result of `cargo build` operation was unsuccessful: {}",
-                  output.status);
-        }
+    let mut args = vec!["build".to_string()];
+    if let Some((ref triple, _)) = settings.target {
+        args.push(format!("--target={}", triple));
+    }
+    if settings.is_release {
+        args.push("--release".to_string());
+    }
+    let status = process::Command::new("cargo").args(args).status()?;
+    if !status.success() {
+        bail!("Result of `cargo build` operation was unsuccessful: {}",
+              status);
     }
     Ok(())
 }

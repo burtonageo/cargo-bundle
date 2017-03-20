@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::BufWriter;
 use std::path::Path;
+use term;
 use walkdir::WalkDir;
 
 /// Returns true if the path has a filename indicating that it is a high-desity
@@ -45,5 +46,21 @@ pub fn copy_to_dir(from: &Path, to_dir: &Path) -> ::Result<()> {
             fs::copy(entry.path(), &dest_path)?;
         }
     }
+    Ok(())
+}
+
+/// Prints a message to stdout, in the same format that `cargo` uses,
+/// indicating that we are creating a bundle with the given filename.
+pub fn print_bundling(filename: &str) -> ::Result<()> {
+    let mut output = match term::stdout() {
+        Some(terminal) => terminal,
+        None => bail!("Can't write to stdout"),
+    };
+    output.attr(term::Attr::Bold)?;
+    output.fg(term::color::GREEN)?;
+    write!(output, "    Bundling")?;
+    output.reset()?;
+    write!(output, " {}\n", filename)?;
+    output.flush()?;
     Ok(())
 }

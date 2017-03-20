@@ -40,17 +40,18 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
         "x86_64" => "amd64",
         other => other,
     };
-
     let package_base_name = {
         let bin_name = settings.cargo_settings.binary_name()?;
         format!("{}_{}_{}", bin_name, settings.version_string(), arch)
     };
+    let package_name = format!("{}.deb", package_base_name);
+    common::print_bundling(&package_name)?;
     let package_dir = settings.cargo_settings
         .project_out_directory
         .join(&package_base_name);
     let package_path = settings.cargo_settings
         .project_out_directory
-        .join(format!("{}.deb", package_base_name));
+        .join(package_name);
 
     // Generate data files.
     let data_dir = package_dir.join("data");
@@ -93,7 +94,7 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
                                          Version={}\n",
                                         bin_name,
                                         bin_name,
-                                        settings.bundle_name,
+                                        settings.bundle_name(),
                                         settings.version_string());
     let desktop_file_name = format!("{}.desktop", bin_name);
     let desktop_file_path = data_dir.join("usr/share/applications")
@@ -107,7 +108,7 @@ fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, da
     // https://www.debian.org/doc/debian-policy/ch-controlfields.html
     let dest_path = control_dir.join("control");
     let mut file = common::create_file(&dest_path)?;
-    writeln!(&mut file, "Package: {}", settings.bundle_name)?;
+    writeln!(&mut file, "Package: {}", settings.bundle_name())?;
     writeln!(&mut file, "Version: {}", settings.cargo_settings.version)?;
     writeln!(&mut file, "Architecture: {}", arch)?;
     writeln!(&mut file, "Installed-Size: {}", total_dir_size(data_dir)?)?;

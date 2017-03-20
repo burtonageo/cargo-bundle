@@ -17,7 +17,7 @@
 // Currently, cargo-bundle does not support Frameworks, nor does it support placing arbitrary
 // files into the `Contents` directory of the bundle.
 
-use super::common::is_retina;
+use super::common;
 use Settings;
 use icns;
 use image::{self, GenericImage};
@@ -30,12 +30,10 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
+    let app_bundle_name = format!("{}.app", settings.bundle_name());
+    common::print_bundling(&app_bundle_name)?;
     let mut app_bundle_path = settings.cargo_settings.project_out_directory.clone();
-    app_bundle_path.push({
-        let mut bundle_name = settings.bundle_name.clone();
-        bundle_name.push_str(".app");
-        bundle_name
-    });
+    app_bundle_path.push(app_bundle_name);
     let mut bundle_directory = app_bundle_path.clone();
     bundle_directory.push("Contents");
     create_dir_all(&bundle_directory)?;
@@ -43,8 +41,9 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let mut resources_dir = bundle_directory.clone();
     resources_dir.push("Resources");
 
-    let bundle_icon_file: Option<PathBuf> =
-        try!(create_icns_file(&settings.bundle_name, &resources_dir, &settings.icon_files));
+    let bundle_icon_file: Option<PathBuf> = create_icns_file(&settings.bundle_name(),
+                                                             &resources_dir,
+                                                             &settings.icon_files)?;
 
     let mut plist = {
         let mut f = bundle_directory.clone();
@@ -98,7 +97,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
                                .and_then(|p| p.file_name())
                                .and_then(OsStr::to_str)
                                .unwrap_or("???"),
-                           settings.bundle_name,
+                           settings.bundle_name(),
                            settings.version_string(),
                            settings.identifier,
                            settings.copyright.as_ref().unwrap_or(&String::new()));
@@ -156,7 +155,7 @@ fn copy_path(from: &Path, to: &Path) -> io::Result<()> {
 /// Given a list of icon files, try to produce an ICNS file in the resources
 /// directory and return the path to it.  Returns `Ok(None)` if no usable icons
 /// were provided.
-fn create_icns_file(bundle_name: &String,
+fn create_icns_file(bundle_name: &str,
                     resources_dir: &PathBuf,
                     icon_paths: &Vec<PathBuf>)
                     -> ::Result<Option<PathBuf>> {
@@ -196,7 +195,7 @@ fn create_icns_file(bundle_name: &String,
    let mut images_to_resize: Vec<(image::DynamicImage, u32, u32)> = vec![];
     for icon_path in icon_paths {
         let icon = try!(image::open(icon_path));
-        let density = if is_retina(icon_path) { 2 } else { 1 };
+        let density = if common::is_retina(icon_path) { 2 } else { 1 };
 
         let (w, h) = icon.dimensions();
         let orig_size = min(w, h);
