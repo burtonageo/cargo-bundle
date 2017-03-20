@@ -21,6 +21,7 @@ use super::common;
 use Settings;
 use icns;
 use image::{self, GenericImage};
+use std::cmp::min;
 use std::ffi::OsStr;
 use std::fs::{self, File, create_dir_all};
 use std::io::{self, BufWriter};
@@ -174,21 +175,43 @@ fn create_icns_file(bundle_name: &str,
 
     // Otherwise, read available images and pack them into a new ICNS file.
     let mut family = icns::IconFamily::new();
-    for icon_path in icon_paths {
-        let icon = try!(image::open(icon_path));
-        let density = if common::is_retina(icon_path) { 2 } else { 1 };
+
+    fn add_icon_to_family(icon: image::DynamicImage, density: u32, family: &mut icns::IconFamily) -> io::Result<()> {
         // Try to add this image to the icon family.  Ignore images whose sizes
         // don't map to any ICNS icon type; print warnings and skip images that
         // fail to encode.
-        if let Some(icon_type) = icns::IconType::from_pixel_size_and_density(icon.width(), icon.height(), density) {
-            if !family.has_icon_with_type(icon_type) {
-                let icon = try!(make_icns_image(icon));
-                family.add_icon_with_type(&icon, icon_type).unwrap();
+        match icns::IconType::from_pixel_size_and_density(icon.width(), icon.height(), density) {
+            Some(icon_type) => {
+                if !family.has_icon_with_type(icon_type) {
+                    let icon = try!(make_icns_image(icon));
+                    try!(family.add_icon_with_type(&icon, icon_type));
+                }
+                Ok(())
             }
+            None => Err(io::Error::new(io::ErrorKind::InvalidData, "No matching IconType")),
         }
-        // TODO: If none of the icons are of usable sizes, we could also use
-        // the image crate to scale icons to the appropriate sizes.
     }
+
+    let mut images_to_resize: Vec<(image::DynamicImage, u32, u32)> = vec![];
+    for icon_path in icon_paths {
+        let icon = try!(image::open(icon_path));
+        let density = if common::is_retina(icon_path) { 2 } else { 1 };
+
+        let (w, h) = icon.dimensions();
+        let orig_size = min(w, h);
+        let next_size_down = 2f32.powf((orig_size as f32).log2().floor()) as u32;
+        if orig_size > next_size_down {
+            images_to_resize.push((icon, next_size_down, density));
+        } else {
+            try!(add_icon_to_family(icon, density, &mut family));
+        }
+    }
+
+    for (icon, next_size_down, density) in images_to_resize {
+        let icon = icon.resize_exact(next_size_down, next_size_down, image::Lanczos3);
+        try!(add_icon_to_family(icon, density, &mut family));
+    }
+
     if !family.is_empty() {
         try!(create_dir_all(resources_dir));
         let mut dest_path = resources_dir.clone();

@@ -56,7 +56,7 @@ pub struct CargoSettings {
     pub version: String,
     pub description: String,
     pub homepage: String,
-    pub authors: Vec<String>
+    pub authors: Vec<String>,
 }
 
 impl CargoSettings {
@@ -76,8 +76,7 @@ impl CargoSettings {
         }
         target_dir.push(if is_release { "release" } else { "debug" });
 
-        let cargo_info = cargo_file.ok_or("cargo.toml is not present in project directory".into())
-            .and_then(load_toml)?;
+        let cargo_info = cargo_file.ok_or("cargo.toml is not present in project directory".into()).and_then(load_toml)?;
 
         let mut settings = CargoSettings {
             project_home_directory: project_dir,
@@ -87,7 +86,7 @@ impl CargoSettings {
             version: String::new(),
             description: String::new(),
             homepage: String::new(),
-            authors: Vec::new()
+            authors: Vec::new(),
         };
 
         for (name, value) in cargo_info {
@@ -128,10 +127,10 @@ impl CargoSettings {
                                 if let Value::Array(a) = value {
                                     settings.authors = a.into_iter()
                                         .filter_map(|v| if let Value::String(s) = v {
-                                            Some(s)
-                                        } else {
-                                            None
-                                        })
+                                                        Some(s)
+                                                    } else {
+                                                        None
+                                                    })
                                         .collect();
                                 } else {
                                     bail!("Invalid format for script value in Bundle.toml: \
@@ -173,7 +172,7 @@ pub struct Settings {
     pub icon_files: Vec<PathBuf>,
     pub copyright: Option<String>,
     pub short_desc: Option<String>,
-    pub long_desc: Option<String>
+    pub long_desc: Option<String>,
 }
 
 impl Settings {
@@ -209,14 +208,14 @@ impl Settings {
             icon_files: vec![],
             copyright: None,
             short_desc: None,
-            long_desc: None
+            long_desc: None,
         };
 
         let table = try!({
-            let mut f = current_dir.clone();
-            f.push("Bundle.toml");
-            load_toml(f)
-        });
+                             let mut f = current_dir.clone();
+                             f.push("Bundle.toml");
+                             load_toml(f)
+                         });
 
         for (name, value) in table {
             match &name[..] {
@@ -380,7 +379,7 @@ pub enum PackageType {
     OsxBundle,
     IosBundle,
     Deb,
-    Rpm
+    Rpm,
 }
 
 fn load_toml(toml_file: PathBuf) -> Result<Table> {
@@ -432,9 +431,9 @@ fn run() -> ::Result<()> {
         let output_paths = env::current_dir().map_err(From::from)
             .and_then(|d| Settings::new(d, m))
             .and_then(|s| {
-                try!(build_project_if_unbuilt(&s));
-                Ok(s)
-            })
+                          try!(build_project_if_unbuilt(&s));
+                          Ok(s)
+                      })
             .and_then(bundle_project)?;
         let pluralised = if output_paths.len() == 1 {
             "bundle"
