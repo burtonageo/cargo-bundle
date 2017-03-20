@@ -175,24 +175,24 @@ fn create_icns_file(bundle_name: &str,
 
     // Otherwise, read available images and pack them into a new ICNS file.
     let mut family = icns::IconFamily::new();
- 
-     fn add_icon_to_family(icon: image::DynamicImage, density: u32, family: &mut icns::IconFamily) -> io::Result<()> {
+
+    fn add_icon_to_family(icon: image::DynamicImage, density: u32, family: &mut icns::IconFamily) -> io::Result<()> {
         // Try to add this image to the icon family.  Ignore images whose sizes
         // don't map to any ICNS icon type; print warnings and skip images that
         // fail to encode.
         match icns::IconType::from_pixel_size_and_density(icon.width(), icon.height(), density) {
-            Some(icon_type) => { 
+            Some(icon_type) => {
                 if !family.has_icon_with_type(icon_type) {
                     let icon = try!(make_icns_image(icon));
                     try!(family.add_icon_with_type(&icon, icon_type));
                 }
                 Ok(())
-            },
-            None => Err(io::Error::new(io::ErrorKind::InvalidData, "No matching IconType"))
+            }
+            None => Err(io::Error::new(io::ErrorKind::InvalidData, "No matching IconType")),
         }
     }
 
-   let mut images_to_resize: Vec<(image::DynamicImage, u32, u32)> = vec![];
+    let mut images_to_resize: Vec<(image::DynamicImage, u32, u32)> = vec![];
     for icon_path in icon_paths {
         let icon = try!(image::open(icon_path));
         let density = if common::is_retina(icon_path) { 2 } else { 1 };

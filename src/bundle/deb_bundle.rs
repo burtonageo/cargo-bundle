@@ -46,12 +46,8 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     };
     let package_name = format!("{}.deb", package_base_name);
     common::print_bundling(&package_name)?;
-    let package_dir = settings.cargo_settings
-        .project_out_directory
-        .join(&package_base_name);
-    let package_path = settings.cargo_settings
-        .project_out_directory
-        .join(package_name);
+    let package_dir = settings.cargo_settings.project_out_directory.join(&package_base_name);
+    let package_path = settings.cargo_settings.project_out_directory.join(package_name);
 
     // Generate data files.
     let data_dir = package_dir.join("data");
@@ -97,8 +93,7 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
                                         settings.bundle_name(),
                                         settings.version_string());
     let desktop_file_name = format!("{}.desktop", bin_name);
-    let desktop_file_path = data_dir.join("usr/share/applications")
-        .join(desktop_file_name);
+    let desktop_file_path = data_dir.join("usr/share/applications").join(desktop_file_name);
     create_file_with_data(desktop_file_path, &desktop_file_contents)?;
     Ok(())
 }
@@ -114,10 +109,13 @@ fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, da
     writeln!(&mut file, "Installed-Size: {}", total_dir_size(data_dir)?)?;
     writeln!(&mut file,
              "Maintainer: {}",
-             settings.cargo_settings.authors.iter().fold(String::new(), |mut acc, s| {
-                 acc.push_str(&s);
-                 acc
-             }))?;
+             settings.cargo_settings
+                 .authors
+                 .iter()
+                 .fold(String::new(), |mut acc, s| {
+        acc.push_str(&s);
+        acc
+    }))?;
     if !settings.cargo_settings.homepage.is_empty() {
         writeln!(&mut file, "Homepage: {}", settings.cargo_settings.homepage)?;
     }
@@ -162,9 +160,9 @@ fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> ::Result<()> {
         let rel_path = path.strip_prefix(data_dir).unwrap();
         let path_str = rel_path.to_str()
             .ok_or_else(|| {
-                let msg = format!("Non-UTF-8 path: {:?}", rel_path);
-                io::Error::new(io::ErrorKind::InvalidData, msg)
-            })?;
+                            let msg = format!("Non-UTF-8 path: {:?}", rel_path);
+                            io::Error::new(io::ErrorKind::InvalidData, msg)
+                        })?;
         write!(md5sums_file, "  {}\n", path_str)?;
     }
     Ok(())
@@ -251,7 +249,9 @@ fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> ::Result<()> {
 fn total_dir_size(dir: &Path) -> ::Result<u64> {
     let mut total: u64 = 0;
     for entry in WalkDir::new(&dir) {
-        total += entry?.metadata()?.len();
+        total += entry?
+            .metadata()?
+            .len();
     }
     Ok(total)
 }
@@ -300,6 +300,7 @@ fn create_archive(srcs: Vec<PathBuf>, dest: &Path) -> ::Result<()> {
     for path in &srcs {
         builder.append_path(path)?;
     }
-    builder.into_inner()?.flush()?;
+    builder.into_inner()?
+        .flush()?;
     Ok(())
 }
