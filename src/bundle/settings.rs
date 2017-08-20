@@ -26,15 +26,15 @@ pub enum PackageType {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CargoSettings {
-    pub project_home_directory: PathBuf,
-    pub project_out_directory: PathBuf,
-    pub name: String,
-    pub binary_file: PathBuf,
-    pub version: String,
-    pub description: String,
-    pub homepage: String,
-    pub authors: Vec<String>,
+struct CargoSettings {
+    project_home_directory: PathBuf,
+    project_out_directory: PathBuf,
+    name: String,
+    binary_file: PathBuf,
+    version: String,
+    description: String,
+    homepage: String,
+    authors: Vec<String>,
 }
 
 impl CargoSettings {
@@ -126,31 +126,23 @@ impl CargoSettings {
 
         Ok(settings)
     }
-
-    pub fn binary_name(&self) -> ::Result<String> {
-        self.binary_file
-            .file_name()
-            .and_then(OsStr::to_str)
-            .map(ToString::to_string)
-            .ok_or("Could not get file name of binary file.".into())
-    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Settings {
-    pub cargo_settings: CargoSettings,
-    pub package_type: Option<PackageType>, // If `None`, use the default package type for this os
-    pub target: Option<(String, TargetInfo)>,
-    pub is_release: bool,
-    pub name: String,
-    pub identifier: String, // Unique identifier for the bundle
-    pub version_str: Option<String>,
-    pub resource_files: Vec<PathBuf>,
-    pub bundle_script: Option<PathBuf>,
-    pub icon_files: Vec<PathBuf>,
-    pub copyright: Option<String>,
-    pub short_desc: Option<String>,
-    pub long_desc: Option<String>,
+    cargo_settings: CargoSettings,
+    package_type: Option<PackageType>, // If `None`, use the default package type for this os
+    target: Option<(String, TargetInfo)>,
+    is_release: bool,
+    name: String,
+    identifier: String, // Unique identifier for the bundle
+    version_str: Option<String>,
+    resource_files: Vec<PathBuf>,
+    bundle_script: Option<PathBuf>,
+    icon_files: Vec<PathBuf>,
+    copyright: Option<String>,
+    short_desc: Option<String>,
+    long_desc: Option<String>,
 }
 
 impl Settings {
@@ -298,6 +290,11 @@ impl Settings {
         Ok(settings)
     }
 
+    /// Returns the directory where the bundle should be placed.
+    pub fn project_out_directory(&self) -> &Path {
+        &self.cargo_settings.project_out_directory
+    }
+
     /// Returns the architecture for the binary being bundled (e.g. "arm" or
     /// "x86" or "x86_64").
     pub fn binary_arch(&self) -> &str {
@@ -307,6 +304,18 @@ impl Settings {
             std::env::consts::ARCH
         }
     }
+
+    /// Returns the file name of the binary being bundled.
+    pub fn binary_name(&self) -> ::Result<String> {
+        self.binary_path()
+            .file_name()
+            .and_then(OsStr::to_str)
+            .map(ToString::to_string)
+            .ok_or("Could not get file name of binary file.".into())
+    }
+
+    /// Returns the path to the binary being bundled.
+    pub fn binary_path(&self) -> &Path { &self.cargo_settings.binary_file }
 
     /// If a specific package type was specified by the command-line, returns
     /// that package type; otherwise, if a target triple was specified by the
@@ -331,6 +340,20 @@ impl Settings {
         }
     }
 
+    /// If the bundle is being cross-compiled, returns the target triple string
+    /// (e.g. `"x86_64-apple-darwin"`).  If the bundle is targeting the host
+    /// environment, returns `None`.
+    pub fn target_triple(&self) -> Option<&str> {
+        match self.target {
+            Some((ref triple, _)) => Some(triple.as_str()),
+            None => None,
+        }
+    }
+
+    /// Returns true if the bundle is being compiled in release mode, false if
+    /// it's being compiled in debug mode.
+    pub fn is_release_build(&self) -> bool { self.is_release }
+
     pub fn bundle_name(&self) -> &str {
         if self.name.is_empty() {
             &self.cargo_settings.name
@@ -339,9 +362,32 @@ impl Settings {
         }
     }
 
+    pub fn bundle_identifier(&self) -> &str { &self.identifier }
+
+    /// Returns an iterator over the icon files to be used for this bundle.
+    pub fn icon_files(&self) -> std::slice::Iter<PathBuf> {
+        self.icon_files.iter()
+    }
+
+    /// Returns an iterator over the resource files to be included in this
+    /// bundle.
+    pub fn resource_files(&self) -> std::slice::Iter<PathBuf> {
+        self.resource_files.iter()
+    }
+
     pub fn version_string(&self) -> &str {
         self.version_str.as_ref().unwrap_or(&self.cargo_settings.version)
     }
+
+    pub fn copyright_string(&self) -> Option<&str> {
+        self.copyright.as_ref().map(String::as_str)
+    }
+
+    pub fn author_names(&self) -> std::slice::Iter<String> {
+        self.cargo_settings.authors.iter()
+    }
+
+    pub fn homepage_url(&self) -> &str { &self.cargo_settings.homepage }
 
     pub fn short_description(&self) -> &str {
         self.short_desc.as_ref().unwrap_or(&self.cargo_settings.description)
