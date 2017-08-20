@@ -2,10 +2,10 @@ use clap::ArgMatches;
 use std;
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use target_build_utils::TargetInfo;
-use toml::{self, Parser, Table, Value};
+use toml::{self, Value};
 
 macro_rules! simple_parse {
     ($toml_ty:ident, $value:expr, $msg:expr) => (
@@ -267,7 +267,7 @@ impl Settings {
             }
         }
 
-        fn parse_resource_files(files_array: toml::Array) -> ::Result<Vec<PathBuf>> {
+        fn parse_resource_files(files_array: toml::value::Array) -> ::Result<Vec<PathBuf>> {
             fn to_file_path(file: toml::Value) -> ::Result<PathBuf> {
                 if let Value::String(s) = file {
                     let path = PathBuf::from(s);
@@ -398,7 +398,7 @@ impl Settings {
     }
 }
 
-fn load_toml(toml_file: PathBuf) -> ::Result<Table> {
+fn load_toml(toml_file: PathBuf) -> ::Result<toml::value::Table> {
     if !toml_file.exists() {
         bail!("Toml file {:?} does not exist", toml_file);
     }
@@ -406,5 +406,8 @@ fn load_toml(toml_file: PathBuf) -> ::Result<Table> {
     let mut toml_str = String::new();
     try!(File::open(toml_file).and_then(|mut file| file.read_to_string(&mut toml_str)));
 
-    Ok(Parser::new(&toml_str).parse().ok_or(::Error::from_kind("Could not parse Toml file".into()))?)
+    match toml_str.parse::<Value>()? {
+        toml::Value::Table(table) => Ok(table),
+        _ => Err(::Error::from_kind("Could not parse Toml file".into()))
+    }
 }

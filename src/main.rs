@@ -26,6 +26,7 @@ error_chain! {
         Image(::image::ImageError);
         Target(::target_build_utils::Error);
         Term(::term::Error);
+        Toml(::toml::de::Error);
         Walkdir(::walkdir::Error);
     }
     errors { }
