@@ -7,6 +7,9 @@ extern crate icns;
 extern crate image;
 extern crate libflate;
 extern crate md5;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate tar;
 extern crate target_build_utils;
 extern crate term;

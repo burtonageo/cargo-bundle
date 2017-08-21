@@ -25,7 +25,20 @@ pub enum PackageType {
     Rpm,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize)]
+struct BundleSettings {
+    name: Option<String>,
+    identifier: Option<String>,
+    icon: Option<Vec<PathBuf>>,
+    version: Option<String>,
+    resources: Option<Vec<PathBuf>>,
+    copyright: Option<String>,
+    short_description: Option<String>,
+    long_description: Option<String>,
+    script: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug)]
 struct CargoSettings {
     project_home_directory: PathBuf,
     project_out_directory: PathBuf,
@@ -134,15 +147,7 @@ pub struct Settings {
     package_type: Option<PackageType>, // If `None`, use the default package type for this os
     target: Option<(String, TargetInfo)>,
     is_release: bool,
-    name: String,
-    identifier: String, // Unique identifier for the bundle
-    version_str: Option<String>,
-    resource_files: Vec<PathBuf>,
-    bundle_script: Option<PathBuf>,
-    icon_files: Vec<PathBuf>,
-    copyright: Option<String>,
-    short_desc: Option<String>,
-    long_desc: Option<String>,
+    bundle_settings: BundleSettings,
 }
 
 impl Settings {
@@ -165,129 +170,20 @@ impl Settings {
                                                 target.as_ref().map(|&(ref triple, _)| triple.as_str()),
                                                 is_release)?;
 
-        let mut settings = Settings {
+        let bundle_settings = {
+            let toml_path = current_dir.join("Bundle.toml");
+            let mut toml_str = String::new();
+            File::open(toml_path).and_then(|mut file| file.read_to_string(&mut toml_str))?;
+            toml::from_str(&toml_str)?
+        };
+
+        Ok(Settings {
             cargo_settings: cargo_settings,
             package_type: package_type,
             target: target,
             is_release: is_release,
-            name: String::new(),
-            identifier: String::new(),
-            version_str: None,
-            resource_files: vec![],
-            bundle_script: None,
-            icon_files: vec![],
-            copyright: None,
-            short_desc: None,
-            long_desc: None,
-        };
-
-        let table = try!({
-                             let mut f = current_dir.clone();
-                             f.push("Bundle.toml");
-                             load_toml(f)
-                         });
-
-        for (name, value) in table {
-            match &name[..] {
-                "script" => {
-                    if let Value::String(s) = value {
-                        let path = PathBuf::from(s);
-                        if path.is_file() {
-                            settings.bundle_script = Some(path);
-                        } else {
-                            bail!("{:?} must be a file", path);
-                        }
-                    } else {
-                        bail!("Invalid format for script value in Bundle.toml: \
-                               Expected string, found {:?}",
-                              value);
-                    }
-                }
-                "name" => {
-                    settings.name = simple_parse!(String,
-                                                  value,
-                                                  "Invalid format for bundle name value in Bundle.toml: \
-                                                   Expected string, found {:?}")
-                }
-                "identifier" => {
-                    settings.identifier = simple_parse!(String,
-                                                        value,
-                                                        "Invalid format for bundle identifier value in \
-                                                         Bundle.toml: Expected string, found {:?}")
-                }
-                "version" => {
-                    settings.version_str = Some(simple_parse!(String,
-                                                              value,
-                                                              "Invalid format for version value in \
-                                                               Bundle.toml: Expected string, found {:?}"))
-                }
-                "copyright" => {
-                    settings.copyright = Some(simple_parse!(String,
-                                                            value,
-                                                            "Invalid format for copyright notice in \
-                                                             Bundle.toml: Expected string, found {:?}"))
-                }
-                "short_description" => {
-                    settings.short_desc = Some(simple_parse!(String,
-                                                             value,
-                                                             "Invalid format for short description in \
-                                                              Bundle.toml: Expected string, found {:?}"))
-                }
-                "long_description" => {
-                    settings.long_desc = Some(simple_parse!(String,
-                                                            value,
-                                                            "Invalid format for long description in \
-                                                             Bundle.toml: Expected string, found {:?}"))
-                }
-                "icon" => {
-                    settings.icon_files = match value {
-                        Value::String(icon_path) => {
-                            let icon_path = PathBuf::from(icon_path);
-                            if !icon_path.is_file() {
-                                bail!("The icon attribute must point to a file");
-                            }
-                            vec![icon_path]
-                        }
-                        Value::Array(icon_paths) => try!(parse_resource_files(icon_paths)),
-                        _ => {
-                            bail!("Invalid format for bundle icon in Bundle.toml: Expected string or \
-                                   array, found {:?}",
-                                  value);
-                        }
-                    };
-                }
-                "resources" => {
-                    let files = simple_parse!(Array,
-                                              value,
-                                              "Invalid format for bundle resource files format in \
-                                               Bundle.toml: Expected array, found {:?}");
-                    settings.resource_files = parse_resource_files(files)?
-                }
-                _ => {}
-            }
-        }
-
-        fn parse_resource_files(files_array: toml::value::Array) -> ::Result<Vec<PathBuf>> {
-            fn to_file_path(file: toml::Value) -> ::Result<PathBuf> {
-                if let Value::String(s) = file {
-                    let path = PathBuf::from(s);
-                    if !path.exists() {
-                        bail!("Resource file {} does not exist.", path.display());
-                    } else {
-                        Ok(path)
-                    }
-                } else {
-                    bail!("Invalid format for resource.");
-                }
-            }
-
-            let mut out_files = Vec::with_capacity(files_array.len());
-            for file in files_array.into_iter().map(to_file_path) {
-                out_files.push(file?);
-            }
-            Ok(out_files)
-        }
-        Ok(settings)
+            bundle_settings: bundle_settings,
+        })
     }
 
     /// Returns the directory where the bundle should be placed.
@@ -355,32 +251,36 @@ impl Settings {
     pub fn is_release_build(&self) -> bool { self.is_release }
 
     pub fn bundle_name(&self) -> &str {
-        if self.name.is_empty() {
-            &self.cargo_settings.name
-        } else {
-            &self.name
-        }
+        self.bundle_settings.name.as_ref().unwrap_or(&self.cargo_settings.name)
     }
 
-    pub fn bundle_identifier(&self) -> &str { &self.identifier }
+    pub fn bundle_identifier(&self) -> &str {
+        self.bundle_settings.identifier.as_ref().map(String::as_str).unwrap_or("")
+    }
 
     /// Returns an iterator over the icon files to be used for this bundle.
     pub fn icon_files(&self) -> std::slice::Iter<PathBuf> {
-        self.icon_files.iter()
+        match self.bundle_settings.icon {
+            Some(ref paths) => paths.iter(),
+            None => [].iter(),
+        }
     }
 
     /// Returns an iterator over the resource files to be included in this
     /// bundle.
     pub fn resource_files(&self) -> std::slice::Iter<PathBuf> {
-        self.resource_files.iter()
+        match self.bundle_settings.resources {
+            Some(ref paths) => paths.iter(),
+            None => [].iter(),
+        }
     }
 
     pub fn version_string(&self) -> &str {
-        self.version_str.as_ref().unwrap_or(&self.cargo_settings.version)
+        self.bundle_settings.version.as_ref().unwrap_or(&self.cargo_settings.version)
     }
 
     pub fn copyright_string(&self) -> Option<&str> {
-        self.copyright.as_ref().map(String::as_str)
+        self.bundle_settings.long_description.as_ref().map(String::as_str)
     }
 
     pub fn author_names(&self) -> std::slice::Iter<String> {
@@ -390,11 +290,11 @@ impl Settings {
     pub fn homepage_url(&self) -> &str { &self.cargo_settings.homepage }
 
     pub fn short_description(&self) -> &str {
-        self.short_desc.as_ref().unwrap_or(&self.cargo_settings.description)
+        self.bundle_settings.short_description.as_ref().unwrap_or(&self.cargo_settings.description)
     }
 
     pub fn long_description(&self) -> Option<&str> {
-        self.long_desc.as_ref().map(String::as_str)
+        self.bundle_settings.long_description.as_ref().map(String::as_str)
     }
 }
 
