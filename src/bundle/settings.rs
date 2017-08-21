@@ -5,17 +5,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use target_build_utils::TargetInfo;
-use toml::{self, Value};
-
-macro_rules! simple_parse {
-    ($toml_ty:ident, $value:expr, $msg:expr) => (
-        if let Value::$toml_ty(x) = $value {
-            x
-        } else {
-            bail!(format!($msg, $value));
-        }
-    )
-}
+use toml;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackageType {
@@ -38,107 +28,18 @@ struct BundleSettings {
     script: Option<PathBuf>,
 }
 
-#[derive(Clone, Debug)]
-struct CargoSettings {
-    project_home_directory: PathBuf,
-    project_out_directory: PathBuf,
+#[derive(Clone, Debug, Deserialize)]
+struct PackageSettings {
     name: String,
-    binary_file: PathBuf,
     version: String,
     description: String,
-    homepage: String,
-    authors: Vec<String>,
+    homepage: Option<String>,
+    authors: Option<Vec<String>>,
 }
 
-impl CargoSettings {
-    fn new(project_home_directory: &Path, target_triple: Option<&str>, is_release: bool) -> ::Result<Self> {
-        let project_dir = project_home_directory.to_path_buf();
-        let mut cargo_file = None;
-        for node in project_dir.read_dir()? {
-            let path = node?.path();
-            if let Some("Cargo.toml") = path.file_name().and_then(|fl_nm| fl_nm.to_str()) {
-                cargo_file = Some(path.to_path_buf());
-            }
-        }
-
-        let mut target_dir = project_home_directory.join("target");
-        if let Some(triple) = target_triple {
-            target_dir.push(triple);
-        }
-        target_dir.push(if is_release { "release" } else { "debug" });
-
-        let cargo_info = cargo_file.ok_or("cargo.toml is not present in project directory".into()).and_then(load_toml)?;
-
-        let mut settings = CargoSettings {
-            project_home_directory: project_dir,
-            project_out_directory: target_dir,
-            name: String::new(),
-            binary_file: PathBuf::new(),
-            version: String::new(),
-            description: String::new(),
-            homepage: String::new(),
-            authors: Vec::new(),
-        };
-
-        for (name, value) in cargo_info {
-            match (&name[..], value) {
-                ("package", Value::Table(table)) => {
-                    for (name, value) in table {
-                        match &name[..] {
-                            "name" => {
-                                if let Value::String(s) = value {
-                                    settings.binary_file = settings.project_out_directory.clone();
-                                    settings.binary_file.push(&s);
-                                    settings.name = s;
-                                } else {
-                                    bail!("expected field \"name\" to have type \"String\", actually has \
-                                           type {}",
-                                          value);
-                                }
-                            }
-                            "version" => {
-                                settings.version = simple_parse!(String,
-                                                                 value,
-                                                                 "Invalid format for version value in Bundle.toml: \
-                                                                  Expected string, found {:?}")
-                            }
-                            "description" => {
-                                settings.description = simple_parse!(String,
-                                                                     value,
-                                                                     "Invalid format for description value in \
-                                                                      Bundle.toml: Expected string, found {:?}")
-                            }
-                            "homepage" => {
-                                settings.homepage = simple_parse!(String,
-                                                                  value,
-                                                                  "Invalid format for description value in \
-                                                                   Bundle.toml: Expected string, found {:?}")
-                            }
-                            "authors" => {
-                                if let Value::Array(a) = value {
-                                    settings.authors = a.into_iter()
-                                        .filter_map(|v| if let Value::String(s) = v {
-                                                        Some(s)
-                                                    } else {
-                                                        None
-                                                    })
-                                        .collect();
-                                } else {
-                                    bail!("Invalid format for script value in Bundle.toml: \
-                                           Expected array, found {:?}",
-                                          value);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        Ok(settings)
-    }
+#[derive(Clone, Debug, Deserialize)]
+struct CargoSettings {
+    package: PackageSettings,
 }
 
 #[derive(Clone, Debug)]
@@ -146,7 +47,9 @@ pub struct Settings {
     cargo_settings: CargoSettings,
     package_type: Option<PackageType>, // If `None`, use the default package type for this os
     target: Option<(String, TargetInfo)>,
+    project_out_directory: PathBuf,
     is_release: bool,
+    binary_path: PathBuf,
     bundle_settings: BundleSettings,
 }
 
@@ -166,29 +69,43 @@ impl Settings {
             Some(triple) => Some((triple.to_string(), TargetInfo::from_str(triple)?)),
             None => None,
         };
-        let cargo_settings = CargoSettings::new(&current_dir,
-                                                target.as_ref().map(|&(ref triple, _)| triple.as_str()),
-                                                is_release)?;
-
-        let bundle_settings = {
-            let toml_path = current_dir.join("Bundle.toml");
+        let target_dir = {
+            let mut path = current_dir.join("target");
+            if let Some((ref triple, _)) = target {
+                path.push(triple);
+            }
+            path.push(if is_release { "release" } else { "debug" });
+            path
+        };
+        let cargo_settings: CargoSettings = {
+            let toml_path = current_dir.join("Cargo.toml");
             let mut toml_str = String::new();
-            File::open(toml_path).and_then(|mut file| file.read_to_string(&mut toml_str))?;
+            let mut toml_file = File::open(toml_path)?;
+            toml_file.read_to_string(&mut toml_str)?;
             toml::from_str(&toml_str)?
         };
-
+        let binary_path = target_dir.join(&cargo_settings.package.name);
+        let bundle_settings: BundleSettings = {
+            let toml_path = current_dir.join("Bundle.toml");
+            let mut toml_str = String::new();
+            let mut toml_file = File::open(toml_path)?;
+            toml_file.read_to_string(&mut toml_str)?;
+            toml::from_str(&toml_str)?
+        };
         Ok(Settings {
             cargo_settings: cargo_settings,
             package_type: package_type,
             target: target,
             is_release: is_release,
+            project_out_directory: target_dir,
+            binary_path: binary_path,
             bundle_settings: bundle_settings,
         })
     }
 
     /// Returns the directory where the bundle should be placed.
     pub fn project_out_directory(&self) -> &Path {
-        &self.cargo_settings.project_out_directory
+        &self.project_out_directory
     }
 
     /// Returns the architecture for the binary being bundled (e.g. "arm" or
@@ -203,7 +120,7 @@ impl Settings {
 
     /// Returns the file name of the binary being bundled.
     pub fn binary_name(&self) -> ::Result<String> {
-        self.binary_path()
+        self.binary_path
             .file_name()
             .and_then(OsStr::to_str)
             .map(ToString::to_string)
@@ -211,7 +128,7 @@ impl Settings {
     }
 
     /// Returns the path to the binary being bundled.
-    pub fn binary_path(&self) -> &Path { &self.cargo_settings.binary_file }
+    pub fn binary_path(&self) -> &Path { &self.binary_path }
 
     /// If a specific package type was specified by the command-line, returns
     /// that package type; otherwise, if a target triple was specified by the
@@ -251,7 +168,7 @@ impl Settings {
     pub fn is_release_build(&self) -> bool { self.is_release }
 
     pub fn bundle_name(&self) -> &str {
-        self.bundle_settings.name.as_ref().unwrap_or(&self.cargo_settings.name)
+        self.bundle_settings.name.as_ref().unwrap_or(&self.cargo_settings.package.name)
     }
 
     pub fn bundle_identifier(&self) -> &str {
@@ -276,38 +193,29 @@ impl Settings {
     }
 
     pub fn version_string(&self) -> &str {
-        self.bundle_settings.version.as_ref().unwrap_or(&self.cargo_settings.version)
+        self.bundle_settings.version.as_ref().unwrap_or(&self.cargo_settings.package.version)
     }
 
     pub fn copyright_string(&self) -> Option<&str> {
-        self.bundle_settings.long_description.as_ref().map(String::as_str)
+        self.bundle_settings.copyright.as_ref().map(String::as_str)
     }
 
     pub fn author_names(&self) -> std::slice::Iter<String> {
-        self.cargo_settings.authors.iter()
+        match self.cargo_settings.package.authors {
+            Some(ref names) => names.iter(),
+            None => [].iter(),
+        }
     }
 
-    pub fn homepage_url(&self) -> &str { &self.cargo_settings.homepage }
+    pub fn homepage_url(&self) -> &str {
+        &self.cargo_settings.package.homepage.as_ref().map(String::as_str).unwrap_or("")
+    }
 
     pub fn short_description(&self) -> &str {
-        self.bundle_settings.short_description.as_ref().unwrap_or(&self.cargo_settings.description)
+        self.bundle_settings.short_description.as_ref().unwrap_or(&self.cargo_settings.package.description)
     }
 
     pub fn long_description(&self) -> Option<&str> {
         self.bundle_settings.long_description.as_ref().map(String::as_str)
-    }
-}
-
-fn load_toml(toml_file: PathBuf) -> ::Result<toml::value::Table> {
-    if !toml_file.exists() {
-        bail!("Toml file {:?} does not exist", toml_file);
-    }
-
-    let mut toml_str = String::new();
-    try!(File::open(toml_file).and_then(|mut file| file.read_to_string(&mut toml_str)));
-
-    match toml_str.parse::<Value>()? {
-        toml::Value::Table(table) => Ok(table),
-        _ => Err(::Error::from_kind("Could not parse Toml file".into()))
     }
 }
