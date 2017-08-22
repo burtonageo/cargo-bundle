@@ -22,15 +22,15 @@ use std::path::{Path, PathBuf};
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
-    let bundle_dir = settings.cargo_settings.project_out_directory.join(&app_bundle_name);
+    let bundle_dir = settings.project_out_directory().join(&app_bundle_name);
     fs::create_dir_all(&bundle_dir)?;
-    for res_path in &settings.resource_files {
+    for res_path in settings.resource_files() {
         common::copy_to_dir(res_path, &bundle_dir.join("Resources"))?;
     }
     let icon_filenames = generate_icon_files(&bundle_dir, settings)?;
     generate_info_plist(&bundle_dir, settings, &icon_filenames)?;
     let bin_path = bundle_dir.join(&settings.bundle_name());
-    fs::copy(&settings.cargo_settings.binary_file, bin_path)?;
+    fs::copy(settings.binary_path(), bin_path)?;
     Ok(vec![bundle_dir])
 }
 
@@ -49,7 +49,7 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> ::Result<Vec<S
         };
         let mut sizes = BTreeSet::new();
         // Prefer PNG files.
-        for icon_path in settings.icon_files.iter().filter(|path| path.extension() == Some(OsStr::new("png"))) {
+        for icon_path in settings.icon_files().filter(|path| path.extension() == Some(OsStr::new("png"))) {
             let mut decoder = PNGDecoder::new(File::open(icon_path)?);
             let (width, height) = decoder.dimensions()?;
             let is_retina = common::is_retina(icon_path);
@@ -60,7 +60,7 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> ::Result<Vec<S
             }
         }
         // Fall back to non-PNG files for any missing sizes.
-        for icon_path in settings.icon_files.iter().filter(|path| path.extension() != Some(OsStr::new("png"))) {
+        for icon_path in settings.icon_files().filter(|path| path.extension() != Some(OsStr::new("png"))) {
             if icon_path.extension() == Some(OsStr::new("icns")) {
                 let icon_family = icns::IconFamily::read(File::open(icon_path)?)?;
                 for icon_type in icon_family.available_icons() {
@@ -103,12 +103,12 @@ fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &
            settings.bundle_name())?;
     write!(file,
            "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
-           settings.identifier)?;
+           settings.bundle_identifier())?;
     write!(file,
            "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
            settings.version_string())?;
     if !icon_filenames.is_empty() {
-        write!(file, "  <key>CFBundleVersion</key>\n  <array>\n")?;
+        write!(file, "  <key>CFBundleIconFiles</key>\n  <array>\n")?;
         for filename in icon_filenames {
             write!(file, "    <string>{}</string>\n", filename)?;
         }

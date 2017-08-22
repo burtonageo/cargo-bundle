@@ -32,18 +32,15 @@ use walkdir::WalkDir;
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
-    let mut app_bundle_path = settings.cargo_settings.project_out_directory.clone();
-    app_bundle_path.push(app_bundle_name);
-    let mut bundle_directory = app_bundle_path.clone();
-    bundle_directory.push("Contents");
+    let app_bundle_path = settings.project_out_directory().join(app_bundle_name);
+    let bundle_directory = app_bundle_path.join("Contents");
     create_dir_all(&bundle_directory)?;
 
-    let mut resources_dir = bundle_directory.clone();
-    resources_dir.push("Resources");
+    let resources_dir = bundle_directory.join("Resources");
 
     let bundle_icon_file: Option<PathBuf> = create_icns_file(&settings.bundle_name(),
                                                              &resources_dir,
-                                                             &settings.icon_files)?;
+                                                             settings.icon_files().cloned().collect())?;
 
     let mut plist = {
         let mut f = bundle_directory.clone();
@@ -51,7 +48,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
         File::create(f)?
     };
 
-    let bin_name = settings.cargo_settings.binary_name()?;
+    let bin_name = settings.binary_name()?;
 
     let contents = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
                             <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
@@ -99,16 +96,16 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
                                .unwrap_or("???"),
                            settings.bundle_name(),
                            settings.version_string(),
-                           settings.identifier,
-                           settings.copyright.as_ref().unwrap_or(&String::new()));
+                           settings.bundle_identifier(),
+                           settings.copyright_string().unwrap_or(""));
 
     try!(plist.write_all(&contents.into_bytes()[..]));
     try!(plist.sync_all());
 
-    if !settings.resource_files.is_empty() {
+    if settings.resource_files().count() > 0 {
         try!(create_dir_all(&resources_dir));
 
-        for res_path in &settings.resource_files {
+        for res_path in settings.resource_files() {
             try!(copy_path(&res_path, &resources_dir));
         }
     }
@@ -120,7 +117,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
         bin_path.push(bin_name);
         bin_path
     };
-    fs::copy(&settings.cargo_settings.binary_file, &bundle_binary)?;
+    fs::copy(settings.binary_path(), &bundle_binary)?;
 
     Ok(vec![app_bundle_path])
 }
@@ -157,7 +154,7 @@ fn copy_path(from: &Path, to: &Path) -> io::Result<()> {
 /// were provided.
 fn create_icns_file(bundle_name: &str,
                     resources_dir: &PathBuf,
-                    icon_paths: &Vec<PathBuf>)
+                    icon_paths: Vec<PathBuf>)
                     -> ::Result<Option<PathBuf>> {
     if icon_paths.is_empty() {
         return Ok(None);
@@ -193,7 +190,7 @@ fn create_icns_file(bundle_name: &str,
     }
 
     let mut images_to_resize: Vec<(image::DynamicImage, u32, u32)> = vec![];
-    for icon_path in icon_paths {
+    for icon_path in icon_paths.iter() {
         let icon = try!(image::open(icon_path));
         let density = if common::is_retina(icon_path) { 2 } else { 1 };
 
