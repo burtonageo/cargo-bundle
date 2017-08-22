@@ -4,6 +4,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use super::common::print_warning;
 use target_build_utils::TargetInfo;
 use toml;
 
@@ -29,12 +30,18 @@ struct BundleSettings {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct MetadataSettings {
+    bundle: Option<BundleSettings>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct PackageSettings {
     name: String,
     version: String,
     description: String,
     homepage: Option<String>,
     authors: Option<Vec<String>>,
+    metadata: Option<MetadataSettings>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -87,10 +94,17 @@ impl Settings {
         let binary_path = target_dir.join(&cargo_settings.package.name);
         let bundle_settings: BundleSettings = {
             let toml_path = current_dir.join("Bundle.toml");
-            let mut toml_str = String::new();
-            let mut toml_file = File::open(toml_path)?;
-            toml_file.read_to_string(&mut toml_str)?;
-            toml::from_str(&toml_str)?
+            if toml_path.exists() {
+                print_warning(BUNDLE_TOML_WARNING)?;
+                let mut toml_str = String::new();
+                let mut toml_file = File::open(toml_path)?;
+                toml_file.read_to_string(&mut toml_str)?;
+                toml::from_str(&toml_str)?
+            } else if let Some(bundle_settings) = cargo_settings.package.metadata.as_ref().and_then(|metadata| metadata.bundle.as_ref()) {
+                bundle_settings.clone()
+            } else {
+                bail!("No [package.metadata.bundle] section or ]Bundle.toml file found.");
+            }
         };
         Ok(Settings {
             cargo_settings: cargo_settings,
@@ -219,3 +233,9 @@ impl Settings {
         self.bundle_settings.long_description.as_ref().map(String::as_str)
     }
 }
+
+const BUNDLE_TOML_WARNING: &str = "\
+Using Bundle.toml file, which is deprecated in favor
+  of using [package.metadata.bundle] section in Cargo.toml
+  file.  Support for Bundle.toml file will be removed in a
+  future version of cargo-bundle.";
