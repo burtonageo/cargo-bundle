@@ -64,3 +64,18 @@ pub fn print_bundling(filename: &str) -> ::Result<()> {
     output.flush()?;
     Ok(())
 }
+
+/// Prints a warning message to stdout, in the same format that `cargo` uses.
+pub fn print_warning(message: &str) -> ::Result<()> {
+    let mut output = match term::stdout() {
+        Some(terminal) => terminal,
+        None => bail!("Can't write to stdout"),
+    };
+    output.attr(term::Attr::Bold)?;
+    output.fg(term::color::YELLOW)?;
+    write!(output, "warning:")?;
+    output.reset()?;
+    write!(output, " {}\n", message)?;
+    output.flush()?;
+    Ok(())
+}
