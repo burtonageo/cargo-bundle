@@ -103,7 +103,7 @@ impl Settings {
             } else if let Some(bundle_settings) = cargo_settings.package.metadata.as_ref().and_then(|metadata| metadata.bundle.as_ref()) {
                 bundle_settings.clone()
             } else {
-                bail!("No [package.metadata.bundle] section or ]Bundle.toml file found.");
+                bail!("No [package.metadata.bundle] section or Bundle.toml file found.");
             }
         };
         Ok(Settings {

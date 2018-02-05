@@ -19,7 +19,7 @@
 // generate postinst or prerm files.
 
 use super::common;
-use Settings;
+use {ResultExt, Settings};
 use ar;
 use icns;
 use image::{self, GenericImage, ImageDecoder};
@@ -51,26 +51,46 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 
     // Generate data files.
     let data_dir = package_dir.join("data");
-    common::copy_to_dir(settings.binary_path(), &data_dir.join("usr/bin"))?;
-    transfer_resource_files(settings, &data_dir)?;
-    generate_icon_files(settings, &data_dir)?;
-    generate_desktop_file(settings, &data_dir)?;
+    common::copy_to_dir(settings.binary_path(), &data_dir.join("usr/bin")).chain_err(|| {
+        format!("Failed to copy binary file from {:?}", settings.binary_path())
+    })?;
+    transfer_resource_files(settings, &data_dir).chain_err(|| {
+        "Failed to copy resource files"
+    })?;
+    generate_icon_files(settings, &data_dir).chain_err(|| {
+        "Failed to create icon files"
+    })?;
+    generate_desktop_file(settings, &data_dir).chain_err(|| {
+        "Failed to create desktop file"
+    })?;
 
     // Generate control files.
     let control_dir = package_dir.join("control");
-    generate_control_file(settings, arch, &control_dir, &data_dir)?;
-    generate_md5sums(&control_dir, &data_dir)?;
+    generate_control_file(settings, arch, &control_dir, &data_dir).chain_err(|| {
+        "Failed to create control file"
+    })?;
+    generate_md5sums(&control_dir, &data_dir).chain_err(|| {
+        "Failed to create md5sums file"
+    })?;
 
     // Generate `debian-binary` file; see
     // http://www.tldp.org/HOWTO/Debian-Binary-Package-Building-HOWTO/x60.html#AEN66
     let debian_binary_path = package_dir.join("debian-binary");
-    create_file_with_data(&debian_binary_path, "2.0\n")?;
+    create_file_with_data(&debian_binary_path, "2.0\n").chain_err(|| {
+        "Failed to create debian-binary file"
+    })?;
 
     // Apply tar/gzip/ar to create the final package file.
-    let control_tar_gz_path = tar_and_gzip_dir(control_dir)?;
-    let data_tar_gz_path = tar_and_gzip_dir(data_dir)?;
+    let control_tar_gz_path = tar_and_gzip_dir(control_dir).chain_err(|| {
+        "Failed to tar/gzip control directory"
+    })?;
+    let data_tar_gz_path = tar_and_gzip_dir(data_dir).chain_err(|| {
+        "Failed to tar/gzip data directory"
+    })?;
     create_archive(vec![debian_binary_path, control_tar_gz_path, data_tar_gz_path],
-                   &package_path)?;
+                   &package_path).chain_err(|| {
+        "Failed to create package archive"
+    })?;
     Ok(vec![package_path])
 }
 
