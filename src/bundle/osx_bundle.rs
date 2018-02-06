@@ -18,12 +18,12 @@
 // files into the `Contents` directory of the bundle.
 
 use super::common;
-use Settings;
+use {ResultExt, Settings};
 use icns;
 use image::{self, GenericImage};
 use std::cmp::min;
 use std::ffi::OsStr;
-use std::fs::{self, File, create_dir_all};
+use std::fs::{self, File};
 use std::io::{self, BufWriter};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
@@ -34,22 +34,52 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     common::print_bundling(&app_bundle_name)?;
     let app_bundle_path = settings.project_out_directory().join(app_bundle_name);
     let bundle_directory = app_bundle_path.join("Contents");
-    create_dir_all(&bundle_directory)?;
+    fs::create_dir_all(&bundle_directory).chain_err(|| {
+        format!("Failed to create bundle directory at {:?}", bundle_directory)
+    })?;
 
     let resources_dir = bundle_directory.join("Resources");
 
-    let bundle_icon_file: Option<PathBuf> = create_icns_file(&settings.bundle_name(),
-                                                             &resources_dir,
-                                                             settings.icon_files().cloned().collect())?;
-
-    let mut plist = {
-        let mut f = bundle_directory.clone();
-        f.push("Info.plist");
-        File::create(f)?
+    let bundle_icon_file: Option<PathBuf> = {
+        let bundle_name = settings.bundle_name();
+        let icons = settings.icon_files().cloned().collect();
+        create_icns_file(bundle_name, &resources_dir, icons).chain_err(|| {
+            "Failed to create app icon"
+        })?
     };
 
-    let bin_name = settings.binary_name()?;
+    create_info_plist(&bundle_directory, bundle_icon_file, settings).chain_err(|| {
+        "Failed to create Info.plist"
+    })?;
 
+    if settings.resource_files().count() > 0 {
+        fs::create_dir_all(&resources_dir)?;
+
+        for res_path in settings.resource_files() {
+            copy_path(&res_path, &resources_dir).chain_err(|| {
+                format!("Failed to copy resource file {:?}", res_path)
+            })?;
+        }
+    }
+
+    copy_binary_to_bundle(&bundle_directory, settings).chain_err(|| {
+        format!("Failed to copy binary from {:?}", settings.binary_path())
+    })?;
+
+    Ok(vec![app_bundle_path])
+}
+
+fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::Result<()> {
+    let dest_dir = bundle_directory.join("MacOS");
+    fs::create_dir_all(&dest_dir)?;
+    fs::copy(settings.binary_path(), dest_dir.join(settings.binary_name()?))?;
+    Ok(())
+}
+
+fn create_info_plist(bundle_directory: &Path, bundle_icon_file: Option<PathBuf>,
+                     settings: &Settings) -> ::Result<()> {
+    let bin_name = settings.binary_name()?;
+    let mut plist = File::create(bundle_directory.join("Info.plist"))?;
     let contents = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
                             <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
                                         \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
@@ -99,27 +129,9 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
                            settings.bundle_identifier(),
                            settings.copyright_string().unwrap_or(""));
 
-    try!(plist.write_all(&contents.into_bytes()[..]));
-    try!(plist.sync_all());
-
-    if settings.resource_files().count() > 0 {
-        try!(create_dir_all(&resources_dir));
-
-        for res_path in settings.resource_files() {
-            try!(copy_path(&res_path, &resources_dir));
-        }
-    }
-
-    let mut bin_path = bundle_directory;
-    bin_path.push("MacOS");
-    try!(create_dir_all(&bin_path));
-    let bundle_binary = {
-        bin_path.push(bin_name);
-        bin_path
-    };
-    fs::copy(settings.binary_path(), &bundle_binary)?;
-
-    Ok(vec![app_bundle_path])
+    plist.write_all(contents.as_bytes())?;
+    plist.sync_all()?;
+    Ok(())
 }
 
 fn copy_path(from: &Path, to: &Path) -> io::Result<()> {
@@ -165,7 +177,7 @@ fn create_icns_file(bundle_name: &str,
         let mut dest_path = resources_dir.to_path_buf();
         // icns_path has been verified to be a file in Settings::new
         dest_path.push(icns_path.file_name().unwrap());
-        try!(create_dir_all(resources_dir));
+        try!(fs::create_dir_all(resources_dir));
         try!(fs::copy(&icns_path, &dest_path));
         return Ok(Some(dest_path));
     }
@@ -210,7 +222,7 @@ fn create_icns_file(bundle_name: &str,
     }
 
     if !family.is_empty() {
-        try!(create_dir_all(resources_dir));
+        try!(fs::create_dir_all(resources_dir));
         let mut dest_path = resources_dir.clone();
         dest_path.push(bundle_name);
         dest_path.set_extension("icns");

@@ -9,7 +9,7 @@
 // explanation.
 
 use super::common;
-use Settings;
+use {ResultExt, Settings};
 use icns;
 use image::{self, GenericImage, ImageDecoder};
 use image::png::{PNGDecoder, PNGEncoder};
@@ -23,14 +23,24 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
     let bundle_dir = settings.project_out_directory().join(&app_bundle_name);
-    fs::create_dir_all(&bundle_dir)?;
+    fs::create_dir_all(&bundle_dir).chain_err(|| {
+        format!("Failed to create bundle directory at {:?}", bundle_dir)
+    })?;
     for res_path in settings.resource_files() {
-        common::copy_to_dir(res_path, &bundle_dir.join("Resources"))?;
+        common::copy_to_dir(res_path, &bundle_dir.join("Resources")).chain_err(|| {
+            format!("Failed to copy resource file {:?}", res_path)
+        })?;
     }
-    let icon_filenames = generate_icon_files(&bundle_dir, settings)?;
-    generate_info_plist(&bundle_dir, settings, &icon_filenames)?;
+    let icon_filenames = generate_icon_files(&bundle_dir, settings).chain_err(|| {
+        "Failed to create app icons"
+    })?;
+    generate_info_plist(&bundle_dir, settings, &icon_filenames).chain_err(|| {
+        "Failed to create Info.plist"
+    })?;
     let bin_path = bundle_dir.join(&settings.bundle_name());
-    fs::copy(settings.binary_path(), bin_path)?;
+    fs::copy(settings.binary_path(), bin_path).chain_err(|| {
+        format!("Failed to copy binary from {:?}", settings.binary_path())
+    })?;
     Ok(vec![bundle_dir])
 }
 

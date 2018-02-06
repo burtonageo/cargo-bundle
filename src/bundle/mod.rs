@@ -1,12 +1,13 @@
-pub use self::settings::{PackageType, Settings};
-use std::path::PathBuf;
-
 mod common;
 mod deb_bundle;
 mod ios_bundle;
 mod osx_bundle;
 mod rpm_bundle;
 mod settings;
+
+pub use self::common::{print_error, print_finished};
+pub use self::settings::{PackageType, Settings};
+use std::path::PathBuf;
 
 pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
     let mut paths = Vec::new();

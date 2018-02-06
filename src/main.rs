@@ -52,12 +52,10 @@ fn build_project_if_unbuilt(settings: &Settings) -> Result<()> {
     Ok(())
 }
 
-quick_main!(run);
-
 fn run() -> ::Result<()> {
     let m = App::new("cargo-bundle")
                 .author("George Burton <burtonageo@gmail.com>")
-                .about("Bundle rust executables into OS bundles")
+                .about("Bundle Rust executables into OS bundles")
                 .version(format!("v{}", crate_version!()).as_str())
                 .bin_name("cargo")
                 .settings(&[AppSettings::GlobalVersion, AppSettings::SubcommandRequired])
@@ -76,15 +74,13 @@ fn run() -> ::Result<()> {
                           Ok(s)
                       })
             .and_then(bundle_project)?;
-        let pluralised = if output_paths.len() == 1 {
-            "bundle"
-        } else {
-            "bundles"
-        };
-        println!("{} {} created at:", output_paths.len(), pluralised);
-        for bundle in output_paths {
-            println!("\t{}", bundle.display());
-        }
+        bundle::print_finished(&output_paths)?;
     }
     Ok(())
+}
+
+fn main() {
+    if let Err(error) = run() {
+        bundle::print_error(&error).unwrap();
+    }
 }
