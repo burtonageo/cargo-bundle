@@ -210,23 +210,27 @@ fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> 
     };
     let mut sizes = BTreeSet::new();
     // Prefer PNG files.
-    for icon_path in settings.icon_files().filter(|path| path.extension() == Some(OsStr::new("png"))) {
-        let mut decoder = PNGDecoder::new(File::open(icon_path)?);
+    for icon_path in settings.icon_files() {
+        let icon_path = icon_path?;
+        if icon_path.extension() != Some(OsStr::new("png")) {
+            continue;
+        }
+        let mut decoder = PNGDecoder::new(File::open(&icon_path)?);
         let (width, height) = decoder.dimensions()?;
-        let is_high_density = common::is_retina(icon_path);
+        let is_high_density = common::is_retina(&icon_path);
         if !sizes.contains(&(width, height, is_high_density)) {
             sizes.insert((width, height, is_high_density));
             let dest_path = get_dest_path(width, height, is_high_density);
-            if let Some(parent) = dest_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::copy(icon_path, dest_path)?;
+            common::copy_file(&icon_path, &dest_path)?;
         }
     }
     // Fall back to non-PNG files for any missing sizes.
-    for icon_path in settings.icon_files().filter(|path| path.extension() != Some(OsStr::new("png"))) {
-        if icon_path.extension() == Some(OsStr::new("icns")) {
-            let icon_family = icns::IconFamily::read(File::open(icon_path)?)?;
+    for icon_path in settings.icon_files() {
+        let icon_path = icon_path?;
+        if icon_path.extension() == Some(OsStr::new("png")) {
+            continue;
+        } else if icon_path.extension() == Some(OsStr::new("icns")) {
+            let icon_family = icns::IconFamily::read(File::open(&icon_path)?)?;
             for icon_type in icon_family.available_icons() {
                 let width = icon_type.screen_width();
                 let height = icon_type.screen_height();
@@ -239,9 +243,9 @@ fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> 
                 }
             }
         } else {
-            let icon = try!(image::open(icon_path));
+            let icon = try!(image::open(&icon_path));
             let (width, height) = icon.dimensions();
-            let is_high_density = common::is_retina(icon_path);
+            let is_high_density = common::is_retina(&icon_path);
             if !sizes.contains(&(width, height, is_high_density)) {
                 sizes.insert((width, height, is_high_density));
                 let dest_path = get_dest_path(width, height, is_high_density);

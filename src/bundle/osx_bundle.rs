@@ -40,9 +40,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let resources_dir = bundle_directory.join("Resources");
 
     let bundle_icon_file: Option<PathBuf> = {
-        let bundle_name = settings.bundle_name();
-        let icons = settings.icon_files().cloned().collect();
-        create_icns_file(bundle_name, &resources_dir, icons).chain_err(|| {
+        create_icns_file(&resources_dir, settings).chain_err(|| {
             "Failed to create app icon"
         })?
     };
@@ -132,22 +130,21 @@ fn create_info_plist(bundle_directory: &Path, bundle_icon_file: Option<PathBuf>,
 /// Given a list of icon files, try to produce an ICNS file in the resources
 /// directory and return the path to it.  Returns `Ok(None)` if no usable icons
 /// were provided.
-fn create_icns_file(bundle_name: &str,
-                    resources_dir: &PathBuf,
-                    icon_paths: Vec<PathBuf>)
+fn create_icns_file(resources_dir: &PathBuf, settings: &Settings)
                     -> ::Result<Option<PathBuf>> {
-    if icon_paths.is_empty() {
+    if settings.icon_files().count() == 0 {
         return Ok(None);
     }
 
     // If one of the icon files is already an ICNS file, just use that.
-    if let Some(icns_path) = icon_paths.iter().find(|path| path.extension() == Some(OsStr::new("icns"))) {
-        let mut dest_path = resources_dir.to_path_buf();
-        // icns_path has been verified to be a file in Settings::new
-        dest_path.push(icns_path.file_name().unwrap());
-        try!(fs::create_dir_all(resources_dir));
-        try!(fs::copy(&icns_path, &dest_path));
-        return Ok(Some(dest_path));
+    for icon_path in settings.icon_files() {
+        let icon_path = icon_path?;
+        if icon_path.extension() == Some(OsStr::new("icns")) {
+            let mut dest_path = resources_dir.to_path_buf();
+            dest_path.push(icon_path.file_name().unwrap());
+            common::copy_file(&icon_path, &dest_path)?;
+            return Ok(Some(dest_path));
+        }
     }
 
     // Otherwise, read available images and pack them into a new ICNS file.
@@ -170,10 +167,10 @@ fn create_icns_file(bundle_name: &str,
     }
 
     let mut images_to_resize: Vec<(image::DynamicImage, u32, u32)> = vec![];
-    for icon_path in icon_paths.iter() {
-        let icon = try!(image::open(icon_path));
-        let density = if common::is_retina(icon_path) { 2 } else { 1 };
-
+    for icon_path in settings.icon_files() {
+        let icon_path = icon_path?;
+        let icon = try!(image::open(&icon_path));
+        let density = if common::is_retina(&icon_path) { 2 } else { 1 };
         let (w, h) = icon.dimensions();
         let orig_size = min(w, h);
         let next_size_down = 2f32.powf((orig_size as f32).log2().floor()) as u32;
@@ -192,7 +189,7 @@ fn create_icns_file(bundle_name: &str,
     if !family.is_empty() {
         try!(fs::create_dir_all(resources_dir));
         let mut dest_path = resources_dir.clone();
-        dest_path.push(bundle_name);
+        dest_path.push(settings.bundle_name());
         dest_path.set_extension("icns");
         let icns_file = BufWriter::new(try!(File::create(&dest_path)));
         try!(family.write(icns_file));
