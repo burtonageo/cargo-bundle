@@ -1,27 +1,22 @@
 # Cargo bundle
 
-Wrap rust executables in OS-specific app bundles
+Wrap Rust executables in OS-specific app bundles
 
 ## About
 
- `cargo-bundle` is a tool used to generate installers or app bundles for executables built with `cargo`.
-It supports `.app` bundles for OSX, `.deb` and `.rpm` packages. `msi` installer support may be added soon.
-In addition to bundling executables, it also has facilities to download and package extra data from other
-sources such as the internet or other repositories.
+`cargo-bundle` is a tool used to generate installers or app bundles for executables built with `cargo`.  It supports
+`.app` bundles for OSX and IOS, and `.deb` packages for Linux.  Support for `msi` installers (for Windows) and `rpm`
+packages is pending.
 
- To install `cargo bundle`, run `cargo install cargo-bundle`. This will add the most recent version of 
-`cargo-bundle` published to [crates.io](https://crates.io/crates/cargo-bundle) as a subcommand to your default 
-`cargo` installation.
+To install `cargo bundle`, run `cargo install cargo-bundle`. This will add the most recent version of `cargo-bundle`
+published to [crates.io](https://crates.io/crates/cargo-bundle) as a subcommand to your default `cargo` installation.
 
- To start using `cargo bundle`, you should create a `Bundle.toml` file in the root directory of your project,
-next to the `Cargo.toml` file. Your `Bundle.toml` describes various attributes of the generated bundle, such
-as its name, icon, description, copyright, as well as any packaging scripts you need to generate extra data.
-The full manifest format is described below. Note that by default, `cargo-bundle` will look at your `Cargo.toml`
-for information such as your package version and description to avoid repeating yourself, but this can be
-overridden.
+To start using `cargo bundle`, add a `[package.metadata.bundle]` section to your project's `Cargo.toml` file.  This
+section describes various attributes of the generated bundle, such as its name, icon, description, copyright, as well
+as any packaging scripts you need to generate extra data.  The full manifest format is described below.
 
- To build a bundle, simply run `cargo bundle` in your project's directory (where the `Bundle.toml` is placed).
-If you would like to bundle a release build, you must add the `--release` flag to your call.
+To build a bundle, simply run `cargo bundle` in your project's directory (where the `Cargo.toml` is placed).  If you
+would like to bundle a release build, you must add the `--release` flag to your call.
 
 ## Flags
 
@@ -29,7 +24,7 @@ If you would like to bundle a release build, you must add the `--release` flag t
 
 ## Bundle manifest format
 
- There are several fields in the `Bundle.toml` file.
+ There are several fields in the `[package.metadata.bundle]` section.
 
  * `name`: The name of the built application. If this is not present, then it will use the `name` value from
            your `Cargo.toml` file.
@@ -42,7 +37,7 @@ If you would like to bundle a release build, you must add the `--release` flag t
  * `version`: [OPTIONAL] The version of the application. If this is not present, then it will use the `version`
               value from your `Cargo.toml` file.
  * `resources`: [OPTIONAL] List of files or directories which will be copied to the resources section of the
-                bundle. This section must be present, but it can be empty.
+                bundle. Globs are supported.
  * `script`: [OPTIONAL] This is a reserved field; at the moment it is not used for anything, but may be used to
              run scripts while packaging the bundle (e.g. download files, compress and encrypt, etc.).
  * `copyright`: [OPTIONAL] This contains a copyright string associated with your application.
@@ -50,14 +45,19 @@ If you would like to bundle a release build, you must add the `--release` flag t
                         will use the `description` value from your `Cargo.toml` file.
  * `long_description`: [OPTIONAL] A longer, multi-line description of the application.
 
-### Example `Bundle.toml`:
+### Example `Cargo.toml`:
 
 ```toml
+[package]
+name = "example"
+...other fields...
+
+[package.metadata.bundle]
 name = "ExampleApplication"
 identifier = "com.doe.exampleapplication"
 icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
 version = "1.0.0"
-resources = ["assets", "configuration", "secrets/public_key.txt"]
+resources = ["assets", "images/**/*.png", "secrets/public_key.txt"]
 copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
 short_description = "An example application."
 long_description = """
@@ -70,16 +70,16 @@ nisi ut aliquip ex ea commodo consequat.
 
 ## Contributing
 
- `cargo-bundle` has ambitions to be inclusive project and welcome contributions from anyone. Please abide
-by the rust code of conduct.
+`cargo-bundle` has ambitions to be inclusive project and welcome contributions from anyone.  Please abide by the Rust
+code of conduct.
 
 ## Status
 
- Very early alpha. Expect the format of the `Bundle.toml` file to change, and there is no guarantee
-of stability.
+Very early alpha. Expect the format of the `[package.metadata.bundle]` section to change, and there is no guarantee of
+stability.
 
 ## License
 
-This program is licensed either under the terms of the [Apache Software License](http://www.apache.org/licenses/LICENSE-2.0),
-or the [MIT License](https://opensource.org/licenses/MIT).
-
+This program is licensed either under the terms of the
+[Apache Software License](http://www.apache.org/licenses/LICENSE-2.0), or the
+[MIT License](https://opensource.org/licenses/MIT).

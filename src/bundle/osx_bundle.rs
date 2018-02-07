@@ -27,12 +27,11 @@ use std::fs::{self, File};
 use std::io::{self, BufWriter};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
-    let app_bundle_path = settings.project_out_directory().join(app_bundle_name);
+    let app_bundle_path = settings.project_out_directory().join("bundle/osx").join(app_bundle_name);
     let bundle_directory = app_bundle_path.join("Contents");
     fs::create_dir_all(&bundle_directory).chain_err(|| {
         format!("Failed to create bundle directory at {:?}", bundle_directory)
@@ -52,14 +51,12 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
         "Failed to create Info.plist"
     })?;
 
-    if settings.resource_files().count() > 0 {
-        fs::create_dir_all(&resources_dir)?;
-
-        for res_path in settings.resource_files() {
-            copy_path(&res_path, &resources_dir).chain_err(|| {
-                format!("Failed to copy resource file {:?}", res_path)
-            })?;
-        }
+    for src in settings.resource_files() {
+        let src = src?;
+        let dest = resources_dir.join(common::resource_relpath(&src));
+        common::copy_file(&src, &dest).chain_err(|| {
+            format!("Failed to copy resource file {:?}", src)
+        })?;
     }
 
     copy_binary_to_bundle(&bundle_directory, settings).chain_err(|| {
@@ -71,14 +68,12 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 
 fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::Result<()> {
     let dest_dir = bundle_directory.join("MacOS");
-    fs::create_dir_all(&dest_dir)?;
-    fs::copy(settings.binary_path(), dest_dir.join(settings.binary_name()?))?;
-    Ok(())
+    common::copy_file(settings.binary_path(),
+                      &dest_dir.join(settings.binary_name()))
 }
 
 fn create_info_plist(bundle_directory: &Path, bundle_icon_file: Option<PathBuf>,
                      settings: &Settings) -> ::Result<()> {
-    let bin_name = settings.binary_name()?;
     let mut plist = File::create(bundle_directory.join("Info.plist"))?;
     let contents = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
                             <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
@@ -119,7 +114,7 @@ fn create_info_plist(bundle_directory: &Path, bundle_icon_file: Option<PathBuf>,
                                 <true/>\n\
                             </dict>\n\
                             </plist>",
-                           bin_name,
+                           settings.binary_name(),
                            bundle_icon_file.as_ref()
                                .and_then(|p| p.file_name())
                                .and_then(OsStr::to_str)
@@ -131,33 +126,6 @@ fn create_info_plist(bundle_directory: &Path, bundle_icon_file: Option<PathBuf>,
 
     plist.write_all(contents.as_bytes())?;
     plist.sync_all()?;
-    Ok(())
-}
-
-fn copy_path(from: &Path, to: &Path) -> io::Result<()> {
-    if from.is_file() {
-        // TODO(burtonageo): This fails if this is a path to a file which has directory components
-        // e.g. from = `/assets/configurations/features-release.json`
-        fs::copy(&from, &to)?;
-        return Ok(());
-    }
-
-    for entry in WalkDir::new(from) {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.is_dir() {
-            continue;
-        }
-
-        let mut destination = to.to_path_buf();
-        destination.push(path);
-        if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::copy(&path, &destination)?;
-    }
-
     Ok(())
 }
 
