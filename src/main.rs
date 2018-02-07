@@ -3,6 +3,7 @@ extern crate ar;
 extern crate clap;
 #[macro_use]
 extern crate error_chain;
+extern crate glob;
 extern crate icns;
 extern crate image;
 extern crate libflate;
@@ -25,6 +26,8 @@ use std::process;
 
 error_chain! {
     foreign_links {
+        Glob(::glob::GlobError);
+        GlobPattern(::glob::PatternError);
         Io(::std::io::Error);
         Image(::image::ImageError);
         Target(::target_build_utils::Error);

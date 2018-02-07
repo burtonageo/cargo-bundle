@@ -40,19 +40,19 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
         "x86_64" => "amd64",
         other => other,
     };
-    let package_base_name = {
-        let bin_name = settings.binary_name()?;
-        format!("{}_{}_{}", bin_name, settings.version_string(), arch)
-    };
+    let package_base_name = format!("{}_{}_{}", settings.binary_name(),
+                                    settings.version_string(), arch);
     let package_name = format!("{}.deb", package_base_name);
     common::print_bundling(&package_name)?;
-    let package_dir = settings.project_out_directory().join(&package_base_name);
-    let package_path = settings.project_out_directory().join(package_name);
+    let base_dir = settings.project_out_directory().join("bundle/deb");
+    let package_dir = base_dir.join(&package_base_name);
+    let package_path = base_dir.join(package_name);
 
     // Generate data files.
     let data_dir = package_dir.join("data");
-    common::copy_to_dir(settings.binary_path(), &data_dir.join("usr/bin")).chain_err(|| {
-        format!("Failed to copy binary file from {:?}", settings.binary_path())
+    let binary_dest = data_dir.join("usr/bin").join(settings.binary_name());
+    common::copy_file(settings.binary_path(), &binary_dest).chain_err(|| {
+        "Failed to copy binary file"
     })?;
     transfer_resource_files(settings, &data_dir).chain_err(|| {
         "Failed to copy resource files"
@@ -96,7 +96,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 
 /// Generate the application desktop file and store it under the `data_dir`.
 fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
-    let bin_name = settings.binary_name()?;
+    let bin_name = settings.binary_name();
     // For more information about the format of this file, see
     // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
     let desktop_file_contents = format!("[Desktop Entry]\n\
@@ -187,24 +187,26 @@ fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> ::Result<()> {
 /// Copy the bundle's resource files into an appropriate directory under the
 /// `data_dir`.
 fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> ::Result<()> {
-    let bin_name = settings.binary_name()?;
-    let resource_dir = data_dir.join("usr/lib").join(bin_name);
-    for res_path in settings.resource_files() {
-        common::copy_to_dir(res_path, &resource_dir)?;
+    let resource_dir = data_dir.join("usr/lib").join(settings.binary_name());
+    for src in settings.resource_files() {
+        let src = src?;
+        let dest = resource_dir.join(common::resource_relpath(&src));
+        common::copy_file(&src, &dest).chain_err(|| {
+            format!("Failed to copy resource file {:?}", src)
+        })?;
     }
     Ok(())
 }
 
 /// Generate the icon files and store them under the `data_dir`.
 fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> {
-    let file_stem = settings.binary_name()?;
     let base_dir = data_dir.join("usr/share/icons/hicolor");
     let get_dest_path = |width: u32, height: u32, is_high_density: bool| {
         base_dir.join(format!("{}x{}{}/apps/{}.png",
                               width,
                               height,
                               if is_high_density { "@2x" } else { "" },
-                              file_stem))
+                              settings.binary_name()))
     };
     let mut sizes = BTreeSet::new();
     // Prefer PNG files.

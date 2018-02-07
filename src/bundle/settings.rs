@@ -1,4 +1,5 @@
 use clap::ArgMatches;
+use glob;
 use std;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -7,6 +8,7 @@ use std::path::{Path, PathBuf};
 use super::common::print_warning;
 use target_build_utils::TargetInfo;
 use toml;
+use walkdir;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackageType {
@@ -22,7 +24,7 @@ struct BundleSettings {
     identifier: Option<String>,
     icon: Option<Vec<PathBuf>>,
     version: Option<String>,
-    resources: Option<Vec<PathBuf>>,
+    resources: Option<Vec<String>>,
     copyright: Option<String>,
     short_description: Option<String>,
     long_description: Option<String>,
@@ -57,6 +59,7 @@ pub struct Settings {
     project_out_directory: PathBuf,
     is_release: bool,
     binary_path: PathBuf,
+    binary_name: String,
     bundle_settings: BundleSettings,
 }
 
@@ -92,6 +95,10 @@ impl Settings {
             toml::from_str(&toml_str)?
         };
         let binary_path = target_dir.join(&cargo_settings.package.name);
+        let binary_name = match binary_path.file_name().and_then(OsStr::to_str) {
+            Some(name) => name.to_string(),
+            None => bail!("Could not get file name of binary file."),
+        };
         let bundle_settings: BundleSettings = {
             let toml_path = current_dir.join("Bundle.toml");
             if toml_path.exists() {
@@ -113,6 +120,7 @@ impl Settings {
             is_release: is_release,
             project_out_directory: target_dir,
             binary_path: binary_path,
+            binary_name: binary_name,
             bundle_settings: bundle_settings,
         })
     }
@@ -133,13 +141,7 @@ impl Settings {
     }
 
     /// Returns the file name of the binary being bundled.
-    pub fn binary_name(&self) -> ::Result<String> {
-        self.binary_path
-            .file_name()
-            .and_then(OsStr::to_str)
-            .map(ToString::to_string)
-            .ok_or("Could not get file name of binary file.".into())
-    }
+    pub fn binary_name(&self) -> &str { &self.binary_name }
 
     /// Returns the path to the binary being bundled.
     pub fn binary_path(&self) -> &Path { &self.binary_path }
@@ -199,10 +201,10 @@ impl Settings {
 
     /// Returns an iterator over the resource files to be included in this
     /// bundle.
-    pub fn resource_files(&self) -> std::slice::Iter<PathBuf> {
+    pub fn resource_files(&self) -> ResourcePaths {
         match self.bundle_settings.resources {
-            Some(ref paths) => paths.iter(),
-            None => [].iter(),
+            Some(ref paths) => ResourcePaths::new(paths.as_slice(), true),
+            None => ResourcePaths::new(&[], true),
         }
     }
 
@@ -231,6 +233,76 @@ impl Settings {
 
     pub fn long_description(&self) -> Option<&str> {
         self.bundle_settings.long_description.as_ref().map(String::as_str)
+    }
+}
+
+pub struct ResourcePaths<'a> {
+    pattern_iter: std::slice::Iter<'a, String>,
+    glob_iter: Option<glob::Paths>,
+    walk_iter: Option<walkdir::IntoIter>,
+    allow_walk: bool,
+}
+
+impl<'a> ResourcePaths<'a> {
+    fn new(patterns: &'a [String], allow_walk: bool) -> ResourcePaths<'a> {
+        ResourcePaths {
+            pattern_iter: patterns.iter(),
+            glob_iter: None,
+            walk_iter: None,
+            allow_walk: allow_walk,
+        }
+    }
+}
+
+impl<'a> Iterator for ResourcePaths<'a> {
+    type Item = ::Result<PathBuf>;
+
+    fn next(&mut self) -> Option<::Result<PathBuf>> {
+        loop {
+            if let Some(ref mut walk_entries) = self.walk_iter {
+                if let Some(entry) = walk_entries.next() {
+                    let entry = match entry {
+                        Ok(entry) => entry,
+                        Err(error) => return Some(Err(::Error::from(error))),
+                    };
+                    let path = entry.path();
+                    if path.is_dir() {
+                        continue;
+                    }
+                    return Some(Ok(path.to_path_buf()));
+                }
+            }
+            self.walk_iter = None;
+            if let Some(ref mut glob_paths) = self.glob_iter {
+                if let Some(glob_result) = glob_paths.next() {
+                    let path = match glob_result {
+                        Ok(path) => path,
+                        Err(error) => return Some(Err(::Error::from(error))),
+                    };
+                    if path.is_dir() {
+                        if self.allow_walk {
+                            let walk = walkdir::WalkDir::new(path);
+                            self.walk_iter = Some(walk.into_iter());
+                            continue;
+                        } else {
+                            let msg = format!("{:?} is a directory", path);
+                            return Some(Err(::Error::from(msg)));
+                        }
+                    }
+                    return Some(Ok(path));
+                }
+            }
+            self.glob_iter = None;
+            if let Some(pattern) = self.pattern_iter.next() {
+                let glob = match glob::glob(pattern) {
+                    Ok(glob) => glob,
+                    Err(error) => return Some(Err(::Error::from(error))),
+                };
+                self.glob_iter = Some(glob);
+                continue;
+            }
+            return None;
+        }
     }
 }
 

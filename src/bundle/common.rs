@@ -1,10 +1,9 @@
-use ::Error;
+use ::ResultExt;
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::BufWriter;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use term;
-use walkdir::WalkDir;
 
 /// Returns true if the path has a filename indicating that it is a high-desity
 /// "retina" icon.  Specifically, returns true the the file stem ends with
@@ -30,24 +29,41 @@ pub fn create_file(path: &Path) -> ::Result<BufWriter<File>> {
     Ok(BufWriter::new(file))
 }
 
-/// Copies the file or directory (recursively) at `from` into the directory at
-/// `to`.  The `to` directory (and its parents) will be created if necessary.
-pub fn copy_to_dir(from: &Path, to_dir: &Path) -> ::Result<()> {
-    let parent = match from.parent() {
-        Some(dir) => dir,
-        None => bail!("Path has no parent: {:?}", from),
-    };
-    for entry in WalkDir::new(from) {
-        let entry = entry?;
-        if entry.file_type().is_file() {
-            let rel_path = entry.path().strip_prefix(parent).unwrap();
-            let dest_path = to_dir.join(rel_path);
-            let dest_dir = dest_path.parent().unwrap();
-            fs::create_dir_all(dest_dir)?;
-            fs::copy(entry.path(), &dest_path)?;
+/// Copies a regular file from one path to another, creating any parent
+/// directories of the destination path as necessary.  Fails if the source path
+/// is a directory or doesn't exist.
+pub fn copy_file(from: &Path, to: &Path) -> ::Result<()> {
+    if !from.exists() {
+        bail!("{:?} does not exist", from);
+    }
+    if !from.is_file() {
+        bail!("{:?} is not a file", from);
+    }
+    let dest_dir = to.parent().unwrap();
+    fs::create_dir_all(dest_dir).chain_err(|| {
+        format!("Failed to create {:?}", dest_dir)
+    })?;
+    fs::copy(from, to).chain_err(|| {
+        format!("Failed to copy {:?} to {:?}", from, to)
+    })?;
+    Ok(())
+}
+
+/// Given a path (absolute or relative) to a resource file, returns the
+/// relative path from the bundle resources directory where that resource
+/// should be stored.
+pub fn resource_relpath(path: &Path) -> PathBuf {
+    let mut dest = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) => {}
+            Component::RootDir => dest.push("_root_"),
+            Component::CurDir => {}
+            Component::ParentDir => dest.push("_up_"),
+            Component::Normal(string) => dest.push(string),
         }
     }
-    Ok(())
+    dest
 }
 
 /// Prints a message to stdout, in the same format that `cargo` uses,
@@ -102,7 +118,7 @@ pub fn print_warning(message: &str) -> ::Result<()> {
 }
 
 /// Prints an error to stdout, in the same format that `cargo` uses.
-pub fn print_error(error: &Error) -> ::Result<()> {
+pub fn print_error(error: &::Error) -> ::Result<()> {
     let mut output = match term::stdout() {
         Some(terminal) => terminal,
         None => bail!("Can't write to stdout"),
