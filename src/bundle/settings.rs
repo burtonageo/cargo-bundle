@@ -22,7 +22,7 @@ pub enum PackageType {
 struct BundleSettings {
     name: Option<String>,
     identifier: Option<String>,
-    icon: Option<Vec<PathBuf>>,
+    icon: Option<Vec<String>>,
     version: Option<String>,
     resources: Option<Vec<String>>,
     copyright: Option<String>,
@@ -192,10 +192,10 @@ impl Settings {
     }
 
     /// Returns an iterator over the icon files to be used for this bundle.
-    pub fn icon_files(&self) -> std::slice::Iter<PathBuf> {
+    pub fn icon_files(&self) -> ResourcePaths {
         match self.bundle_settings.icon {
-            Some(ref paths) => paths.iter(),
-            None => [].iter(),
+            Some(ref paths) => ResourcePaths::new(paths.as_slice(), false),
+            None => ResourcePaths::new(&[], false),
         }
     }
 

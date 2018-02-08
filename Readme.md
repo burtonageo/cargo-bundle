@@ -30,10 +30,11 @@ would like to bundle a release build, you must add the `--release` flag to your 
            your `Cargo.toml` file.
  * `identifier`: [REQUIRED] Unique identifier for your application. This is a simple string, but it may change so that
                  you can specify it for individual platforms.
- * `icon`: [REQUIRED] The icon used for your application.  This can either be a single file path (string), or an array
-           of file paths (with images in various sizes/formats); `cargo-bundle` will automatically convert between
-           image formats as necessary for different platforms.  Supported formats include ICNS, ICO, PNG, and anything
-           else that can be decoded by the [`image`](https://crates.io/crates/image) crate.
+ * `icon`: [OPTIONAL] The icons used for your application.  This should be an array of file paths or globs (with images
+           in various sizes/formats); `cargo-bundle` will automatically convert between image formats as necessary for
+           different platforms.  Supported formats include ICNS, ICO, PNG, and anything else that can be decoded by the
+           [`image`](https://crates.io/crates/image) crate.  Icons intended for high-resolution (e.g. Retina) displays
+           should have a filename with `@2x` just before the extension (see example below).
  * `version`: [OPTIONAL] The version of the application. If this is not present, then it will use the `version`
               value from your `Cargo.toml` file.
  * `resources`: [OPTIONAL] List of files or directories which will be copied to the resources section of the
