@@ -1,7 +1,7 @@
 use ::ResultExt;
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::BufWriter;
+use std::io::{self, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 use term;
 
@@ -89,53 +89,71 @@ pub fn print_finished(output_paths: &Vec<PathBuf>) -> ::Result<()> {
 }
 
 fn print_progress(step: &str, msg: &str) -> ::Result<()> {
-    let mut output = match term::stdout() {
-        Some(terminal) => terminal,
-        None => bail!("Can't write to stdout"),
-    };
-    output.attr(term::Attr::Bold)?;
-    output.fg(term::color::GREEN)?;
-    write!(output, "    {}", step)?;
-    output.reset()?;
-    write!(output, " {}\n", msg)?;
-    output.flush()?;
-    Ok(())
+    if let Some(mut output) = term::stdout() {
+        output.attr(term::Attr::Bold)?;
+        output.fg(term::color::GREEN)?;
+        write!(output, "    {}", step)?;
+        output.reset()?;
+        write!(output, " {}\n", msg)?;
+        output.flush()?;
+        Ok(())
+    } else {
+        let mut output = io::stdout();
+        write!(output, "    {}", step)?;
+        write!(output, " {}\n", msg)?;
+        output.flush()?;
+        Ok(())
+    }
 }
 
 /// Prints a warning message to stdout, in the same format that `cargo` uses.
 pub fn print_warning(message: &str) -> ::Result<()> {
-    let mut output = match term::stdout() {
-        Some(terminal) => terminal,
-        None => bail!("Can't write to stdout"),
-    };
-    output.attr(term::Attr::Bold)?;
-    output.fg(term::color::YELLOW)?;
-    write!(output, "warning:")?;
-    output.reset()?;
-    write!(output, " {}\n", message)?;
-    output.flush()?;
-    Ok(())
+    if let Some(mut output) = term::stdout() {
+        output.attr(term::Attr::Bold)?;
+        output.fg(term::color::YELLOW)?;
+        write!(output, "warning:")?;
+        output.reset()?;
+        write!(output, " {}\n", message)?;
+        output.flush()?;
+        Ok(())
+    } else {
+        let mut output = io::stdout();
+        write!(output, "warning:")?;
+        write!(output, " {}\n", message)?;
+        output.flush()?;
+        Ok(())
+    }
 }
 
 /// Prints an error to stdout, in the same format that `cargo` uses.
 pub fn print_error(error: &::Error) -> ::Result<()> {
-    let mut output = match term::stdout() {
-        Some(terminal) => terminal,
-        None => bail!("Can't write to stdout"),
-    };
-    output.attr(term::Attr::Bold)?;
-    output.fg(term::color::RED)?;
-    write!(output, "error:")?;
-    output.reset()?;
-    output.attr(term::Attr::Bold)?;
-    writeln!(output, " {}", error)?;
-    output.reset()?;
-    for cause in error.iter().skip(1) {
-        writeln!(output, "  Caused by: {}", cause)?;
+    if let Some(mut output) = term::stdout() {
+        output.attr(term::Attr::Bold)?;
+        output.fg(term::color::RED)?;
+        write!(output, "error:")?;
+        output.reset()?;
+        output.attr(term::Attr::Bold)?;
+        writeln!(output, " {}", error)?;
+        output.reset()?;
+        for cause in error.iter().skip(1) {
+            writeln!(output, "  Caused by: {}", cause)?;
+        }
+        if let Some(backtrace) = error.backtrace() {
+            writeln!(output, "{:?}", backtrace)?;
+        }
+        output.flush()?;
+        Ok(())
+    } else {
+        let mut output = io::stdout();
+        write!(output, "error:")?;
+        writeln!(output, " {}", error)?;
+        for cause in error.iter().skip(1) {
+            writeln!(output, "  Caused by: {}", cause)?;
+        }
+        if let Some(backtrace) = error.backtrace() {
+            writeln!(output, "{:?}", backtrace)?;
+        }
+        output.flush()?;
+        Ok(())
     }
-    if let Some(backtrace) = error.backtrace() {
-        writeln!(output, "{:?}", backtrace)?;
-    }
-    output.flush()?;
-    Ok(())
 }
