@@ -311,3 +311,54 @@ Using Bundle.toml file, which is deprecated in favor
   of using [package.metadata.bundle] section in Cargo.toml
   file.  Support for Bundle.toml file will be removed in a
   future version of cargo-bundle.";
+
+#[cfg(test)]
+mod tests {
+    use super::CargoSettings;
+    use toml;
+
+    #[test]
+    fn parse_cargo_toml() {
+        let toml_str = "\
+            [package]\n\
+            name = \"example\"\n\
+            version = \"0.1.0\"\n\
+            authors = [\"Jane Doe\"]\n\
+            license = \"MIT\"\n\
+            description = \"An example application.\"\n\
+            build = \"build.rs\"\n\
+            \n\
+            [package.metadata.bundle]\n\
+            name = \"Example Application\"\n\
+            identifier = \"com.example.app\"\n\
+            resources = [\"data\", \"foo/bar\"]\n\
+            long_description = \"\"\"\n\
+            This is an example of a\n\
+            simple application.\n\
+            \"\"\"\n\
+            \n\
+            [dependencies]\n\
+            rand = \"0.4\"\n";
+        let cargo_settings: CargoSettings = toml::from_str(toml_str).unwrap();
+        assert_eq!(cargo_settings.package.name, "example");
+        assert_eq!(cargo_settings.package.version, "0.1.0");
+        assert_eq!(cargo_settings.package.description,
+                   "An example application.");
+        assert_eq!(cargo_settings.package.homepage, None);
+        assert_eq!(cargo_settings.package.authors,
+                   Some(vec!["Jane Doe".to_string()]));
+        assert!(cargo_settings.package.metadata.is_some());
+        let metadata = cargo_settings.package.metadata.as_ref().unwrap();
+        assert!(metadata.bundle.is_some());
+        let bundle = metadata.bundle.as_ref().unwrap();
+        assert_eq!(bundle.name, Some("Example Application".to_string()));
+        assert_eq!(bundle.identifier, Some("com.example.app".to_string()));
+        assert_eq!(bundle.icon, None);
+        assert_eq!(bundle.version, None);
+        assert_eq!(bundle.resources,
+                   Some(vec!["data".to_string(), "foo/bar".to_string()]));
+        assert_eq!(bundle.long_description,
+                   Some("This is an example of a\n\
+                         simple application.\n".to_string()));
+    }
+}
