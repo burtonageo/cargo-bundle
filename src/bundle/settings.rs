@@ -1,7 +1,7 @@
 use clap::ArgMatches;
 use glob;
 use std;
-use std::ffi::OsStr;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -18,6 +18,44 @@ pub enum PackageType {
     Rpm,
 }
 
+impl PackageType {
+    pub fn from_short_name(name: &str) -> Option<PackageType> {
+        // Other types we may eventually want to support: apk, win
+        match name {
+            "deb" => Some(PackageType::Deb),
+            "ios" => Some(PackageType::IosBundle),
+            "osx" => Some(PackageType::OsxBundle),
+            "rpm" => Some(PackageType::Rpm),
+            _ => None,
+        }
+    }
+
+    pub fn short_name(&self) -> &'static str {
+        match *self {
+            PackageType::Deb => "deb",
+            PackageType::IosBundle => "ios",
+            PackageType::OsxBundle => "osx",
+            PackageType::Rpm => "rpm",
+        }
+    }
+
+    pub fn all() -> &'static [PackageType] { ALL_PACKAGE_TYPES }
+}
+
+const ALL_PACKAGE_TYPES: &[PackageType] = &[
+    PackageType::Deb,
+    PackageType::IosBundle,
+    PackageType::OsxBundle,
+    PackageType::Rpm,
+];
+
+#[derive(Clone, Debug)]
+pub enum BuildArtifact {
+    Main,
+    Bin(String),
+    Example(String),
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct BundleSettings {
     name: Option<String>,
@@ -29,6 +67,8 @@ struct BundleSettings {
     short_description: Option<String>,
     long_description: Option<String>,
     script: Option<PathBuf>,
+    bin: Option<HashMap<String, BundleSettings>>,
+    example: Option<HashMap<String, BundleSettings>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -63,6 +103,7 @@ pub struct Settings {
     package_type: Option<PackageType>, // If `None`, use the default package type for this os
     target: Option<(String, TargetInfo)>,
     project_out_directory: PathBuf,
+    build_artifact: BuildArtifact,
     is_release: bool,
     binary_path: PathBuf,
     binary_name: String,
@@ -85,13 +126,18 @@ impl CargoSettings {
 impl Settings {
     pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> ::Result<Self> {
         let package_type = match matches.value_of("format") {
-            // Other types we may eventually want to support: apk, win
+            Some(name) => match PackageType::from_short_name(name) {
+                Some(package_type) => Some(package_type),
+                None => bail!("Unsupported bundle format: {}", name),
+            }
             None => None,
-            Some("deb") => Some(PackageType::Deb),
-            Some("ios") => Some(PackageType::IosBundle),
-            Some("osx") => Some(PackageType::OsxBundle),
-            Some("rpm") => Some(PackageType::Rpm),
-            Some(format) => bail!("Unsupported bundle format: {}", format),
+        };
+        let build_artifact = if let Some(bin) = matches.value_of("bin") {
+            BuildArtifact::Bin(bin.to_string())
+        } else if let Some(example) = matches.value_of("example") {
+            BuildArtifact::Example(example.to_string())
+        } else {
+            BuildArtifact::Main
         };
         let is_release = matches.is_present("release");
         let target = match matches.value_of("target") {
@@ -104,31 +150,43 @@ impl Settings {
             None => bail!("No 'package' info found in 'Cargo.toml'")
         };
         let workspace_dir = Settings::get_workspace_dir(&current_dir);
-        let target_dir = Settings::get_target_dir(&workspace_dir, &target, is_release);
-        let binary_path = target_dir.join(&package.name);
-        let binary_name = match binary_path.file_name().and_then(OsStr::to_str) {
-            Some(name) => name.to_string(),
-            None => bail!("Could not get file name of binary file."),
-        };
-        let bundle_settings: BundleSettings = {
+        let target_dir = Settings::get_target_dir(&workspace_dir, &target, is_release, &build_artifact);
+        let (bundle_settings, using_bundle_toml): (BundleSettings, bool) = {
             let toml_path = current_dir.join("Bundle.toml");
             if toml_path.exists() {
                 print_warning(BUNDLE_TOML_WARNING)?;
                 let mut toml_str = String::new();
                 let mut toml_file = File::open(toml_path)?;
                 toml_file.read_to_string(&mut toml_str)?;
-                toml::from_str(&toml_str)?
-            } else if let Some(bundle_settings) = package.metadata.as_ref().
-                and_then(|metadata| metadata.bundle.as_ref()) {
-                bundle_settings.clone()
+                (toml::from_str(&toml_str)?, true)
+            } else if let Some(bundle_settings) = package.metadata.as_ref().and_then(|metadata| metadata.bundle.as_ref()) {
+                (bundle_settings.clone(), false)
             } else {
                 bail!("No [package.metadata.bundle] section or Bundle.toml file found.");
             }
         };
+        let (bundle_settings, binary_name) = match build_artifact {
+            BuildArtifact::Main => {
+                (bundle_settings, package.name.clone())
+            }
+            BuildArtifact::Bin(ref name) => {
+                (bundle_settings_from_table(&bundle_settings.bin, "bin", name,
+                                            using_bundle_toml)?,
+                 name.clone())
+            }
+            BuildArtifact::Example(ref name) => {
+                (bundle_settings_from_table(&bundle_settings.example,
+                                            "example", name,
+                                            using_bundle_toml)?,
+                 name.clone())
+            }
+        };
+        let binary_path = target_dir.join(&binary_name);
         Ok(Settings {
             package,
             package_type,
             target,
+            build_artifact,
             is_release,
             project_out_directory: target_dir,
             binary_path,
@@ -147,13 +205,18 @@ impl Settings {
         This function determines where 'target' dir is and suffixes it with 'release' or 'debug'
         to determine where the compiled binary will be located.
     */
-    fn get_target_dir(project_root_dir: &PathBuf, target: &Option<(String, TargetInfo)>, is_release: bool)
+    fn get_target_dir(project_root_dir: &PathBuf,
+                      target: &Option<(String, TargetInfo)>,
+                      is_release: bool, build_artifact: &BuildArtifact)
                       -> PathBuf {
         let mut path = project_root_dir.join("target");
         if let &Some((ref triple, _)) = target {
             path.push(triple);
         }
         path.push(if is_release { "release" } else { "debug" });
+        if let &BuildArtifact::Example(_) = build_artifact {
+            path.push("examples");
+        }
         path
     }
 
@@ -233,6 +296,9 @@ impl Settings {
         }
     }
 
+    /// Returns the artifact that is being bundled.
+    pub fn build_artifact(&self) -> &BuildArtifact { &self.build_artifact }
+
     /// Returns true if the bundle is being compiled in release mode, false if
     /// it's being compiled in debug mode.
     pub fn is_release_build(&self) -> bool { self.is_release }
@@ -288,6 +354,21 @@ impl Settings {
 
     pub fn long_description(&self) -> Option<&str> {
         self.bundle_settings.long_description.as_ref().map(String::as_str)
+    }
+}
+
+fn bundle_settings_from_table(opt_map: &Option<HashMap<String, BundleSettings>>,
+                              map_name: &str, bundle_name: &str,
+                              using_bundle_toml: bool)
+                              -> ::Result<BundleSettings> {
+    if let Some(bundle_settings) = opt_map.as_ref().and_then(|map| map.get(bundle_name)) {
+        Ok(bundle_settings.clone())
+    } else if using_bundle_toml {
+        bail!("No [{}.{}] section in Bundle.toml",
+              map_name, bundle_name);
+    } else {
+        bail!("No [package.metadata.bundle.{}.{}] section in Cargo.toml",
+              map_name, bundle_name);
     }
 }
 
@@ -369,7 +450,7 @@ Using Bundle.toml file, which is deprecated in favor
 
 #[cfg(test)]
 mod tests {
-    use super::CargoSettings;
+    use super::{BundleSettings, CargoSettings};
     use toml;
 
     #[test]
@@ -414,5 +495,53 @@ mod tests {
         assert_eq!(bundle.long_description,
                    Some("This is an example of a\n\
                          simple application.\n".to_string()));
+    }
+
+    #[test]
+    fn parse_bin_and_example_bundles() {
+        let toml_str = "\
+            [package]\n\
+            name = \"example\"\n\
+            version = \"0.1.0\"\n\
+            description = \"An example application.\"\n\
+            \n\
+            [package.metadata.bundle.bin.foo]\n\
+            name = \"Foo App\"\n\
+            \n\
+            [package.metadata.bundle.bin.bar]\n\
+            name = \"Bar App\"\n\
+            \n\
+            [package.metadata.bundle.example.baz]\n\
+            name = \"Baz Example\"\n\
+            \n\
+            [[bin]]\n\
+            name = \"foo\"\n
+            \n\
+            [[bin]]\n\
+            name = \"bar\"\n
+            \n\
+            [[example]]\n\
+            name = \"baz\"\n";
+        let cargo_settings: CargoSettings = toml::from_str(toml_str).unwrap();
+        assert!(cargo_settings.package.is_some());
+        let package = cargo_settings.package.as_ref().unwrap();
+        assert!(package.metadata.is_some());
+        let metadata = package.metadata.as_ref().unwrap();
+        assert!(metadata.bundle.is_some());
+        let bundle = metadata.bundle.as_ref().unwrap();
+        assert!(bundle.example.is_some());
+
+        let bins = bundle.bin.as_ref().unwrap();
+        assert!(bins.contains_key("foo"));
+        let foo: &BundleSettings = bins.get("foo").unwrap();
+        assert_eq!(foo.name, Some("Foo App".to_string()));
+        assert!(bins.contains_key("bar"));
+        let bar: &BundleSettings = bins.get("bar").unwrap();
+        assert_eq!(bar.name, Some("Bar App".to_string()));
+
+        let examples = bundle.example.as_ref().unwrap();
+        assert!(examples.contains_key("baz"));
+        let baz: &BundleSettings = examples.get("baz").unwrap();
+        assert_eq!(baz.name, Some("Baz Example".to_string()));
     }
 }

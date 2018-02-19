@@ -19,8 +19,8 @@ extern crate walkdir;
 
 mod bundle;
 
-use bundle::{Settings, bundle_project};
-use clap::{App, AppSettings, SubCommand};
+use bundle::{BuildArtifact, PackageType, Settings, bundle_project};
+use clap::{App, AppSettings, Arg, SubCommand};
 use std::env;
 use std::process;
 
@@ -44,6 +44,15 @@ fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
     if let Some(triple) = settings.target_triple() {
         args.push(format!("--target={}", triple));
     }
+    match settings.build_artifact() {
+        &BuildArtifact::Main => {}
+        &BuildArtifact::Bin(ref name) => {
+            args.push(format!("--bin={}", name));
+        }
+        &BuildArtifact::Example(ref name) => {
+            args.push(format!("--example={}", name));
+        }
+    }
     if settings.is_release_build() {
         args.push("--release".to_string());
     }
@@ -56,18 +65,40 @@ fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
 }
 
 fn run() -> ::Result<()> {
+    let all_formats: Vec<&str> =
+        PackageType::all().iter().map(PackageType::short_name).collect();
     let m = App::new("cargo-bundle")
-                .author("George Burton <burtonageo@gmail.com>")
-                .about("Bundle Rust executables into OS bundles")
-                .version(format!("v{}", crate_version!()).as_str())
-                .bin_name("cargo")
-                .settings(&[AppSettings::GlobalVersion, AppSettings::SubcommandRequired])
-                .subcommand(SubCommand::with_name("bundle").args_from_usage(
-                    "-d --resources-directory [DIR] 'Directory which contains bundle resources (images, etc)'\n\
-                     -r --release 'Build a bundle from a target built in release mode'\n\
-                     --target [TRIPLE] 'Build a bundle for the target triple'\n\
-                     -f --format [FORMAT] 'Which format to use for the bundle'"))
-                .get_matches();
+        .version(format!("v{}", crate_version!()).as_str())
+        .bin_name("cargo")
+        .setting(AppSettings::GlobalVersion)
+        .setting(AppSettings::SubcommandRequired)
+        .subcommand(SubCommand::with_name("bundle")
+                    .author("George Burton <burtonageo@gmail.com>")
+                    .about("Bundle Rust executables into OS bundles")
+                    .setting(AppSettings::DisableVersion)
+                    .setting(AppSettings::UnifiedHelpMessage)
+                    .arg(Arg::with_name("bin")
+                         .long("bin")
+                         .value_name("NAME")
+                         .help("Bundle the specified binary"))
+                    .arg(Arg::with_name("example")
+                         .long("example")
+                         .value_name("NAME")
+                         .conflicts_with("bin")
+                         .help("Bundle the specified example"))
+                    .arg(Arg::with_name("format")
+                         .long("format")
+                         .value_name("FORMAT")
+                         .possible_values(&all_formats)
+                         .help("Which bundle format to produce"))
+                    .arg(Arg::with_name("release")
+                         .long("release")
+                         .help("Build a bundle from a target built in release mode"))
+                    .arg(Arg::with_name("target")
+                         .long("target")
+                         .value_name("TRIPLE")
+                         .help("Build a bundle for the target triple")))
+        .get_matches();
 
     if let Some(m) = m.subcommand_matches("bundle") {
         let output_paths = env::current_dir().map_err(From::from)

@@ -6,7 +6,7 @@ mod rpm_bundle;
 mod settings;
 
 pub use self::common::{print_error, print_finished};
-pub use self::settings::{PackageType, Settings};
+pub use self::settings::{BuildArtifact, PackageType, Settings};
 use std::path::PathBuf;
 
 pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
