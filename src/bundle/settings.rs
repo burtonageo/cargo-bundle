@@ -47,13 +47,19 @@ struct PackageSettings {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct WorkspaceSettings {
+    members: Option<Vec<String>>
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct CargoSettings {
-    package: PackageSettings,
+    package: Option<PackageSettings>, // "Ancestor" workspace Cargo.toml files may not have package info
+    workspace: Option<WorkspaceSettings>, // "Ancestor" workspace Cargo.toml files may declare workspaces
 }
 
 #[derive(Clone, Debug)]
 pub struct Settings {
-    cargo_settings: CargoSettings,
+    package: PackageSettings,
     package_type: Option<PackageType>, // If `None`, use the default package type for this os
     target: Option<(String, TargetInfo)>,
     project_out_directory: PathBuf,
@@ -61,6 +67,19 @@ pub struct Settings {
     binary_path: PathBuf,
     binary_name: String,
     bundle_settings: BundleSettings,
+}
+
+impl CargoSettings {
+    /*
+        Try to load a set of CargoSettings from a "Cargo.toml" file in the specified directory
+    */
+    fn load(dir: &PathBuf) -> ::Result<Self> {
+        let toml_path = dir.join("Cargo.toml");
+        let mut toml_str = String::new();
+        let mut toml_file = File::open(toml_path)?;
+        toml_file.read_to_string(&mut toml_str)?;
+        toml::from_str(&toml_str).map_err(|e| e.into())
+    }
 }
 
 impl Settings {
@@ -79,22 +98,14 @@ impl Settings {
             Some(triple) => Some((triple.to_string(), TargetInfo::from_str(triple)?)),
             None => None,
         };
-        let target_dir = {
-            let mut path = current_dir.join("target");
-            if let Some((ref triple, _)) = target {
-                path.push(triple);
-            }
-            path.push(if is_release { "release" } else { "debug" });
-            path
+        let cargo_settings = CargoSettings::load(&current_dir)?;
+        let package = match cargo_settings.package {
+            Some(package_info) => package_info,
+            None => bail!("No 'package' info found in 'Cargo.toml'")
         };
-        let cargo_settings: CargoSettings = {
-            let toml_path = current_dir.join("Cargo.toml");
-            let mut toml_str = String::new();
-            let mut toml_file = File::open(toml_path)?;
-            toml_file.read_to_string(&mut toml_str)?;
-            toml::from_str(&toml_str)?
-        };
-        let binary_path = target_dir.join(&cargo_settings.package.name);
+        let workspace_dir = Settings::get_workspace_dir(&current_dir);
+        let target_dir = Settings::get_target_dir(&workspace_dir, &target, is_release);
+        let binary_path = target_dir.join(&package.name);
         let binary_name = match binary_path.file_name().and_then(OsStr::to_str) {
             Some(name) => name.to_string(),
             None => bail!("Could not get file name of binary file."),
@@ -107,22 +118,65 @@ impl Settings {
                 let mut toml_file = File::open(toml_path)?;
                 toml_file.read_to_string(&mut toml_str)?;
                 toml::from_str(&toml_str)?
-            } else if let Some(bundle_settings) = cargo_settings.package.metadata.as_ref().and_then(|metadata| metadata.bundle.as_ref()) {
+            } else if let Some(bundle_settings) = package.metadata.as_ref().
+                and_then(|metadata| metadata.bundle.as_ref()) {
                 bundle_settings.clone()
             } else {
                 bail!("No [package.metadata.bundle] section or Bundle.toml file found.");
             }
         };
         Ok(Settings {
-            cargo_settings: cargo_settings,
-            package_type: package_type,
-            target: target,
-            is_release: is_release,
+            package,
+            package_type,
+            target,
+            is_release,
             project_out_directory: target_dir,
-            binary_path: binary_path,
-            binary_name: binary_name,
-            bundle_settings: bundle_settings,
+            binary_path,
+            binary_name,
+            bundle_settings,
         })
+    }
+
+    /*
+        The target_dir where binaries will be compiled to by cargo can vary:
+            - this directory is a member of a workspace project
+            - overridden by CARGO_TARGET_DIR environment variable
+            - specified in build.target-dir configuration key
+            - if the build is a 'release' or 'debug' build
+
+        This function determines where 'target' dir is and suffixes it with 'release' or 'debug'
+        to determine where the compiled binary will be located.
+    */
+    fn get_target_dir(project_root_dir: &PathBuf, target: &Option<(String, TargetInfo)>, is_release: bool)
+                      -> PathBuf {
+        let mut path = project_root_dir.join("target");
+        if let &Some((ref triple, _)) = target {
+            path.push(triple);
+        }
+        path.push(if is_release { "release" } else { "debug" });
+        path
+    }
+
+    /*
+        The specification of the Cargo.toml Manifest that covers the "workspace" section is here:
+        https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section
+
+        Determining if the current project folder is part of a workspace:
+            - Walk up the file system, looking for a Cargo.toml file.
+            - Stop at the first one found.
+            - If one is found before reaching "/" then this folder belongs to that parent workspace
+    */
+    fn get_workspace_dir(current_dir: &PathBuf) -> PathBuf {
+        let mut dir = current_dir.clone();
+        while dir.pop() {
+            let set = CargoSettings::load(&dir);
+            if set.is_ok() {
+                return dir;
+            }
+        }
+
+        // Nothing found walking up the file system, return the starting directory
+        current_dir.clone()
     }
 
     /// Returns the directory where the bundle should be placed.
@@ -184,7 +238,7 @@ impl Settings {
     pub fn is_release_build(&self) -> bool { self.is_release }
 
     pub fn bundle_name(&self) -> &str {
-        self.bundle_settings.name.as_ref().unwrap_or(&self.cargo_settings.package.name)
+        self.bundle_settings.name.as_ref().unwrap_or(&self.package.name)
     }
 
     pub fn bundle_identifier(&self) -> &str {
@@ -209,7 +263,7 @@ impl Settings {
     }
 
     pub fn version_string(&self) -> &str {
-        self.bundle_settings.version.as_ref().unwrap_or(&self.cargo_settings.package.version)
+        self.bundle_settings.version.as_ref().unwrap_or(&self.package.version)
     }
 
     pub fn copyright_string(&self) -> Option<&str> {
@@ -217,18 +271,19 @@ impl Settings {
     }
 
     pub fn author_names(&self) -> std::slice::Iter<String> {
-        match self.cargo_settings.package.authors {
+        match self.package.authors {
             Some(ref names) => names.iter(),
             None => [].iter(),
         }
     }
 
     pub fn homepage_url(&self) -> &str {
-        &self.cargo_settings.package.homepage.as_ref().map(String::as_str).unwrap_or("")
+        &self.package.homepage.as_ref().map(String::as_str).unwrap_or("")
     }
 
     pub fn short_description(&self) -> &str {
-        self.bundle_settings.short_description.as_ref().unwrap_or(&self.cargo_settings.package.description)
+        self.bundle_settings.short_description.as_ref().
+            unwrap_or(&self.package.description)
     }
 
     pub fn long_description(&self) -> Option<&str> {
@@ -249,7 +304,7 @@ impl<'a> ResourcePaths<'a> {
             pattern_iter: patterns.iter(),
             glob_iter: None,
             walk_iter: None,
-            allow_walk: allow_walk,
+            allow_walk,
         }
     }
 }
@@ -340,15 +395,14 @@ mod tests {
             [dependencies]\n\
             rand = \"0.4\"\n";
         let cargo_settings: CargoSettings = toml::from_str(toml_str).unwrap();
-        assert_eq!(cargo_settings.package.name, "example");
-        assert_eq!(cargo_settings.package.version, "0.1.0");
-        assert_eq!(cargo_settings.package.description,
-                   "An example application.");
-        assert_eq!(cargo_settings.package.homepage, None);
-        assert_eq!(cargo_settings.package.authors,
-                   Some(vec!["Jane Doe".to_string()]));
-        assert!(cargo_settings.package.metadata.is_some());
-        let metadata = cargo_settings.package.metadata.as_ref().unwrap();
+        let package = cargo_settings.package.unwrap();
+        assert_eq!(package.name, "example");
+        assert_eq!(package.version, "0.1.0");
+        assert_eq!(package.description, "An example application.");
+        assert_eq!(package.homepage, None);
+        assert_eq!(package.authors, Some(vec!["Jane Doe".to_string()]));
+        assert!(package.metadata.is_some());
+        let metadata = package.metadata.as_ref().unwrap();
         assert!(metadata.bundle.is_some());
         let bundle = metadata.bundle.as_ref().unwrap();
         assert_eq!(bundle.name, Some("Example Application".to_string()));

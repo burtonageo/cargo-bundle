@@ -39,7 +39,7 @@ error_chain! {
 }
 
 /// Runs `cargo build` to make sure the binary file is up-to-date.
-fn build_project_if_unbuilt(settings: &Settings) -> Result<()> {
+fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
     let mut args = vec!["build".to_string()];
     if let Some(triple) = settings.target_triple() {
         args.push(format!("--target={}", triple));
