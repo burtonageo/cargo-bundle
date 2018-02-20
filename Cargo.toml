@@ -7,6 +7,18 @@ keywords = ["bundle", "cargo"]
 repository = "https://github.com/burtonageo/cargo-bundle"
 description = "Wrap rust executables in OS-specific app bundles"
 
+[package.metadata.bundle.example.hello]
+name = "Hello World"
+identifier = "io.github.burtonageo.cargo-bundle.hello"
+icon = ["examples/hello/icon*.png"]
+short_description = "An example of a bundled application"
+long_description = """
+A trivial application that just displays a blank window with
+a title bar.  It serves as an example of an application that
+can be bundled with cargo-bundle, as well as a test-case for
+cargo-bundle's support for bundling crate examples.
+"""
+
 [dependencies]
 ar = "0.2"
 clap = "^2"
@@ -23,3 +35,10 @@ target_build_utils = "0.3"
 term = "0.4"
 toml = "0.4"
 walkdir = "2"
+
+[dev-dependencies]
+winit = "0.11"
+
+[[example]]
+name = "hello"
+path = "examples/hello/main.rs"
