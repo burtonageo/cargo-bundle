@@ -20,12 +20,14 @@ pub fn is_retina<P: AsRef<Path>>(path: P) -> bool {
 /// Creates a new file at the given path, creating any parent directories as
 /// needed.
 pub fn create_file(path: &Path) -> ::Result<BufWriter<File>> {
-    let parent = match path.parent() {
-        Some(dir) => dir,
-        None => bail!("Path has no parent: {:?}", path),
-    };
-    fs::create_dir_all(parent)?;
-    let file = File::create(path)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(&parent).chain_err(|| {
+            format!("Failed to create directory {:?}", parent)
+        })?;
+    }
+    let file = File::create(path).chain_err(|| {
+        format!("Failed to create file {:?}", path)
+    })?;
     Ok(BufWriter::new(file))
 }
 
