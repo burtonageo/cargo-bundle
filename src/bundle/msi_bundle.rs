@@ -166,8 +166,9 @@ fn set_summary_info(package: &mut Package, package_guid: Uuid,
     summary_info.set_subject(settings.bundle_name().to_string());
     summary_info.set_uuid(package_guid);
     summary_info.set_comments(settings.short_description().to_string());
-    let authors: Vec<String> = settings.author_names().cloned().collect();
-    summary_info.set_author(authors.join(", "));
+    if let Some(authors) = settings.authors_comma_separated() {
+        summary_info.set_author(authors);
+    }
     let creating_app = format!("cargo-bundle v{}", crate_version!());
     summary_info.set_creating_application(creating_app);
 }
@@ -175,14 +176,14 @@ fn set_summary_info(package: &mut Package, package_guid: Uuid,
 // Creates and populates the `Property` database table for the package.
 fn create_property_table(package: &mut Package, package_guid: Uuid,
                          settings: &Settings) -> ::Result<()> {
-    let authors: Vec<String> = settings.author_names().cloned().collect();
+    let authors = settings.authors_comma_separated().unwrap_or(String::new());
     package.create_table("Property", vec![
         msi::Column::build("Property").primary_key().id_string(72),
         msi::Column::build("Value").text_string(0),
     ])?;
     package.insert_rows(msi::Insert::into("Property").row(vec![
         msi::Value::from("Manufacturer"),
-        msi::Value::Str(authors.join(", ")),
+        msi::Value::Str(authors),
     ]).row(vec![
         msi::Value::from("ProductCode"),
         msi::Value::from(package_guid),
