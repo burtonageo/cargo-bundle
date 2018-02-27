@@ -20,9 +20,16 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
+    common::print_warning("iOS bundle support is still experimental.")?;
+
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
     let bundle_dir = settings.project_out_directory().join("bundle/ios").join(&app_bundle_name);
+    if bundle_dir.exists() {
+        fs::remove_dir_all(&bundle_dir).chain_err(|| {
+            format!("Failed to remove old {}", app_bundle_name)
+        })?;
+    }
     fs::create_dir_all(&bundle_dir).chain_err(|| {
         format!("Failed to create bundle directory at {:?}", bundle_dir)
     })?;
@@ -121,12 +128,6 @@ fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &
     write!(file,
            "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n",
            settings.bundle_name())?;
-    write!(file,
-           "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
-           settings.bundle_identifier())?;
-    write!(file,
-           "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
-           settings.version_string())?;
     if !icon_filenames.is_empty() {
         write!(file, "  <key>CFBundleIconFiles</key>\n  <array>\n")?;
         for filename in icon_filenames {
@@ -134,6 +135,12 @@ fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &
         }
         write!(file, "  </array>\n")?;
     }
+    write!(file,
+           "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
+           settings.bundle_identifier())?;
+    write!(file,
+           "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
+           settings.version_string())?;
     // Note that this key is true for all iOS apps, even non-iPhone ones.
     write!(file, "  <key>LSRequiresIPhoneOS</key>\n  <true/>\n")?;
     write!(file, "</dict>\n</plist>\n")?;

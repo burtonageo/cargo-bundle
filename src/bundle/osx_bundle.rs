@@ -31,7 +31,12 @@ use std::path::{Path, PathBuf};
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
-    let app_bundle_path = settings.project_out_directory().join("bundle/osx").join(app_bundle_name);
+    let app_bundle_path = settings.project_out_directory().join("bundle/osx").join(&app_bundle_name);
+    if app_bundle_path.exists() {
+        fs::remove_dir_all(&app_bundle_path).chain_err(|| {
+            format!("Failed to remove old {}", app_bundle_name)
+        })?;
+    }
     let bundle_directory = app_bundle_path.join("Contents");
     fs::create_dir_all(&bundle_directory).chain_err(|| {
         format!("Failed to create bundle directory at {:?}", bundle_directory)
@@ -70,60 +75,54 @@ fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::Resu
                       &dest_dir.join(settings.binary_name()))
 }
 
-fn create_info_plist(bundle_directory: &Path, bundle_icon_file: Option<PathBuf>,
+fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>,
                      settings: &Settings) -> ::Result<()> {
-    let mut plist = File::create(bundle_directory.join("Info.plist"))?;
-    let contents = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
-                            <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
-                                        \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
-                            <plist version=\"1.0\">\n\
-                            <dict>\n\
-                                <key>CFBundleDevelopmentRegion</key>\n\
-                                <string>English</string>\n\
-                                <key>CFBundleExecutable</key>\n\
-                                <string>{}</string>\n\
-                                <key>CFBundleGetInfoString</key>\n\
-                                <string></string>\n\
-                                <key>CFBundleIconFile</key>\n\
-                                <string>{}</string>\n\
-                                <key>CFBundleIdentifier</key>\n\
-                                <string></string>\n\
-                                <key>CFBundleInfoDictionaryVersion</key>\n\
-                                <string>6.0</string>\n\
-                                <key>CFBundleLongVersionString</key>\n\
-                                <string></string>\n\
-                                <key>CFBundleName</key>\n\
-                                <string>{}</string>\n\
-                                <key>CFBundlePackageType</key>\n\
-                                <string>APPL</string>\n\
-                                <key>CFBundleShortVersionString</key>\n\
-                                <string>{}</string>\n\
-                                <key>CFBundleSignature</key>\n\
-                                <string>{}</string>\n\
-                                <key>CFBundleVersion</key>\n\
-                                <string></string>\n\
-                                <key>CSResourcesFileMapped</key>\n\
-                                <true/>\n\
-                                <key>LSRequiresCarbon</key>\n\
-                                <true/>\n\
-                                <key>NSHumanReadableCopyright</key>\n\
-                                <string>{}</string>\n\
-                                <key>NSHighResolutionCapable</key>\n\
-                                <true/>\n\
-                            </dict>\n\
-                            </plist>",
-                           settings.binary_name(),
-                           bundle_icon_file.as_ref()
-                               .and_then(|p| p.file_name())
-                               .and_then(OsStr::to_str)
-                               .unwrap_or("???"),
-                           settings.bundle_name(),
-                           settings.version_string(),
-                           settings.bundle_identifier(),
-                           settings.copyright_string().unwrap_or(""));
-
-    plist.write_all(contents.as_bytes())?;
-    plist.sync_all()?;
+    let file = &mut common::create_file(&bundle_dir.join("Info.plist"))?;
+    write!(file,
+           "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+            <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
+            \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+            <plist version=\"1.0\">\n\
+            <dict>\n")?;
+    write!(file,
+           "  <key>CFBundleDevelopmentRegion</key>\n  \
+            <string>English</string>\n")?;
+    write!(file,
+           "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n",
+           settings.bundle_name())?;
+    write!(file,
+           "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n",
+           settings.binary_name())?;
+    if let Some(path) = bundle_icon_file {
+        write!(file,
+               "  <key>CFBundleIconFile</key>\n  <string>{}</string>\n",
+               path.file_name().unwrap().to_string_lossy())?;
+    }
+    write!(file,
+           "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
+           settings.bundle_identifier())?;
+    write!(file,
+           "  <key>CFBundleInfoDictionaryVersion</key>\n  \
+            <string>6.0</string>\n")?;
+    write!(file,
+           "  <key>CFBundleName</key>\n  <string>{}</string>\n",
+           settings.bundle_name())?;
+    write!(file,
+           "  <key>CFBundlePackageType</key>\n  <string>APPL</string>\n")?;
+    write!(file,
+           "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
+           settings.version_string())?;
+    write!(file, "  <key>CSResourcesFileMapped</key>\n  <true/>\n")?;
+    write!(file, "  <key>LSRequiresCarbon</key>\n  <true/>\n")?;
+    write!(file, "  <key>NSHighResolutionCapable</key>\n  <true/>\n")?;
+    if let Some(copyright) = settings.copyright_string() {
+        write!(file,
+               "  <key>NSHumanReadableCopyright</key>\n  \
+                <string>{}</string>\n",
+               copyright)?;
+    }
+    write!(file, "</dict>\n</plist>\n")?;
+    file.flush()?;
     Ok(())
 }
 

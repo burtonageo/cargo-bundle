@@ -4,9 +4,11 @@ Wrap Rust executables in OS-specific app bundles
 
 ## About
 
-`cargo-bundle` is a tool used to generate installers or app bundles for executables built with `cargo`.  It supports
-`.app` bundles for OSX and IOS, and `.deb` packages for Linux.  Support for `msi` installers (for Windows) and `rpm`
-packages is pending.
+`cargo-bundle` is a tool used to generate installers or app bundles for GUI
+executables built with `cargo`.  It can create `.app` bundles for Mac OS X and
+iOS, `.deb` packages for Linux, and `.msi` installers for Windows (note however
+that iOS and Windows support is still experimental).  Support for creating
+`.rpm` packages (for Linux) and `.apk` packages (for Android) is still pending.
 
 To install `cargo bundle`, run `cargo install cargo-bundle`. This will add the most recent version of `cargo-bundle`
 published to [crates.io](https://crates.io/crates/cargo-bundle) as a subcommand to your default `cargo` installation.
@@ -15,8 +17,11 @@ To start using `cargo bundle`, add a `[package.metadata.bundle]` section to your
 section describes various attributes of the generated bundle, such as its name, icon, description, copyright, as well
 as any packaging scripts you need to generate extra data.  The full manifest format is described below.
 
-To build a bundle, simply run `cargo bundle` in your project's directory (where the `Cargo.toml` is placed).  If you
-would like to bundle a release build, you must add the `--release` flag to your call.
+To build a bundle for the OS you're on, simply run `cargo bundle` in your
+project's directory (where the `Cargo.toml` is placed).  If you would like to
+bundle a release build, you must add the `--release` flag to your call.  To
+cross-compile and bundle an application for another OS, add an appropriate
+`--target` flag, just as you would for `cargo build`.
 
 ## Flags
 
@@ -28,8 +33,11 @@ would like to bundle a release build, you must add the `--release` flag to your 
 
  * `name`: The name of the built application. If this is not present, then it will use the `name` value from
            your `Cargo.toml` file.
- * `identifier`: [REQUIRED] Unique identifier for your application. This is a simple string, but it may change so that
-                 you can specify it for individual platforms.
+ * `identifier`: [REQUIRED] A string that uniquely identifies your application,
+   in reverse-DNS form (for example, `"com.example.appname"` or
+   `"io.github.username.project"`).  For OS X and iOS, this is used as the
+   bundle's `CFBundleIdentifier` value; for Windows, this is hashed to create
+   an application GUID.
  * `icon`: [OPTIONAL] The icons used for your application.  This should be an array of file paths or globs (with images
            in various sizes/formats); `cargo-bundle` will automatically convert between image formats as necessary for
            different platforms.  Supported formats include ICNS, ICO, PNG, and anything else that can be decoded by the
@@ -51,7 +59,7 @@ would like to bundle a release build, you must add the `--release` flag to your 
 ```toml
 [package]
 name = "example"
-...other fields...
+# ...other fields...
 
 [package.metadata.bundle]
 name = "ExampleApplication"
