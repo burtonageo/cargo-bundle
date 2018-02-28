@@ -46,6 +46,11 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     common::print_bundling(&package_name)?;
     let base_dir = settings.project_out_directory().join("bundle/deb");
     let package_dir = base_dir.join(&package_base_name);
+    if package_dir.exists() {
+        fs::remove_dir_all(&package_dir).chain_err(|| {
+            format!("Failed to remove old {}", package_base_name)
+        })?;
+    }
     let package_path = base_dir.join(package_name);
 
     // Generate data files.
@@ -126,12 +131,8 @@ fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, da
     writeln!(&mut file, "Version: {}", settings.version_string())?;
     writeln!(&mut file, "Architecture: {}", arch)?;
     writeln!(&mut file, "Installed-Size: {}", total_dir_size(data_dir)?)?;
-    writeln!(&mut file,
-             "Maintainer: {}",
-             settings.author_names().fold(String::new(), |mut acc, s| {
-        acc.push_str(&s);
-        acc
-    }))?;
+    let authors = settings.authors_comma_separated().unwrap_or(String::new());
+    writeln!(&mut file, "Maintainer: {}", authors)?;
     if !settings.homepage_url().is_empty() {
         writeln!(&mut file, "Homepage: {}", settings.homepage_url())?;
     }
@@ -311,7 +312,6 @@ fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> ::Result<PathBuf> {
     let gzip_encoder = create_tar_from_dir(src_dir, gzip_encoder)?;
     let mut dest_file = gzip_encoder.finish().into_result()?;
     dest_file.flush()?;
-    fs::remove_dir_all(src_dir)?;
     Ok(dest_path)
 }
 

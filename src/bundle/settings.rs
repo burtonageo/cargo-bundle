@@ -341,10 +341,19 @@ impl Settings {
         self.bundle_settings.copyright.as_ref().map(String::as_str)
     }
 
-    pub fn author_names(&self) -> std::slice::Iter<String> {
+    pub fn author_names(&self) -> &[String] {
         match self.package.authors {
-            Some(ref names) => names.iter(),
-            None => [].iter(),
+            Some(ref names) => names.as_slice(),
+            None => &[],
+        }
+    }
+
+    pub fn authors_comma_separated(&self) -> Option<String> {
+        let names = self.author_names();
+        if names.is_empty() {
+            None
+        } else {
+            Some(names.join(", "))
         }
     }
 
