@@ -68,13 +68,13 @@ pub fn resource_relpath(path: &Path) -> PathBuf {
     dest
 }
 
-/// Prints a message to stdout, in the same format that `cargo` uses,
+/// Prints a message to stderr, in the same format that `cargo` uses,
 /// indicating that we are creating a bundle with the given filename.
 pub fn print_bundling(filename: &str) -> ::Result<()> {
     print_progress("Bundling", filename)
 }
 
-/// Prints a message to stdout, in the same format that `cargo` uses,
+/// Prints a message to stderr, in the same format that `cargo` uses,
 /// indicating that we have finished the the given bundles.
 pub fn print_finished(output_paths: &Vec<PathBuf>) -> ::Result<()> {
     let pluralised = if output_paths.len() == 1 {
@@ -91,7 +91,7 @@ pub fn print_finished(output_paths: &Vec<PathBuf>) -> ::Result<()> {
 }
 
 fn print_progress(step: &str, msg: &str) -> ::Result<()> {
-    if let Some(mut output) = term::stdout() {
+    if let Some(mut output) = term::stderr() {
         output.attr(term::Attr::Bold)?;
         output.fg(term::color::GREEN)?;
         write!(output, "    {}", step)?;
@@ -100,7 +100,7 @@ fn print_progress(step: &str, msg: &str) -> ::Result<()> {
         output.flush()?;
         Ok(())
     } else {
-        let mut output = io::stdout();
+        let mut output = io::stderr();
         write!(output, "    {}", step)?;
         write!(output, " {}\n", msg)?;
         output.flush()?;
@@ -108,9 +108,9 @@ fn print_progress(step: &str, msg: &str) -> ::Result<()> {
     }
 }
 
-/// Prints a warning message to stdout, in the same format that `cargo` uses.
+/// Prints a warning message to stderr, in the same format that `cargo` uses.
 pub fn print_warning(message: &str) -> ::Result<()> {
-    if let Some(mut output) = term::stdout() {
+    if let Some(mut output) = term::stderr() {
         output.attr(term::Attr::Bold)?;
         output.fg(term::color::YELLOW)?;
         write!(output, "warning:")?;
@@ -119,7 +119,7 @@ pub fn print_warning(message: &str) -> ::Result<()> {
         output.flush()?;
         Ok(())
     } else {
-        let mut output = io::stdout();
+        let mut output = io::stderr();
         write!(output, "warning:")?;
         write!(output, " {}\n", message)?;
         output.flush()?;
@@ -127,9 +127,9 @@ pub fn print_warning(message: &str) -> ::Result<()> {
     }
 }
 
-/// Prints an error to stdout, in the same format that `cargo` uses.
+/// Prints an error to stderr, in the same format that `cargo` uses.
 pub fn print_error(error: &::Error) -> ::Result<()> {
-    if let Some(mut output) = term::stdout() {
+    if let Some(mut output) = term::stderr() {
         output.attr(term::Attr::Bold)?;
         output.fg(term::color::RED)?;
         write!(output, "error:")?;
@@ -146,7 +146,7 @@ pub fn print_error(error: &::Error) -> ::Result<()> {
         output.flush()?;
         Ok(())
     } else {
-        let mut output = io::stdout();
+        let mut output = io::stderr();
         write!(output, "error:")?;
         writeln!(output, " {}", error)?;
         for cause in error.iter().skip(1) {
