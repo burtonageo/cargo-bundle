@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use super::common::print_warning;
 use target_build_utils::TargetInfo;
 use toml;
 use walkdir;
@@ -155,33 +154,23 @@ impl Settings {
         };
         let workspace_dir = Settings::get_workspace_dir(&current_dir);
         let target_dir = Settings::get_target_dir(&workspace_dir, &target, is_release, &build_artifact);
-        let (bundle_settings, using_bundle_toml): (BundleSettings, bool) = {
-            let toml_path = current_dir.join("Bundle.toml");
-            if toml_path.exists() {
-                print_warning(BUNDLE_TOML_WARNING)?;
-                let mut toml_str = String::new();
-                let mut toml_file = File::open(toml_path)?;
-                toml_file.read_to_string(&mut toml_str)?;
-                (toml::from_str(&toml_str)?, true)
-            } else if let Some(bundle_settings) = package.metadata.as_ref().and_then(|metadata| metadata.bundle.as_ref()) {
-                (bundle_settings.clone(), false)
-            } else {
-                bail!("No [package.metadata.bundle] section or Bundle.toml file found.");
-            }
+        let bundle_settings = if let Some(bundle_settings) = package.metadata.as_ref().and_then(|metadata| metadata.bundle.as_ref()) {
+            bundle_settings.clone()
+        } else {
+            bail!("No [package.metadata.bundle] section in Cargo.toml");
         };
         let (bundle_settings, binary_name) = match build_artifact {
             BuildArtifact::Main => {
                 (bundle_settings, package.name.clone())
             }
             BuildArtifact::Bin(ref name) => {
-                (bundle_settings_from_table(&bundle_settings.bin, "bin", name,
-                                            using_bundle_toml)?,
+                (bundle_settings_from_table(&bundle_settings.bin, "bin",
+                                            name)?,
                  name.clone())
             }
             BuildArtifact::Example(ref name) => {
                 (bundle_settings_from_table(&bundle_settings.example,
-                                            "example", name,
-                                            using_bundle_toml)?,
+                                            "example", name)?,
                  name.clone())
             }
         };
@@ -372,14 +361,10 @@ impl Settings {
 }
 
 fn bundle_settings_from_table(opt_map: &Option<HashMap<String, BundleSettings>>,
-                              map_name: &str, bundle_name: &str,
-                              using_bundle_toml: bool)
+                              map_name: &str, bundle_name: &str)
                               -> ::Result<BundleSettings> {
     if let Some(bundle_settings) = opt_map.as_ref().and_then(|map| map.get(bundle_name)) {
         Ok(bundle_settings.clone())
-    } else if using_bundle_toml {
-        bail!("No [{}.{}] section in Bundle.toml",
-              map_name, bundle_name);
     } else {
         bail!("No [package.metadata.bundle.{}.{}] section in Cargo.toml",
               map_name, bundle_name);
@@ -455,12 +440,6 @@ impl<'a> Iterator for ResourcePaths<'a> {
         }
     }
 }
-
-const BUNDLE_TOML_WARNING: &str = "\
-Using Bundle.toml file, which is deprecated in favor
-  of using [package.metadata.bundle] section in Cargo.toml
-  file.  Support for Bundle.toml file will be removed in a
-  future version of cargo-bundle.";
 
 #[cfg(test)]
 mod tests {
