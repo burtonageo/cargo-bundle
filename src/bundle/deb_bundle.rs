@@ -127,7 +127,9 @@ fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, da
     // https://www.debian.org/doc/debian-policy/ch-controlfields.html
     let dest_path = control_dir.join("control");
     let mut file = common::create_file(&dest_path)?;
-    writeln!(&mut file, "Package: {}", settings.bundle_name())?;
+    writeln!(&mut file, "Package: {}",
+             str::replace(settings.bundle_name(), " ", "-")
+             .to_ascii_lowercase())?;
     writeln!(&mut file, "Version: {}", settings.version_string())?;
     writeln!(&mut file, "Architecture: {}", arch)?;
     writeln!(&mut file, "Installed-Size: {}", total_dir_size(data_dir)?)?;
