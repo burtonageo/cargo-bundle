@@ -61,6 +61,7 @@ pub enum BuildArtifact {
 
 #[derive(Clone, Debug, Deserialize)]
 struct BundleSettings {
+    // General settings:
     name: Option<String>,
     identifier: Option<String>,
     icon: Option<Vec<String>>,
@@ -70,6 +71,9 @@ struct BundleSettings {
     short_description: Option<String>,
     long_description: Option<String>,
     script: Option<PathBuf>,
+    // OS-specific settings:
+    deb_depends: Option<Vec<String>>,
+    // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
 }
@@ -357,6 +361,13 @@ impl Settings {
 
     pub fn long_description(&self) -> Option<&str> {
         self.bundle_settings.long_description.as_ref().map(String::as_str)
+    }
+
+    pub fn debian_dependencies(&self) -> &[String] {
+        match self.bundle_settings.deb_depends {
+            Some(ref dependencies) => dependencies.as_slice(),
+            None => &[],
+        }
     }
 }
 
