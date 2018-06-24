@@ -138,6 +138,10 @@ fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, da
     if !settings.homepage_url().is_empty() {
         writeln!(&mut file, "Homepage: {}", settings.homepage_url())?;
     }
+    let dependencies = settings.debian_dependencies();
+    if !dependencies.is_empty() {
+        writeln!(&mut file, "Depends: {}", dependencies.join(", "))?;
+    }
     let mut short_description = settings.short_description().trim();
     if short_description.is_empty() {
         short_description = "(none)";

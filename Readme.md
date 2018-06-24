@@ -29,7 +29,11 @@ cross-compile and bundle an application for another OS, add an appropriate
 
 ## Bundle manifest format
 
- There are several fields in the `[package.metadata.bundle]` section.
+There are several fields in the `[package.metadata.bundle]` section.
+
+### General settings
+
+These settings apply to bundles for all (or most) OSes.
 
  * `name`: The name of the built application. If this is not present, then it will use the `name` value from
            your `Cargo.toml` file.
@@ -54,6 +58,14 @@ cross-compile and bundle an application for another OS, add an appropriate
                         will use the `description` value from your `Cargo.toml` file.
  * `long_description`: [OPTIONAL] A longer, multi-line description of the application.
 
+### Debian-specific settings
+
+These settings are used only when bundling `deb` packages.
+
+* `deb_depends`: A list of strings indicating other packages (e.g. shared
+  libraries) that this package depends on to be installed.  If present, this
+  forms the `Depends:` field of the `deb` package control file.
+
 ### Example `Cargo.toml`:
 
 ```toml
@@ -75,6 +87,7 @@ eiusmod tempor incididunt ut labore et dolore magna aliqua.  Ut
 enim ad minim veniam, quis nostrud exercitation ullamco laboris
 nisi ut aliquip ex ea commodo consequat.
 """
+deb_depends = ["libgl1-mesa-glx", "libsdl2-2.0-0 (>= 2.0.5)"]
 ```
 
 ## Contributing
