@@ -21,6 +21,9 @@ extern crate toml;
 extern crate uuid;
 extern crate walkdir;
 
+#[cfg(test)]
+extern crate tempfile;
+
 mod bundle;
 
 use bundle::{BuildArtifact, PackageType, Settings, bundle_project};

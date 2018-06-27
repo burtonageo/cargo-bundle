@@ -72,6 +72,25 @@ These settings are used only when bundling `deb` packages.
   libraries) that this package depends on to be installed.  If present, this
   forms the `Depends:` field of the `deb` package control file.
 
+### Mac OS X-specific settings
+
+These settings are used only when bundling `osx` packages.
+
+* `osx_frameworks`: A list of strings indicating any Mac OS X frameworks that
+  need to be bundled with the app.  Each string can either be the name of a
+  framework (without the `.framework` extension, e.g. `"SDL2"`), in which case
+  `cargo-bundle` will search for that framework in the standard install
+  locations (`~/Library/Frameworks/`, `/Library/Frameworks/`, and
+  `/Network/Library/Frameworks/`), or a path to a specific framework bundle
+  (e.g. `./data/frameworks/SDL2.framework`).  Note that this setting just makes
+  `cargo-bundle` copy the specified frameworks into the OS X app bundle (under
+  `Foobar.app/Contents/Frameworks/`); you are still responsible for (1)
+  arranging for the compiled binary to link against those frameworks (e.g. by
+  emitting lines like `cargo:rustc-link-lib=framework=SDL2` from your
+  `build.rs` script), and (2) embedding the correct rpath in your binary
+  (e.g. by running `install_name_tool -add_rpath
+  "@executable_path/../Frameworks" path/to/binary` after compiling).
+
 ### Example `Cargo.toml`:
 
 ```toml
@@ -95,6 +114,7 @@ enim ad minim veniam, quis nostrud exercitation ullamco laboris
 nisi ut aliquip ex ea commodo consequat.
 """
 deb_depends = ["libgl1-mesa-glx", "libsdl2-2.0-0 (>= 2.0.5)"]
+osx_frameworks = ["SDL2"]
 ```
 
 ## Contributing

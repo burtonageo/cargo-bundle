@@ -22,6 +22,7 @@ use {ResultExt, Settings};
 use icns;
 use image::{self, GenericImage};
 use std::cmp::min;
+use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufWriter};
@@ -52,6 +53,10 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 
     create_info_plist(&bundle_directory, bundle_icon_file, settings).chain_err(|| {
         "Failed to create Info.plist"
+    })?;
+
+    copy_frameworks_to_bundle(&bundle_directory, settings).chain_err(|| {
+        "Failed to bundle frameworks"
     })?;
 
     for src in settings.resource_files() {
@@ -132,6 +137,57 @@ fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>,
     }
     write!(file, "</dict>\n</plist>\n")?;
     file.flush()?;
+    Ok(())
+}
+
+fn copy_framework_from(dest_dir: &Path, framework: &str, src_dir: &Path)
+                       -> ::Result<bool> {
+    let src_name = format!("{}.framework", framework);
+    let src_path = src_dir.join(&src_name);
+    if src_path.exists() {
+        common::copy_dir(&src_path, &dest_dir.join(&src_name))?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings)
+                             -> ::Result<()> {
+    let frameworks = settings.osx_frameworks();
+    if frameworks.is_empty() {
+        return Ok(());
+    }
+    let dest_dir = bundle_directory.join("Frameworks");
+    fs::create_dir_all(&bundle_directory).chain_err(|| {
+        format!("Failed to create Frameworks directory at {:?}", dest_dir)
+    })?;
+    for framework in frameworks.iter() {
+        if framework.ends_with(".framework") {
+            let src_path = PathBuf::from(framework);
+            let src_name = src_path.file_name().unwrap();
+            common::copy_dir(&src_path, &dest_dir.join(&src_name))?;
+            continue;
+        } else if framework.contains("/") {
+            bail!("Framework path should have .framework extension: {}",
+                  framework);
+        }
+        if let Some(home_dir) = env::home_dir() {
+            if copy_framework_from(&dest_dir, framework,
+                                   &home_dir.join("Library/Frameworks/"))?
+            {
+                continue;
+            }
+        }
+        if copy_framework_from(&dest_dir, framework,
+                               &PathBuf::from("/Library/Frameworks/"))? ||
+           copy_framework_from(&dest_dir, framework,
+                               &PathBuf::from("/Network/Library/Frameworks/"))?
+        {
+            continue;
+        }
+        bail!("Could not locate {}.framework", framework);
+    }
     Ok(())
 }
 
