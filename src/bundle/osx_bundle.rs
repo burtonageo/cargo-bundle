@@ -110,6 +110,9 @@ fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>,
     write!(file,
            "  <key>CFBundlePackageType</key>\n  <string>APPL</string>\n")?;
     write!(file,
+           "  <key>CFBundleShortVersionString</key>\n  <string>{}</string>\n",
+           settings.version_string())?;
+    write!(file,
            "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
            settings.version_string())?;
     write!(file, "  <key>CSResourcesFileMapped</key>\n  <true/>\n")?;
