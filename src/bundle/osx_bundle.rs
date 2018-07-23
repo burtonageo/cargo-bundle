@@ -116,6 +116,12 @@ fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>,
            "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
            settings.version_string())?;
     write!(file, "  <key>CSResourcesFileMapped</key>\n  <true/>\n")?;
+    if let Some(category) = settings.app_category() {
+        write!(file,
+               "  <key>LSApplicationCategoryType</key>\n  \
+                <string>{}</string>\n",
+               category.osx_application_category_type())?;
+    }
     write!(file, "  <key>LSRequiresCarbon</key>\n  <true/>\n")?;
     write!(file, "  <key>NSHighResolutionCapable</key>\n  <true/>\n")?;
     if let Some(copyright) = settings.copyright_string() {

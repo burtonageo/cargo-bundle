@@ -13,6 +13,7 @@ extern crate msi;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate strsim;
 extern crate tar;
 extern crate target_build_utils;
 extern crate term;
