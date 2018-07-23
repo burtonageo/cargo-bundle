@@ -54,6 +54,12 @@ These settings apply to bundles for all (or most) OSes.
  * `script`: [OPTIONAL] This is a reserved field; at the moment it is not used for anything, but may be used to
              run scripts while packaging the bundle (e.g. download files, compress and encrypt, etc.).
  * `copyright`: [OPTIONAL] This contains a copyright string associated with your application.
+ * `category`: [OPTIONAL] What kind of application this is.  This can
+   be a human-readable string (e.g. `"Puzzle game"`), or a Mac OS X
+   LSApplicationCategoryType value
+   (e.g. `"public.app-category.puzzle-games"`), or a GNOME desktop
+   file category name (e.g. `"LogicGame"`), and `cargo-bundle` will
+   automatically convert as needed for different platforms.
  * `short_description`: [OPTIONAL] A short, one-line description of the application. If this is not present, then it
                         will use the `description` value from your `Cargo.toml` file.
  * `long_description`: [OPTIONAL] A longer, multi-line description of the application.
@@ -80,6 +86,7 @@ icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
 version = "1.0.0"
 resources = ["assets", "images/**/*.png", "secrets/public_key.txt"]
 copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
+category = "Developer Tool"
 short_description = "An example application."
 long_description = """
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do

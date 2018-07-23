@@ -1,3 +1,4 @@
+mod category;
 mod common;
 mod deb_bundle;
 mod ios_bundle;

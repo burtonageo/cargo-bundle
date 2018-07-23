@@ -102,23 +102,25 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 /// Generate the application desktop file and store it under the `data_dir`.
 fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     let bin_name = settings.binary_name();
-    // For more information about the format of this file, see
-    // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
-    let desktop_file_contents = format!("[Desktop Entry]\n\
-                                         Encoding=UTF-8\n\
-                                         Exec={}\n\
-                                         Icon={}\n\
-                                         Name={}\n\
-                                         Terminal=false\n\
-                                         Type=Application\n\
-                                         Version={}\n",
-                                        bin_name,
-                                        bin_name,
-                                        settings.bundle_name(),
-                                        settings.version_string());
     let desktop_file_name = format!("{}.desktop", bin_name);
     let desktop_file_path = data_dir.join("usr/share/applications").join(desktop_file_name);
-    create_file_with_data(desktop_file_path, &desktop_file_contents)?;
+    let file = &mut common::create_file(&desktop_file_path)?;
+    // For more information about the format of this file, see
+    // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
+    write!(file, "[Desktop Entry]\n")?;
+    write!(file, "Encoding=UTF-8\n")?;
+    if let Some(category) = settings.app_category() {
+        write!(file, "Categories={}\n", category.gnome_desktop_categories())?;
+    }
+    if !settings.short_description().is_empty() {
+        write!(file, "Comment={}\n", settings.short_description())?;
+    }
+    write!(file, "Exec={}\n", bin_name)?;
+    write!(file, "Icon={}\n", bin_name)?;
+    write!(file, "Name={}\n", settings.bundle_name())?;
+    write!(file, "Terminal=false\n")?;
+    write!(file, "Type=Application\n")?;
+    write!(file, "Version={}\n", settings.version_string())?;
     Ok(())
 }
 

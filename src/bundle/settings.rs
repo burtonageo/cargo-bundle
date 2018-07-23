@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use super::category::AppCategory;
 use target_build_utils::TargetInfo;
 use toml;
 use walkdir;
@@ -68,6 +69,7 @@ struct BundleSettings {
     version: Option<String>,
     resources: Option<Vec<String>>,
     copyright: Option<String>,
+    category: Option<AppCategory>,
     short_description: Option<String>,
     long_description: Option<String>,
     script: Option<PathBuf>,
@@ -354,6 +356,10 @@ impl Settings {
         &self.package.homepage.as_ref().map(String::as_str).unwrap_or("")
     }
 
+    pub fn app_category(&self) -> Option<AppCategory> {
+        self.bundle_settings.category
+    }
+
     pub fn short_description(&self) -> &str {
         self.bundle_settings.short_description.as_ref().
             unwrap_or(&self.package.description)
@@ -454,7 +460,7 @@ impl<'a> Iterator for ResourcePaths<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BundleSettings, CargoSettings};
+    use super::{AppCategory, BundleSettings, CargoSettings};
     use toml;
 
     #[test]
@@ -472,6 +478,7 @@ mod tests {
             name = \"Example Application\"\n\
             identifier = \"com.example.app\"\n\
             resources = [\"data\", \"foo/bar\"]\n\
+            category = \"Puzzle Game\"\n\
             long_description = \"\"\"\n\
             This is an example of a\n\
             simple application.\n\
@@ -496,6 +503,7 @@ mod tests {
         assert_eq!(bundle.version, None);
         assert_eq!(bundle.resources,
                    Some(vec!["data".to_string(), "foo/bar".to_string()]));
+        assert_eq!(bundle.category, Some(AppCategory::PuzzleGame));
         assert_eq!(bundle.long_description,
                    Some("This is an example of a\n\
                          simple application.\n".to_string()));
