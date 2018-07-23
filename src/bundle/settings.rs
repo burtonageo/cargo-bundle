@@ -75,6 +75,7 @@ struct BundleSettings {
     script: Option<PathBuf>,
     // OS-specific settings:
     deb_depends: Option<Vec<String>>,
+    osx_frameworks: Option<Vec<String>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -372,6 +373,13 @@ impl Settings {
     pub fn debian_dependencies(&self) -> &[String] {
         match self.bundle_settings.deb_depends {
             Some(ref dependencies) => dependencies.as_slice(),
+            None => &[],
+        }
+    }
+
+    pub fn osx_frameworks(&self) -> &[String] {
+        match self.bundle_settings.osx_frameworks {
+            Some(ref frameworks) => frameworks.as_slice(),
             None => &[],
         }
     }

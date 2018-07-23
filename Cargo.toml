@@ -42,6 +42,7 @@ uuid = { version = "0.5", features = ["v5"] }
 walkdir = "2"
 
 [dev-dependencies]
+tempfile = "3"
 winit = "0.11"
 
 [[example]]
