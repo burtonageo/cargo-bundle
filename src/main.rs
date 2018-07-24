@@ -1,5 +1,6 @@
 extern crate ar;
 extern crate cab;
+extern crate chrono;
 #[macro_use]
 extern crate clap;
 #[macro_use]

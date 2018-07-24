@@ -19,6 +19,7 @@
 
 use super::common;
 use {ResultExt, Settings};
+use chrono;
 use icns;
 use image::{self, GenericImage};
 use std::cmp::min;
@@ -82,6 +83,7 @@ fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::Resu
 
 fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>,
                      settings: &Settings) -> ::Result<()> {
+    let build_number = chrono::Utc::now().format("%Y%m%d.%H%M%S");
     let file = &mut common::create_file(&bundle_dir.join("Info.plist"))?;
     write!(file,
            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
@@ -119,7 +121,7 @@ fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>,
            settings.version_string())?;
     write!(file,
            "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
-           settings.version_string())?;
+           build_number)?;
     write!(file, "  <key>CSResourcesFileMapped</key>\n  <true/>\n")?;
     if let Some(category) = settings.app_category() {
         write!(file,
