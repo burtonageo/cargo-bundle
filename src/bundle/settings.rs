@@ -76,6 +76,7 @@ struct BundleSettings {
     // OS-specific settings:
     deb_depends: Option<Vec<String>>,
     osx_frameworks: Option<Vec<String>>,
+    osx_minimum_system_version: Option<String>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -382,6 +383,10 @@ impl Settings {
             Some(ref frameworks) => frameworks.as_slice(),
             None => &[],
         }
+    }
+
+    pub fn osx_minimum_system_version(&self) -> Option<&str> {
+        self.bundle_settings.osx_minimum_system_version.as_ref().map(String::as_str)
     }
 }
 

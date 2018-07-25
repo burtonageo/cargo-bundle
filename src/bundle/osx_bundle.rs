@@ -129,6 +129,12 @@ fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>,
                 <string>{}</string>\n",
                category.osx_application_category_type())?;
     }
+    if let Some(version) = settings.osx_minimum_system_version() {
+        write!(file,
+               "  <key>LSMinimumSystemVersion</key>\n  \
+                <string>{}</string>\n",
+               version)?;
+    }
     write!(file, "  <key>LSRequiresCarbon</key>\n  <true/>\n")?;
     write!(file, "  <key>NSHighResolutionCapable</key>\n  <true/>\n")?;
     if let Some(copyright) = settings.copyright_string() {
