@@ -151,9 +151,16 @@ pub fn print_finished(output_paths: &Vec<PathBuf>) -> ::Result<()> {
     Ok(())
 }
 
+fn safe_term_attr<T : term::Terminal + ?Sized>(output: &mut Box<T>, attr: term::Attr) -> term::Result<()> {
+    match output.supports_attr(attr) {
+        true => output.attr(attr),
+        false => Ok(()),
+    }
+}
+
 fn print_progress(step: &str, msg: &str) -> ::Result<()> {
     if let Some(mut output) = term::stderr() {
-        output.attr(term::Attr::Bold)?;
+        safe_term_attr(&mut output, term::Attr::Bold)?;
         output.fg(term::color::GREEN)?;
         write!(output, "    {}", step)?;
         output.reset()?;
@@ -172,7 +179,7 @@ fn print_progress(step: &str, msg: &str) -> ::Result<()> {
 /// Prints a warning message to stderr, in the same format that `cargo` uses.
 pub fn print_warning(message: &str) -> ::Result<()> {
     if let Some(mut output) = term::stderr() {
-        output.attr(term::Attr::Bold)?;
+        safe_term_attr(&mut output, term::Attr::Bold)?;
         output.fg(term::color::YELLOW)?;
         write!(output, "warning:")?;
         output.reset()?;
@@ -191,11 +198,11 @@ pub fn print_warning(message: &str) -> ::Result<()> {
 /// Prints an error to stderr, in the same format that `cargo` uses.
 pub fn print_error(error: &::Error) -> ::Result<()> {
     if let Some(mut output) = term::stderr() {
-        output.attr(term::Attr::Bold)?;
+        safe_term_attr(&mut output, term::Attr::Bold)?;
         output.fg(term::color::RED)?;
         write!(output, "error:")?;
         output.reset()?;
-        output.attr(term::Attr::Bold)?;
+        safe_term_attr(&mut output, term::Attr::Bold)?;
         writeln!(output, " {}", error)?;
         output.reset()?;
         for cause in error.iter().skip(1) {
