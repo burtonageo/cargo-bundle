@@ -20,10 +20,10 @@
 use super::common;
 use {ResultExt, Settings};
 use chrono;
+use dirs;
 use icns;
 use image::{self, GenericImage};
 use std::cmp::min;
-use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufWriter};
@@ -180,7 +180,7 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings)
             bail!("Framework path should have .framework extension: {}",
                   framework);
         }
-        if let Some(home_dir) = env::home_dir() {
+        if let Some(home_dir) = dirs::home_dir() {
             if copy_framework_from(&dest_dir, framework,
                                    &home_dir.join("Library/Frameworks/"))?
             {
