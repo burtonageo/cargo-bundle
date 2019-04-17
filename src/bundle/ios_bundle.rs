@@ -126,9 +126,15 @@ fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &
             \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
             <plist version=\"1.0\">\n\
             <dict>\n")?;
-    write!(file,
-           "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n",
-           settings.bundle_name())?;
+
+    write!(file, "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n", settings.bundle_identifier())?;
+    write!(file, "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n", settings.bundle_name())?;
+    write!(file, "  <key>CFBundleName</key>\n  <string>{}</string>\n", settings.bundle_name())?;
+    write!(file, "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n", settings.binary_name())?;
+    write!(file, "  <key>CFBundleVersion</key>\n  <string>{}</string>\n", settings.version_string())?;
+    write!(file, "  <key>CFBundleDevelopmentRegion</key>\n  <string>en_US</string>\n")?;
+
+
     if !icon_filenames.is_empty() {
         write!(file, "  <key>CFBundleIconFiles</key>\n  <array>\n")?;
         for filename in icon_filenames {
@@ -136,16 +142,6 @@ fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &
         }
         write!(file, "  </array>\n")?;
     }
-    write!(file,
-           "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
-           settings.bundle_identifier())?;
-    write!(file,
-           "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n",
-           settings.bundle_identifier())?;
-    write!(file,
-           "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
-           settings.version_string())?;
-    // Note that this key is true for all iOS apps, even non-iPhone ones.
     write!(file, "  <key>LSRequiresIPhoneOS</key>\n  <true/>\n")?;
     write!(file, "</dict>\n</plist>\n")?;
     file.flush()?;
