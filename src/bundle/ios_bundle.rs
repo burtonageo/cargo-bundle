@@ -33,14 +33,15 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     fs::create_dir_all(&bundle_dir).chain_err(|| {
         format!("Failed to create bundle directory at {:?}", bundle_dir)
     })?;
-    let resources_dir = bundle_dir.join("Resources");
+    
     for src in settings.resource_files() {
         let src = src?;
-        let dest = resources_dir.join(common::resource_relpath(&src));
+        let dest = bundle_dir.join(common::resource_relpath(&src));
         common::copy_file(&src, &dest).chain_err(|| {
             format!("Failed to copy resource file {:?}", src)
         })?;
     }
+
     let icon_filenames = generate_icon_files(&bundle_dir, settings).chain_err(|| {
         "Failed to create app icons"
     })?;
@@ -137,6 +138,9 @@ fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &
     }
     write!(file,
            "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
+           settings.bundle_identifier())?;
+    write!(file,
+           "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n",
            settings.bundle_identifier())?;
     write!(file,
            "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
