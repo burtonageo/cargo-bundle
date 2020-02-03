@@ -12,3 +12,4 @@ export SIM_ID=$(xcrun simctl create My-iphone7 com.apple.CoreSimulator.SimDevice
 xcrun simctl boot $SIM_ID
 $CARGO_BUNDLE bundle --example hello --target x86_64-apple-ios
 xcrun simctl install $SIM_ID target/x86_64-apple-ios/debug/examples/bundle/ios/hello.app
+xcrun simctl launch $SIM_ID io.github.burtonageo.cargo-bundle.hello
