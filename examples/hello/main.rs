@@ -11,7 +11,7 @@ use winit::{
 };
 
 fn main() {
-    let mut events_loop = EventLoop::new();
+    let events_loop = EventLoop::new();
     let window = Window::new(&events_loop).unwrap();
     window.set_title("Hello, World!");
     window.set_inner_size(PhysicalSize::new(640, 480));
