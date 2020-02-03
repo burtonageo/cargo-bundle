@@ -33,7 +33,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     fs::create_dir_all(&bundle_dir).chain_err(|| {
         format!("Failed to create bundle directory at {:?}", bundle_dir)
     })?;
-    
+
     for src in settings.resource_files() {
         let src = src?;
         let dest = bundle_dir.join(common::resource_relpath(&src));
@@ -132,6 +132,7 @@ fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &
     write!(file, "  <key>CFBundleName</key>\n  <string>{}</string>\n", settings.bundle_name())?;
     write!(file, "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n", settings.binary_name())?;
     write!(file, "  <key>CFBundleVersion</key>\n  <string>{}</string>\n", settings.version_string())?;
+    write!(file, "  <key>CFBundleShortVersionString</key>\n  <string>{}</string>\n", settings.version_string())?;
     write!(file, "  <key>CFBundleDevelopmentRegion</key>\n  <string>en_US</string>\n")?;
 
 
