@@ -1,1 +1,12 @@
 language: rust
+matrix:
+  include:
+  - os: osx
+    osx_image: xcode11.2
+    env: DEPLOY=macos
+    script: sh .travis.macos.sh
+  - os: linux
+    dist: bionic
+  - rust: stable
+    dist: bionic
+    env: DEPLOY=travis
