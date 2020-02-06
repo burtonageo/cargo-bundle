@@ -1,1 +1,8 @@
 language: rust
+matrix:
+  include:
+  - os: osx
+    osx_image: xcode11.2
+    script: sh .travis.macos.sh
+  - os: linux
+    dist: bionic

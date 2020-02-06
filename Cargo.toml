@@ -8,7 +8,7 @@ repository = "https://github.com/burtonageo/cargo-bundle"
 description = "Wrap rust executables in OS-specific app bundles"
 
 [package.metadata.bundle.example.hello]
-name = "Hello World"
+name = "hello"
 identifier = "io.github.burtonageo.cargo-bundle.hello"
 icon = ["examples/hello/icon*.png"]
 category = "Utility"
@@ -45,7 +45,7 @@ walkdir = "2"
 
 [dev-dependencies]
 tempfile = "3"
-winit = "0.11"
+winit = "0.20"
 
 [[example]]
 name = "hello"

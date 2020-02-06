@@ -1,4 +1,5 @@
 # Cargo bundle
+[![Build Status](https://travis-ci.org/burtonageo/cargo-bundle.svg?branch=master)](https://travis-ci.org/burtonageo/cargo-bundle)
 
 Wrap Rust executables in OS-specific app bundles
 

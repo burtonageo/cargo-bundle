@@ -113,7 +113,7 @@ fn run() -> ::Result<()> {
         let output_paths = env::current_dir().map_err(From::from)
             .and_then(|d| Settings::new(d, m))
             .and_then(|s| {
-                          try!(build_project_if_unbuilt(&s));
+                          build_project_if_unbuilt(&s)?;
                           Ok(s)
                       })
             .and_then(bundle_project)?;
