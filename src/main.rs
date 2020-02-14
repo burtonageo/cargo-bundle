@@ -67,7 +67,7 @@ fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
     }
     let status = process::Command::new("cargo").args(args).status()?;
     if !status.success() {
-        bail!("Result of `cargo build` operation was unsuccessful: {}",
+        panic!("Result of `cargo build` operation was unsuccessful: {}",
               status);
     }
     Ok(())
