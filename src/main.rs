@@ -67,7 +67,7 @@ fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
     }
     let status = process::Command::new("cargo").args(args).status()?;
     if !status.success() {
-        panic!("Result of `cargo build` operation was unsuccessful: {}",
+        bail!("Result of `cargo build` operation was unsuccessful: {}",
               status);
     }
     Ok(())
@@ -125,5 +125,6 @@ fn run() -> ::Result<()> {
 fn main() {
     if let Err(error) = run() {
         bundle::print_error(&error).unwrap();
+        std::process::exit(1);
     }
 }
