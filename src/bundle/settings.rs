@@ -113,9 +113,12 @@ pub struct Settings {
     package: PackageSettings,
     package_type: Option<PackageType>, // If `None`, use the default package type for this os
     target: Option<(String, TargetInfo)>,
+    features: Option<String>,
     project_out_directory: PathBuf,
     build_artifact: BuildArtifact,
     is_release: bool,
+    all_features: bool,
+    no_default_features: bool,
     binary_path: PathBuf,
     binary_name: String,
     bundle_settings: BundleSettings,
@@ -151,9 +154,15 @@ impl Settings {
             BuildArtifact::Main
         };
         let is_release = matches.is_present("release");
+        let all_features = matches.is_present("all-features");
+        let no_default_features = matches.is_present("no-default-features");
         let target = match matches.value_of("target") {
             Some(triple) => Some((triple.to_string(), TargetInfo::from_str(triple)?)),
             None => None,
+        };
+        let features = match matches.value_of("features") {
+            Some(features) => Some(features.into()),
+            None => None
         };
         let cargo_settings = CargoSettings::load(&current_dir)?;
         let package = match cargo_settings.package {
@@ -187,8 +196,11 @@ impl Settings {
             package,
             package_type,
             target,
+            features,
             build_artifact,
             is_release,
+            all_features,
+            no_default_features,
             project_out_directory: target_dir,
             binary_path,
             binary_name,
@@ -298,12 +310,23 @@ impl Settings {
         }
     }
 
+    pub fn features(&self) -> Option<&str> {
+        match self.features {
+            Some(ref features) => Some(features.as_str()),
+            None => None,
+        }
+    }
+
     /// Returns the artifact that is being bundled.
     pub fn build_artifact(&self) -> &BuildArtifact { &self.build_artifact }
 
     /// Returns true if the bundle is being compiled in release mode, false if
     /// it's being compiled in debug mode.
     pub fn is_release_build(&self) -> bool { self.is_release }
+
+    pub fn all_features(&self) -> bool { self.all_features }
+
+    pub fn no_default_features(&self) -> bool { self.no_default_features }
 
     pub fn bundle_name(&self) -> &str {
         self.bundle_settings.name.as_ref().unwrap_or(&self.package.name)

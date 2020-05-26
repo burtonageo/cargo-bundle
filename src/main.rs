@@ -53,6 +53,9 @@ fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
     if let Some(triple) = settings.target_triple() {
         args.push(format!("--target={}", triple));
     }
+    if let Some(features) = settings.features() {
+        args.push(format!("--features={}", features));
+    }
     match settings.build_artifact() {
         &BuildArtifact::Main => {}
         &BuildArtifact::Bin(ref name) => {
@@ -64,6 +67,12 @@ fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
     }
     if settings.is_release_build() {
         args.push("--release".to_string());
+    }
+    if settings.all_features() {
+        args.push("--all-features".to_string());
+    }
+    if settings.no_default_features() {
+        args.push("--no-default-features".to_string());
     }
     let status = process::Command::new("cargo").args(args).status()?;
     if !status.success() {
@@ -106,7 +115,18 @@ fn run() -> ::Result<()> {
                     .arg(Arg::with_name("target")
                          .long("target")
                          .value_name("TRIPLE")
-                         .help("Build a bundle for the target triple")))
+                         .help("Build a bundle for the target triple"))
+                    .arg(Arg::with_name("features")
+                         .long("features")
+                         .value_name("FEATURES")
+                         .help("Set crate features for the bundle. Eg: `--features \"f1 f2\"`"))
+                    .arg(Arg::with_name("all-features")
+                         .long("all-features")
+                         .help("Build a bundle with all crate features."))
+                    .arg(Arg::with_name("no-default-features")
+                         .long("no-default-features")
+                         .help("Build a bundle without the default crate features.")))
+
         .get_matches();
 
     if let Some(m) = m.subcommand_matches("bundle") {
