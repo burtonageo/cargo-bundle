@@ -125,5 +125,6 @@ fn run() -> ::Result<()> {
 fn main() {
     if let Err(error) = run() {
         bundle::print_error(&error).unwrap();
+        std::process::exit(1);
     }
 }
