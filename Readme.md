@@ -65,6 +65,15 @@ These settings apply to bundles for all (or most) OSes.
                         will use the `description` value from your `Cargo.toml` file.
  * `long_description`: [OPTIONAL] A longer, multi-line description of the application.
 
+### Linux-specific settings
+
+These settings are used only when bundling Linux compatible packages (currently `deb` only).
+
+* `linux_exec_args`: A single string which is inserted after the name of the binary in the `Exec`
+  field in the `.desktop` file. For example if the binary is called `my_program` and
+  `linux_exec_args = "%f"` then the Exec filed will be `Exec=my_program %f`. Find out more from the
+  [specification](https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#exec-variables)
+
 ### Debian-specific settings
 
 These settings are used only when bundling `deb` packages.
