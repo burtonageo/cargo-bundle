@@ -74,6 +74,7 @@ struct BundleSettings {
     long_description: Option<String>,
     script: Option<PathBuf>,
     // OS-specific settings:
+    linux_mime_types: Option<Vec<String>>,
     deb_depends: Option<Vec<String>>,
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
@@ -397,6 +398,13 @@ impl Settings {
     pub fn debian_dependencies(&self) -> &[String] {
         match self.bundle_settings.deb_depends {
             Some(ref dependencies) => dependencies.as_slice(),
+            None => &[],
+        }
+    }
+
+    pub fn linux_mime_types(&self) -> &[String] {
+        match self.bundle_settings.linux_mime_types {
+            Some(ref mime_types) => mime_types.as_slice(),
             None => &[],
         }
     }
