@@ -65,6 +65,13 @@ These settings apply to bundles for all (or most) OSes.
                         will use the `description` value from your `Cargo.toml` file.
  * `long_description`: [OPTIONAL] A longer, multi-line description of the application.
 
+### Linux-specific settings
+
+These settings are used only when bundling Linux compatible packages (currently `deb` only).
+
+* `linux_mime_types`: A list of strings which represent mime types. If present, these are assigned
+  to the `MimeType` field of the .desktop file.
+
 ### Debian-specific settings
 
 These settings are used only when bundling `deb` packages.
