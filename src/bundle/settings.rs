@@ -74,6 +74,7 @@ struct BundleSettings {
     long_description: Option<String>,
     script: Option<PathBuf>,
     // OS-specific settings:
+    linux_exec_args: Option<String>,
     deb_depends: Option<Vec<String>>,
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
@@ -399,6 +400,10 @@ impl Settings {
             Some(ref dependencies) => dependencies.as_slice(),
             None => &[],
         }
+    }
+
+    pub fn linux_exec_args(&self) -> Option<&str> {
+        self.bundle_settings.linux_exec_args.as_ref().map(String::as_str)
     }
 
     pub fn osx_frameworks(&self) -> &[String] {
