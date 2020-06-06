@@ -105,6 +105,10 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     let desktop_file_name = format!("{}.desktop", bin_name);
     let desktop_file_path = data_dir.join("usr/share/applications").join(desktop_file_name);
     let file = &mut common::create_file(&desktop_file_path)?;
+    let mime_types = settings.linux_mime_types().iter().fold(
+        "".to_owned(),
+        |acc, s| format!("{}{};", acc, s)
+    );
     // For more information about the format of this file, see
     // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
     write!(file, "[Desktop Entry]\n")?;
@@ -125,6 +129,7 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     write!(file, "Name={}\n", settings.bundle_name())?;
     write!(file, "Terminal=false\n")?;
     write!(file, "Type=Application\n")?;
+    write!(file, "MimeType={}\n", mime_types)?;
     write!(file, "Version={}\n", settings.version_string())?;
     Ok(())
 }

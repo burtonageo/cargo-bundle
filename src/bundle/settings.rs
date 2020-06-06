@@ -74,6 +74,7 @@ struct BundleSettings {
     long_description: Option<String>,
     script: Option<PathBuf>,
     // OS-specific settings:
+    linux_mime_types: Option<Vec<String>>,
     linux_exec_args: Option<String>,
     deb_depends: Option<Vec<String>>,
     osx_frameworks: Option<Vec<String>>,
@@ -402,6 +403,13 @@ impl Settings {
         }
     }
 
+    pub fn linux_mime_types(&self) -> &[String] {
+        match self.bundle_settings.linux_mime_types {
+            Some(ref mime_types) => mime_types.as_slice(),
+            None => &[],
+        }
+    }
+    
     pub fn linux_exec_args(&self) -> Option<&str> {
         self.bundle_settings.linux_exec_args.as_ref().map(String::as_str)
     }

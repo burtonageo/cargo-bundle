@@ -69,6 +69,8 @@ These settings apply to bundles for all (or most) OSes.
 
 These settings are used only when bundling Linux compatible packages (currently `deb` only).
 
+* `linux_mime_types`: A list of strings which represent mime types. If present, these are assigned
+  to the `MimeType` field of the .desktop file.
 * `linux_exec_args`: A single string which is inserted after the name of the binary in the `Exec`
   field in the `.desktop` file. For example if the binary is called `my_program` and
   `linux_exec_args = "%f"` then the Exec filed will be `Exec=my_program %f`. Find out more from the
