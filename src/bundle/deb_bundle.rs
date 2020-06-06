@@ -119,7 +119,12 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     if !settings.short_description().is_empty() {
         write!(file, "Comment={}\n", settings.short_description())?;
     }
-    write!(file, "Exec={}\n", bin_name)?;
+    let exec;
+    match settings.linux_exec_args() {
+        Some(args) => exec = format!("{} {}", bin_name, args),
+        None => exec = bin_name.to_owned(),
+    }
+    write!(file, "Exec={}\n", exec)?;
     write!(file, "Icon={}\n", bin_name)?;
     write!(file, "Name={}\n", settings.bundle_name())?;
     write!(file, "Terminal=false\n")?;
