@@ -159,7 +159,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-bundle"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ar 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "cab 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
