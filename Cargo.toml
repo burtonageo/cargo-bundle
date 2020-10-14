@@ -20,6 +20,9 @@ can be bundled with cargo-bundle, as well as a test-case for
 cargo-bundle's support for bundling crate examples.
 """
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = { git = "https://github.com/servo/core-foundation-rs/" }
+
 [dependencies]
 ar = "0.3"
 cab = "0.1"
@@ -30,6 +33,7 @@ error-chain = "0.12"
 glob = "0.2"
 icns = "^0.2"
 image = "0.12"
+lazy_static = "1.4.0"
 libflate = "0.1"
 md5 = "0.3"
 msi = "0.2"
