@@ -21,7 +21,7 @@ cargo-bundle's support for bundling crate examples.
 """
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = { git = "https://github.com/servo/core-foundation-rs/" }
+core-foundation = { git = "https://github.com/servo/core-foundation-rs" }
 
 [dependencies]
 ar = "0.3"
@@ -29,6 +29,7 @@ cab = "0.1"
 chrono = "0.4"
 clap = "^2"
 dirs = "1.0"
+dunce = "1.0.1"
 error-chain = "0.12"
 glob = "0.2"
 icns = "^0.2"
