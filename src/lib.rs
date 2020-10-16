@@ -21,11 +21,13 @@ fn _resources_root() -> Option<PathBuf> {
     }
 }
 
+/// Returns the absolute path to the resources root, if available. It can handle the difference between `cargo run` and bundled run.
 pub fn resources_root() -> Option<PathBuf> {
     let resources_root = PathBuf::from((*RESOURCES_ROOT).as_ref()?);
     Some(resources_root)
 }
 
+/// Joins passed path to the resources root.
 pub fn resource_path<P: AsRef<Path>>(relative_from_resources_root: P) -> Option<PathBuf> {
     let resources_root = (*RESOURCES_ROOT).as_ref()?;
     let resource_path = resources_root.join(relative_from_resources_root);
