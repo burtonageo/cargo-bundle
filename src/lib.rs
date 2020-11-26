@@ -20,6 +20,8 @@ fn _resources_root() -> Option<PathBuf> {
             let canonical_resources_root = dunce::canonicalize(absolute_resources_root).ok()?;
             Some(canonical_resources_root)
         }
+        #[cfg(not(any(target_os = "macos")))]
+        None
     }
 }
 
