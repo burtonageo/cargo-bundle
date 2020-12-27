@@ -130,7 +130,8 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     write!(file, "Terminal=false\n")?;
     write!(file, "Type=Application\n")?;
     write!(file, "MimeType={}\n", mime_types)?;
-    write!(file, "Version={}\n", settings.version_string())?;
+    // The `Version` field is omitted on pupose. See `generate_control_file` for specifying
+    // the application version.
     Ok(())
 }
 
