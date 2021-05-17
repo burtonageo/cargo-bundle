@@ -45,7 +45,7 @@ walkdir = "2"
 
 [dev-dependencies]
 tempfile = "3"
-winit = "0.20"
+winit = "0.24"
 
 [[example]]
 name = "hello"
