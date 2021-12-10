@@ -158,9 +158,12 @@ impl Settings {
         let profile = if matches.is_present("release") {
             "release".to_string()
         } else if let Some(profile) = matches.value_of("profile") {
+            if profile == "debug" {
+                bail!("Profile name `debug` is reserved")
+            }
             profile.to_string()
         } else {
-            "debug".to_string()
+            "dev".to_string()
         };
         let all_features = matches.is_present("all-features");
         let no_default_features = matches.is_present("no-default-features");
@@ -234,7 +237,7 @@ impl Settings {
         if let &Some((ref triple, _)) = target {
             path.push(triple);
         }
-        path.push(profile);
+        path.push(if profile == "dev" { "debug" } else { profile });
         if let &BuildArtifact::Example(_) = build_artifact {
             path.push("examples");
         }

@@ -66,7 +66,7 @@ fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
         }
     }
     match settings.build_profile() {
-        "debug" => {}
+        "dev" => {}
         "release" => {
             args.push("--release".to_string());
         }
