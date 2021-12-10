@@ -118,7 +118,7 @@ pub struct Settings {
     features: Option<String>,
     project_out_directory: PathBuf,
     build_artifact: BuildArtifact,
-    is_release: bool,
+    profile: String,
     all_features: bool,
     no_default_features: bool,
     binary_path: PathBuf,
@@ -155,7 +155,13 @@ impl Settings {
         } else {
             BuildArtifact::Main
         };
-        let is_release = matches.is_present("release");
+        let profile = if matches.is_present("release") {
+            "release".to_string()
+        } else if let Some(profile) = matches.value_of("profile") {
+            profile.to_string()
+        } else {
+            "debug".to_string()
+        };
         let all_features = matches.is_present("all-features");
         let no_default_features = matches.is_present("no-default-features");
         let target = match matches.value_of("target") {
@@ -172,7 +178,7 @@ impl Settings {
             None => bail!("No 'package' info found in 'Cargo.toml'")
         };
         let workspace_dir = Settings::get_workspace_dir(&current_dir);
-        let target_dir = Settings::get_target_dir(&workspace_dir, &target, is_release, &build_artifact);
+        let target_dir = Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
         let bundle_settings = if let Some(bundle_settings) = package.metadata.as_ref().and_then(|metadata| metadata.bundle.as_ref()) {
             bundle_settings.clone()
         } else {
@@ -200,7 +206,7 @@ impl Settings {
             target,
             features,
             build_artifact,
-            is_release,
+            profile,
             all_features,
             no_default_features,
             project_out_directory: target_dir,
@@ -222,13 +228,13 @@ impl Settings {
     */
     fn get_target_dir(project_root_dir: &PathBuf,
                       target: &Option<(String, TargetInfo)>,
-                      is_release: bool, build_artifact: &BuildArtifact)
+                      profile: &str, build_artifact: &BuildArtifact)
                       -> PathBuf {
         let mut path = project_root_dir.join("target");
         if let &Some((ref triple, _)) = target {
             path.push(triple);
         }
-        path.push(if is_release { "release" } else { "debug" });
+        path.push(profile);
         if let &BuildArtifact::Example(_) = build_artifact {
             path.push("examples");
         }
@@ -324,7 +330,7 @@ impl Settings {
 
     /// Returns true if the bundle is being compiled in release mode, false if
     /// it's being compiled in debug mode.
-    pub fn is_release_build(&self) -> bool { self.is_release }
+    pub fn build_profile(&self) -> &str { &self.profile }
 
     pub fn all_features(&self) -> bool { self.all_features }
 
@@ -409,7 +415,7 @@ impl Settings {
             None => &[],
         }
     }
-    
+
     pub fn linux_exec_args(&self) -> Option<&str> {
         self.bundle_settings.linux_exec_args.as_ref().map(String::as_str)
     }
