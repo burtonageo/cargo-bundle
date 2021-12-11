@@ -65,8 +65,15 @@ fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
             args.push(format!("--example={}", name));
         }
     }
-    if settings.is_release_build() {
-        args.push("--release".to_string());
+    match settings.build_profile() {
+        "dev" => {}
+        "release" => {
+            args.push("--release".to_string());
+        }
+        custom => {
+            args.push("--profile".to_string());
+            args.push(custom.to_string());
+        }
     }
     if settings.all_features() {
         args.push("--all-features".to_string());
@@ -112,6 +119,11 @@ fn run() -> ::Result<()> {
                     .arg(Arg::with_name("release")
                          .long("release")
                          .help("Build a bundle from a target built in release mode"))
+                    .arg(Arg::with_name("profile")
+                        .long("profile")
+                        .value_name("NAME")
+                        .conflicts_with("release")
+                        .help("Build a bundle from a target build using the given profile"))
                     .arg(Arg::with_name("target")
                          .long("target")
                          .value_name("TRIPLE")
