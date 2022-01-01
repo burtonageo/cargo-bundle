@@ -134,6 +134,7 @@ fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &
     write!(file, "  <key>CFBundleVersion</key>\n  <string>{}</string>\n", settings.version_string())?;
     write!(file, "  <key>CFBundleShortVersionString</key>\n  <string>{}</string>\n", settings.version_string())?;
     write!(file, "  <key>CFBundleDevelopmentRegion</key>\n  <string>en_US</string>\n")?;
+    write!(file, "  <key>UILaunchStoryboardName</key>\n  <string></string>\n")?;
 
 
     if !icon_filenames.is_empty() {
