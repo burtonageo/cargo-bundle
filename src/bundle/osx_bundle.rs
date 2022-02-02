@@ -190,7 +190,9 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings)
         if copy_framework_from(&dest_dir, framework,
                                &PathBuf::from("/Library/Frameworks/"))? ||
            copy_framework_from(&dest_dir, framework,
-                               &PathBuf::from("/Network/Library/Frameworks/"))?
+                               &PathBuf::from("/Network/Library/Frameworks/"))? ||
+            copy_framework_from(&dest_dir, framework,
+                                &PathBuf::from("/System/Library/Frameworks/"))?
         {
             continue;
         }
