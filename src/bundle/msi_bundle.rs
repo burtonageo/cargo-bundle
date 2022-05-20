@@ -154,8 +154,8 @@ fn new_empty_package(msi_path: &Path) -> ::Result<Package> {
 
 // Generates a GUID for the package, based on `settings.bundle_identifier()`.
 fn generate_package_guid(settings: &Settings) -> Uuid {
-    let namespace = Uuid::from_bytes(&UUID_NAMESPACE).unwrap();
-    Uuid::new_v5(&namespace, &settings.bundle_identifier())
+    let namespace = Uuid::from_bytes(UUID_NAMESPACE);
+    Uuid::new_v5(&namespace, &settings.bundle_identifier().as_bytes())
 }
 
 // Populates the summary metadata for the package from the bundle settings.
@@ -429,9 +429,10 @@ fn create_component_table(package: &mut Package, package_guid: Uuid,
     for directory in directories.iter() {
         if !directory.files.is_empty() {
             let hash_input = directory.files.join("/");
+            let uuid = Uuid::new_v5(&package_guid, hash_input.as_bytes());
             rows.push(vec![
                 msi::Value::Str(directory.key.clone()),
-                msi::Value::from(Uuid::new_v5(&package_guid, &hash_input)),
+                msi::Value::from(uuid),
                 msi::Value::Str(directory.key.clone()),
                 msi::Value::Int(0),
                 msi::Value::Null,

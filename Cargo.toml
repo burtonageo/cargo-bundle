@@ -21,26 +21,26 @@ cargo-bundle's support for bundling crate examples.
 """
 
 [dependencies]
-ar = "0.3"
-cab = "0.1"
+ar = "0.9"
+cab = "0.4"
 chrono = "0.4"
 clap = "^2"
 dirs = "1.0"
 error-chain = "0.12"
-glob = "0.2"
-icns = "^0.2"
+glob = "0.3"
+icns = "0.3"
 image = "0.12"
-libflate = "0.1"
-md5 = "0.3"
-msi = "0.2"
+libflate = "1.2"
+md5 = "0.7"
+msi = "0.5"
 serde = "1.0"
 serde_derive = "1.0"
-strsim = "0.7"
+strsim = "0.10"
 tar = "0.4"
 target_build_utils = "0.3"
 term = "0.4"
-toml = "0.4"
-uuid = { version = "0.5", features = ["v5"] }
+toml = "0.5"
+uuid = { version = "1", features = ["v5"] }
 walkdir = "2"
 
 [dev-dependencies]
