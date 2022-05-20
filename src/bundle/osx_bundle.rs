@@ -231,8 +231,8 @@ fn create_icns_file(resources_dir: &PathBuf, settings: &Settings)
         match icns::IconType::from_pixel_size_and_density(icon.width(), icon.height(), density) {
             Some(icon_type) => {
                 if !family.has_icon_with_type(icon_type) {
-                    let icon = try!(make_icns_image(icon));
-                    try!(family.add_icon_with_type(&icon, icon_type));
+                    let icon = make_icns_image(icon)?;
+                    family.add_icon_with_type(&icon, icon_type)?;
                 }
                 Ok(())
             }
@@ -243,7 +243,7 @@ fn create_icns_file(resources_dir: &PathBuf, settings: &Settings)
     let mut images_to_resize: Vec<(image::DynamicImage, u32, u32)> = vec![];
     for icon_path in settings.icon_files() {
         let icon_path = icon_path?;
-        let icon = try!(image::open(&icon_path));
+        let icon = image::open(&icon_path)?;
         let density = if common::is_retina(&icon_path) { 2 } else { 1 };
         let (w, h) = icon.dimensions();
         let orig_size = min(w, h);
@@ -251,22 +251,22 @@ fn create_icns_file(resources_dir: &PathBuf, settings: &Settings)
         if orig_size > next_size_down {
             images_to_resize.push((icon, next_size_down, density));
         } else {
-            try!(add_icon_to_family(icon, density, &mut family));
+            add_icon_to_family(icon, density, &mut family)?;
         }
     }
 
     for (icon, next_size_down, density) in images_to_resize {
         let icon = icon.resize_exact(next_size_down, next_size_down, image::Lanczos3);
-        try!(add_icon_to_family(icon, density, &mut family));
+        add_icon_to_family(icon, density, &mut family)?;
     }
 
     if !family.is_empty() {
-        try!(fs::create_dir_all(resources_dir));
+        fs::create_dir_all(resources_dir)?;
         let mut dest_path = resources_dir.clone();
         dest_path.push(settings.bundle_name());
         dest_path.set_extension("icns");
-        let icns_file = BufWriter::new(try!(File::create(&dest_path)));
-        try!(family.write(icns_file));
+        let icns_file = BufWriter::new(File::create(&dest_path)?);
+        family.write(icns_file)?;
         return Ok(Some(dest_path));
     }
 
