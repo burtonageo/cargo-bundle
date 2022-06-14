@@ -345,7 +345,7 @@ mod tests {
                    Ok(AppCategory::Education));
         assert_eq!(AppCategory::from_str("Developer Tool"),
                    Ok(AppCategory::DeveloperTool));
-        // Lowercase, spaces, and hypens are fine:
+        // Lowercase, spaces, and hyphens are fine:
         assert_eq!(AppCategory::from_str(" puzzle  game "),
                    Ok(AppCategory::PuzzleGame));
         assert_eq!(AppCategory::from_str("Role-playing game"),
