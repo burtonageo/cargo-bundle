@@ -278,9 +278,9 @@ fn collect_directory_info(settings: &Settings,
 }
 
 // Divides up the list of resource into some number of cabinets, subject to a
-// few contraints: 1) no one cabinet will have two resources with the same
+// few constraints: 1) no one cabinet will have two resources with the same
 // filename, 2) no one cabinet will have more than `CABINET_MAX_FILES` files
-// in it, and 3) no one cabinet will contain mroe than `CABINET_MAX_SIZE`
+// in it, and 3) no one cabinet will contain more than `CABINET_MAX_SIZE`
 // bytes of data (unless that cabinet consists of a single file that is
 // already bigger than that).
 fn divide_resources_into_cabinets(mut resources: Vec<ResourceInfo>)
@@ -314,7 +314,7 @@ fn divide_resources_into_cabinets(mut resources: Vec<ResourceInfo>)
 }
 
 // Creates the CAB archives within the package that contain the binary
-// execuable and all the resource files.
+// executable and all the resource files.
 fn generate_resource_cabinets(package: &mut Package,
                               cabinets: &[CabinetInfo])
                               -> ::Result<()> {
