@@ -1,4 +1,3 @@
-use ResultExt;
 use super::common;
 use super::settings::Settings;
 use cab;
@@ -10,6 +9,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+use ResultExt;
 
 type Package = msi::Package<fs::File>;
 
@@ -29,8 +29,7 @@ const MAIN_FEATURE_NAME: &str = "MainFeature";
 // A v4 UUID that was generated specifically for cargo-bundle, to be used as a
 // namespace for generating v5 UUIDs from bundle identifier strings.
 const UUID_NAMESPACE: [u8; 16] = [
-    0xfd, 0x85, 0x95, 0xa8, 0x17, 0xa3, 0x47, 0x4e,
-    0xa6, 0x16, 0x76, 0x14, 0x8d, 0xfa, 0x0c, 0x7b,
+    0xfd, 0x85, 0x95, 0xa8, 0x17, 0xa3, 0x47, 0x4e, 0xa6, 0x16, 0x76, 0x14, 0x8d, 0xfa, 0x0c, 0x7b,
 ];
 
 // Info about a resource file (including the main executable) in the bundle.
@@ -74,65 +73,47 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     common::print_bundling(&msi_name)?;
     let base_dir = settings.project_out_directory().join("bundle/msi");
     let msi_path = base_dir.join(&msi_name);
-    let mut package = new_empty_package(&msi_path).chain_err(|| {
-        "Failed to initialize MSI package"
-    })?;
+    let mut package = new_empty_package(&msi_path).chain_err(|| "Failed to initialize MSI package")?;
 
     // Generate package metadata:
     let guid = generate_package_guid(settings);
     set_summary_info(&mut package, guid, settings);
-    create_property_table(&mut package, guid, settings).chain_err(|| {
-        "Failed to generate Property table"
-    })?;
+    create_property_table(&mut package, guid, settings).chain_err(|| "Failed to generate Property table")?;
 
     // Copy resource files into package:
-    let mut resources = collect_resource_info(settings).chain_err(|| {
-        "Failed to collect resource file information"
-    })?;
-    let directories = collect_directory_info(settings, &mut resources).chain_err(|| {
-        "Failed to collect resource directory information"
-    })?;
+    let mut resources = collect_resource_info(settings).chain_err(|| "Failed to collect resource file information")?;
+    let directories = collect_directory_info(settings, &mut resources)
+        .chain_err(|| "Failed to collect resource directory information")?;
     let cabinets = divide_resources_into_cabinets(resources);
-    generate_resource_cabinets(&mut package, &cabinets).chain_err(|| {
-        "Failed to generate resource cabinets"
-    })?;
+    generate_resource_cabinets(&mut package, &cabinets).chain_err(|| "Failed to generate resource cabinets")?;
 
     // Set up installer database tables:
-    create_directory_table(&mut package, &directories).chain_err(|| {
-        "Failed to generate Directory table"
-    })?;
-    create_feature_table(&mut package, settings).chain_err(|| {
-        "Failed to generate Feature table"
-    })?;
-    create_component_table(&mut package, guid, &directories).chain_err(|| {
-        "Failed to generate Component table"
-    })?;
-    create_feature_components_table(&mut package, &directories).chain_err(|| {
-        "Failed to generate FeatureComponents table"
-    })?;
-    create_media_table(&mut package, &cabinets).chain_err(|| {
-        "Failed to generate Media table"
-    })?;
-    create_file_table(&mut package, &cabinets).chain_err(|| {
-        "Failed to generate File table"
-    })?;
+    create_directory_table(&mut package, &directories).chain_err(|| "Failed to generate Directory table")?;
+    create_feature_table(&mut package, settings).chain_err(|| "Failed to generate Feature table")?;
+    create_component_table(&mut package, guid, &directories).chain_err(|| "Failed to generate Component table")?;
+    create_feature_components_table(&mut package, &directories)
+        .chain_err(|| "Failed to generate FeatureComponents table")?;
+    create_media_table(&mut package, &cabinets).chain_err(|| "Failed to generate Media table")?;
+    create_file_table(&mut package, &cabinets).chain_err(|| "Failed to generate File table")?;
     // TODO: Create other needed tables.
 
     // Create app icon:
-    package.create_table("Icon", vec![
-        msi::Column::build("Name").primary_key().id_string(72),
-        msi::Column::build("Data").binary(),
-    ])?;
+    package.create_table(
+        "Icon",
+        vec![
+            msi::Column::build("Name").primary_key().id_string(72),
+            msi::Column::build("Data").binary(),
+        ],
+    )?;
     let icon_name = format!("{}.ico", settings.binary_name());
     {
         let stream_name = format!("Icon.{}", icon_name);
         let mut stream = package.write_stream(&stream_name)?;
         create_app_icon(&mut stream, settings)?;
     }
-    package.insert_rows(msi::Insert::into("Icon").row(vec![
-        msi::Value::Str(icon_name.clone()),
-        msi::Value::from("Name"),
-    ]))?;
+    package.insert_rows(
+        msi::Insert::into("Icon").row(vec![msi::Value::Str(icon_name.clone()), msi::Value::from("Name")]),
+    )?;
 
     package.flush()?;
     Ok(vec![msi_path])
@@ -140,14 +121,15 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 
 fn new_empty_package(msi_path: &Path) -> ::Result<Package> {
     if let Some(parent) = msi_path.parent() {
-        fs::create_dir_all(&parent).chain_err(|| {
-            format!("Failed to create directory {:?}", parent)
-        })?;
+        fs::create_dir_all(&parent).chain_err(|| format!("Failed to create directory {:?}", parent))?;
     }
-    let msi_file = fs::OpenOptions::new().read(true).write(true).create(true)
-        .truncate(true).open(msi_path).chain_err(|| {
-            format!("Failed to create file {:?}", msi_path)
-        })?;
+    let msi_file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(msi_path)
+        .chain_err(|| format!("Failed to create file {:?}", msi_path))?;
     let package = msi::Package::create(msi::PackageType::Installer, msi_file)?;
     Ok(package)
 }
@@ -159,8 +141,7 @@ fn generate_package_guid(settings: &Settings) -> Uuid {
 }
 
 // Populates the summary metadata for the package from the bundle settings.
-fn set_summary_info(package: &mut Package, package_guid: Uuid,
-                    settings: &Settings) {
+fn set_summary_info(package: &mut Package, package_guid: Uuid, settings: &Settings) {
     let summary_info = package.summary_info_mut();
     summary_info.set_creation_time_to_now();
     summary_info.set_subject(settings.bundle_name().to_string());
@@ -174,29 +155,32 @@ fn set_summary_info(package: &mut Package, package_guid: Uuid,
 }
 
 // Creates and populates the `Property` database table for the package.
-fn create_property_table(package: &mut Package, package_guid: Uuid,
-                         settings: &Settings) -> ::Result<()> {
+fn create_property_table(package: &mut Package, package_guid: Uuid, settings: &Settings) -> ::Result<()> {
     let authors = settings.authors_comma_separated().unwrap_or(String::new());
-    package.create_table("Property", vec![
-        msi::Column::build("Property").primary_key().id_string(72),
-        msi::Column::build("Value").text_string(0),
-    ])?;
-    package.insert_rows(msi::Insert::into("Property").row(vec![
-        msi::Value::from("Manufacturer"),
-        msi::Value::Str(authors),
-    ]).row(vec![
-        msi::Value::from("ProductCode"),
-        msi::Value::from(package_guid),
-    ]).row(vec![
-        msi::Value::from("ProductLanguage"),
-        msi::Value::from(msi::Language::from_tag("en-US")),
-    ]).row(vec![
-        msi::Value::from("ProductName"),
-        msi::Value::from(settings.bundle_name()),
-    ]).row(vec![
-        msi::Value::from("ProductVersion"),
-        msi::Value::from(settings.version_string()),
-    ]))?;
+    package.create_table(
+        "Property",
+        vec![
+            msi::Column::build("Property").primary_key().id_string(72),
+            msi::Column::build("Value").text_string(0),
+        ],
+    )?;
+    package.insert_rows(
+        msi::Insert::into("Property")
+            .row(vec![msi::Value::from("Manufacturer"), msi::Value::Str(authors)])
+            .row(vec![msi::Value::from("ProductCode"), msi::Value::from(package_guid)])
+            .row(vec![
+                msi::Value::from("ProductLanguage"),
+                msi::Value::from(msi::Language::from_tag("en-US")),
+            ])
+            .row(vec![
+                msi::Value::from("ProductName"),
+                msi::Value::from(settings.bundle_name()),
+            ])
+            .row(vec![
+                msi::Value::from("ProductVersion"),
+                msi::Value::from(settings.version_string()),
+            ]),
+    )?;
     Ok(())
 }
 
@@ -216,10 +200,8 @@ fn collect_resource_info(settings: &Settings) -> ::Result<Vec<ResourceInfo>> {
         let source_path = source_path?;
         let metadata = source_path.metadata()?;
         let size = metadata.len();
-        let dest_path =
-            root_rsrc_dir.join(common::resource_relpath(&source_path));
-        let filename =
-            dest_path.file_name().unwrap().to_string_lossy().to_string();
+        let dest_path = root_rsrc_dir.join(common::resource_relpath(&source_path));
+        let filename = dest_path.file_name().unwrap().to_string_lossy().to_string();
         let info = ResourceInfo {
             source_path,
             dest_path,
@@ -237,17 +219,18 @@ fn collect_resource_info(settings: &Settings) -> ::Result<Vec<ResourceInfo>> {
 // modifies each `ResourceInfo` object to populate its `component_key` field
 // with the database key of the Component that the resource will be associated
 // with.
-fn collect_directory_info(settings: &Settings,
-                          resources: &mut Vec<ResourceInfo>)
-                          -> ::Result<Vec<DirectoryInfo>> {
+fn collect_directory_info(settings: &Settings, resources: &mut Vec<ResourceInfo>) -> ::Result<Vec<DirectoryInfo>> {
     let mut dir_map = BTreeMap::<PathBuf, DirectoryInfo>::new();
     let mut dir_index: i32 = 0;
-    dir_map.insert(PathBuf::new(), DirectoryInfo {
-        key: "INSTALLDIR".to_string(),
-        parent_key: "ProgramFilesFolder".to_string(),
-        name: settings.bundle_name().to_string(),
-        files: Vec::new(),
-    });
+    dir_map.insert(
+        PathBuf::new(),
+        DirectoryInfo {
+            key: "INSTALLDIR".to_string(),
+            parent_key: "ProgramFilesFolder".to_string(),
+            name: settings.bundle_name().to_string(),
+            files: Vec::new(),
+        },
+    );
     for resource in resources.iter_mut() {
         let mut dir_key = "INSTALLDIR".to_string();
         let mut dir_path = PathBuf::new();
@@ -258,12 +241,15 @@ fn collect_directory_info(settings: &Settings,
                     dir_key = dir_map.get(&dir_path).unwrap().key.clone();
                 } else {
                     let new_key = format!("RDIR{:04}", dir_index);
-                    dir_map.insert(dir_path.clone(), DirectoryInfo {
-                        key: new_key.clone(),
-                        parent_key: dir_key.clone(),
-                        name: name.to_string_lossy().to_string(),
-                        files: Vec::new(),
-                    });
+                    dir_map.insert(
+                        dir_path.clone(),
+                        DirectoryInfo {
+                            key: new_key.clone(),
+                            parent_key: dir_key.clone(),
+                            name: name.to_string_lossy().to_string(),
+                            files: Vec::new(),
+                        },
+                    );
                     dir_key = new_key;
                     dir_index += 1;
                 }
@@ -283,8 +269,7 @@ fn collect_directory_info(settings: &Settings,
 // in it, and 3) no one cabinet will contain more than `CABINET_MAX_SIZE`
 // bytes of data (unless that cabinet consists of a single file that is
 // already bigger than that).
-fn divide_resources_into_cabinets(mut resources: Vec<ResourceInfo>)
-                                  -> Vec<CabinetInfo> {
+fn divide_resources_into_cabinets(mut resources: Vec<ResourceInfo>) -> Vec<CabinetInfo> {
     let mut cabinets = Vec::new();
     while !resources.is_empty() {
         let mut filenames = HashSet::<String>::new();
@@ -295,10 +280,9 @@ fn divide_resources_into_cabinets(mut resources: Vec<ResourceInfo>)
             resources: Vec::new(),
         };
         for resource in resources.into_iter() {
-            if cabinet.resources.len() >= CABINET_MAX_FILES ||
-                (!cabinet.resources.is_empty() &&
-                 total_size + resource.size > CABINET_MAX_SIZE) ||
-                filenames.contains(&resource.filename)
+            if cabinet.resources.len() >= CABINET_MAX_FILES
+                || (!cabinet.resources.is_empty() && total_size + resource.size > CABINET_MAX_SIZE)
+                || filenames.contains(&resource.filename)
             {
                 leftovers.push(resource);
             } else {
@@ -315,9 +299,7 @@ fn divide_resources_into_cabinets(mut resources: Vec<ResourceInfo>)
 
 // Creates the CAB archives within the package that contain the binary
 // executable and all the resource files.
-fn generate_resource_cabinets(package: &mut Package,
-                              cabinets: &[CabinetInfo])
-                              -> ::Result<()> {
+fn generate_resource_cabinets(package: &mut Package, cabinets: &[CabinetInfo]) -> ::Result<()> {
     for cabinet_info in cabinets.iter() {
         let mut builder = cab::CabinetBuilder::new();
         let mut file_map = HashMap::<String, &Path>::new();
@@ -325,15 +307,12 @@ fn generate_resource_cabinets(package: &mut Package,
         while resource_index < cabinet_info.resources.len() {
             let folder = builder.add_folder(cab::CompressionType::MsZip);
             let mut folder_size: u64 = 0;
-            while resource_index < cabinet_info.resources.len() &&
-                folder_size < CABINET_FOLDER_SIZE_LIMIT
-            {
+            while resource_index < cabinet_info.resources.len() && folder_size < CABINET_FOLDER_SIZE_LIMIT {
                 let resource = &cabinet_info.resources[resource_index];
                 folder_size += resource.size;
                 folder.add_file(resource.filename.as_str());
                 debug_assert!(!file_map.contains_key(&resource.filename));
-                file_map.insert(resource.filename.clone(),
-                                &resource.source_path);
+                file_map.insert(resource.filename.clone(), &resource.source_path);
                 resource_index += 1;
             }
         }
@@ -351,15 +330,20 @@ fn generate_resource_cabinets(package: &mut Package,
 }
 
 // Creates and populates the `Directory` database table for the package.
-fn create_directory_table(package: &mut Package, directories: &[DirectoryInfo])
-                          -> ::Result<()> {
-    package.create_table("Directory", vec![
-        msi::Column::build("Directory").primary_key().id_string(72),
-        msi::Column::build("Directory_Parent")
-            .nullable().foreign_key("Directory", 1).id_string(72),
-        msi::Column::build("DefaultDir")
-            .category(msi::Category::DefaultDir).string(255),
-    ])?;
+fn create_directory_table(package: &mut Package, directories: &[DirectoryInfo]) -> ::Result<()> {
+    package.create_table(
+        "Directory",
+        vec![
+            msi::Column::build("Directory").primary_key().id_string(72),
+            msi::Column::build("Directory_Parent")
+                .nullable()
+                .foreign_key("Directory", 1)
+                .id_string(72),
+            msi::Column::build("DefaultDir")
+                .category(msi::Category::DefaultDir)
+                .string(255),
+        ],
+    )?;
     let mut rows = Vec::new();
     for directory in directories.iter() {
         rows.push(vec![
@@ -368,34 +352,45 @@ fn create_directory_table(package: &mut Package, directories: &[DirectoryInfo])
             msi::Value::Str(directory.name.clone()),
         ]);
     }
-    package.insert_rows(msi::Insert::into("Directory").row(vec![
-        msi::Value::from("TARGETDIR"),
-        msi::Value::Null,
-        msi::Value::from("SourceDir"),
-    ]).row(vec![
-        msi::Value::from("ProgramFilesFolder"),
-        msi::Value::from("TARGETDIR"),
-        msi::Value::from("."),
-    ]).rows(rows))?;
+    package.insert_rows(
+        msi::Insert::into("Directory")
+            .row(vec![
+                msi::Value::from("TARGETDIR"),
+                msi::Value::Null,
+                msi::Value::from("SourceDir"),
+            ])
+            .row(vec![
+                msi::Value::from("ProgramFilesFolder"),
+                msi::Value::from("TARGETDIR"),
+                msi::Value::from("."),
+            ])
+            .rows(rows),
+    )?;
     Ok(())
 }
 
 // Creates and populates the `Feature` database table for the package.  The
 // package will have a single main feature that installs everything.
-fn create_feature_table(package: &mut Package, settings: &Settings)
-                        -> ::Result<()> {
-    package.create_table("Feature", vec![
-        msi::Column::build("Feature").primary_key().id_string(38),
-        msi::Column::build("Feature_Parent").nullable()
-            .foreign_key("Feature", 1).id_string(38),
-        msi::Column::build("Title").nullable().text_string(64),
-        msi::Column::build("Description").nullable().text_string(255),
-        msi::Column::build("Display").nullable().range(0, 0x7fff).int16(),
-        msi::Column::build("Level").range(0, 0x7fff).int16(),
-        msi::Column::build("Directory_").nullable()
-            .foreign_key("Directory", 1).id_string(72),
-        msi::Column::build("Attributes").int16(),
-    ])?;
+fn create_feature_table(package: &mut Package, settings: &Settings) -> ::Result<()> {
+    package.create_table(
+        "Feature",
+        vec![
+            msi::Column::build("Feature").primary_key().id_string(38),
+            msi::Column::build("Feature_Parent")
+                .nullable()
+                .foreign_key("Feature", 1)
+                .id_string(38),
+            msi::Column::build("Title").nullable().text_string(64),
+            msi::Column::build("Description").nullable().text_string(255),
+            msi::Column::build("Display").nullable().range(0, 0x7fff).int16(),
+            msi::Column::build("Level").range(0, 0x7fff).int16(),
+            msi::Column::build("Directory_")
+                .nullable()
+                .foreign_key("Directory", 1)
+                .id_string(72),
+            msi::Column::build("Attributes").int16(),
+        ],
+    )?;
     package.insert_rows(msi::Insert::into("Feature").row(vec![
         msi::Value::from(MAIN_FEATURE_NAME),
         msi::Value::Null,
@@ -411,20 +406,27 @@ fn create_feature_table(package: &mut Package, settings: &Settings)
 
 // Creates and populates the `Component` database table for the package.  One
 // component is created for each subdirectory under in the install dir.
-fn create_component_table(package: &mut Package, package_guid: Uuid,
-                          directories: &[DirectoryInfo])
-                          -> ::Result<()> {
-    package.create_table("Component", vec![
-        msi::Column::build("Component").primary_key().id_string(72),
-        msi::Column::build("ComponentId").nullable()
-            .category(msi::Category::Guid).string(38),
-        msi::Column::build("Directory_")
-            .nullable().foreign_key("Directory", 1).id_string(72),
-        msi::Column::build("Attributes").int16(),
-        msi::Column::build("Condition").nullable()
-            .category(msi::Category::Condition).string(255),
-        msi::Column::build("KeyPath").nullable().id_string(72),
-    ])?;
+fn create_component_table(package: &mut Package, package_guid: Uuid, directories: &[DirectoryInfo]) -> ::Result<()> {
+    package.create_table(
+        "Component",
+        vec![
+            msi::Column::build("Component").primary_key().id_string(72),
+            msi::Column::build("ComponentId")
+                .nullable()
+                .category(msi::Category::Guid)
+                .string(38),
+            msi::Column::build("Directory_")
+                .nullable()
+                .foreign_key("Directory", 1)
+                .id_string(72),
+            msi::Column::build("Attributes").int16(),
+            msi::Column::build("Condition")
+                .nullable()
+                .category(msi::Category::Condition)
+                .string(255),
+            msi::Column::build("KeyPath").nullable().id_string(72),
+        ],
+    )?;
     let mut rows = Vec::new();
     for directory in directories.iter() {
         if !directory.files.is_empty() {
@@ -446,15 +448,20 @@ fn create_component_table(package: &mut Package, package_guid: Uuid,
 
 // Creates and populates the `FeatureComponents` database table for the
 // package.  All components are added to the package's single main feature.
-fn create_feature_components_table(package: &mut Package,
-                                   directories: &[DirectoryInfo])
-                                   -> ::Result<()> {
-    package.create_table("FeatureComponents", vec![
-        msi::Column::build("Feature_").primary_key()
-            .foreign_key("Component", 1).id_string(38),
-        msi::Column::build("Component_").primary_key()
-            .foreign_key("Component", 1).id_string(72),
-    ])?;
+fn create_feature_components_table(package: &mut Package, directories: &[DirectoryInfo]) -> ::Result<()> {
+    package.create_table(
+        "FeatureComponents",
+        vec![
+            msi::Column::build("Feature_")
+                .primary_key()
+                .foreign_key("Component", 1)
+                .id_string(38),
+            msi::Column::build("Component_")
+                .primary_key()
+                .foreign_key("Component", 1)
+                .id_string(72),
+        ],
+    )?;
     let mut rows = Vec::new();
     for directory in directories.iter() {
         if !directory.files.is_empty() {
@@ -470,18 +477,24 @@ fn create_feature_components_table(package: &mut Package,
 
 // Creates and populates the `Media` database table for the package, with one
 // entry for each CAB archive within the package.
-fn create_media_table(package: &mut Package, cabinets: &[CabinetInfo])
-                      -> ::Result<()> {
-    package.create_table("Media", vec![
-        msi::Column::build("DiskId").primary_key().range(1, 0x7fff).int16(),
-        msi::Column::build("LastSequence").range(0, 0x7fff).int16(),
-        msi::Column::build("DiskPrompt").nullable().text_string(64),
-        msi::Column::build("Cabinet").nullable()
-            .category(msi::Category::Cabinet).string(255),
-        msi::Column::build("VolumeLabel").nullable().text_string(32),
-        msi::Column::build("Source").nullable()
-            .category(msi::Category::Property).string(32),
-    ])?;
+fn create_media_table(package: &mut Package, cabinets: &[CabinetInfo]) -> ::Result<()> {
+    package.create_table(
+        "Media",
+        vec![
+            msi::Column::build("DiskId").primary_key().range(1, 0x7fff).int16(),
+            msi::Column::build("LastSequence").range(0, 0x7fff).int16(),
+            msi::Column::build("DiskPrompt").nullable().text_string(64),
+            msi::Column::build("Cabinet")
+                .nullable()
+                .category(msi::Category::Cabinet)
+                .string(255),
+            msi::Column::build("VolumeLabel").nullable().text_string(32),
+            msi::Column::build("Source")
+                .nullable()
+                .category(msi::Category::Property)
+                .string(32),
+        ],
+    )?;
     let mut disk_id: i32 = 0;
     let mut last_seq: i32 = 0;
     let mut rows = Vec::new();
@@ -504,22 +517,30 @@ fn create_media_table(package: &mut Package, cabinets: &[CabinetInfo])
 // Creates and populates the `File` database table for the package, with one
 // entry for each resource file to be installed (including the main
 // executable).
-fn create_file_table(package: &mut Package, cabinets: &[CabinetInfo])
-                     -> ::Result<()> {
-    package.create_table("File", vec![
-        msi::Column::build("File").primary_key().id_string(72),
-        msi::Column::build("Component_")
-            .foreign_key("Component", 1).id_string(72),
-        msi::Column::build("FileName")
-            .category(msi::Category::Filename).string(255),
-        msi::Column::build("FileSize").range(0, 0x7fffffff).int32(),
-        msi::Column::build("Version").nullable()
-            .category(msi::Category::Version).string(72),
-        msi::Column::build("Language").nullable()
-            .category(msi::Category::Language).string(20),
-        msi::Column::build("Attributes").nullable().range(0, 0x7fff).int16(),
-        msi::Column::build("Sequence").range(1, 0x7fff).int16(),
-    ])?;
+fn create_file_table(package: &mut Package, cabinets: &[CabinetInfo]) -> ::Result<()> {
+    package.create_table(
+        "File",
+        vec![
+            msi::Column::build("File").primary_key().id_string(72),
+            msi::Column::build("Component_")
+                .foreign_key("Component", 1)
+                .id_string(72),
+            msi::Column::build("FileName")
+                .category(msi::Category::Filename)
+                .string(255),
+            msi::Column::build("FileSize").range(0, 0x7fffffff).int32(),
+            msi::Column::build("Version")
+                .nullable()
+                .category(msi::Category::Version)
+                .string(72),
+            msi::Column::build("Language")
+                .nullable()
+                .category(msi::Category::Language)
+                .string(20),
+            msi::Column::build("Attributes").nullable().range(0, 0x7fff).int16(),
+            msi::Column::build("Sequence").range(1, 0x7fff).int16(),
+        ],
+    )?;
     let mut rows = Vec::new();
     let mut sequence: i32 = 1;
     for cabinet in cabinets.iter() {
@@ -541,8 +562,7 @@ fn create_file_table(package: &mut Package, cabinets: &[CabinetInfo])
     Ok(())
 }
 
-fn create_app_icon<W: Write>(writer: &mut W, settings: &Settings)
-                             -> ::Result<()> {
+fn create_app_icon<W: Write>(writer: &mut W, settings: &Settings) -> ::Result<()> {
     // Prefer ICO files.
     for icon_path in settings.icon_files() {
         let icon_path = icon_path?;

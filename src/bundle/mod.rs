@@ -1,6 +1,7 @@
 mod category;
 mod common;
 mod deb_bundle;
+mod flatpak_bundle;
 mod ios_bundle;
 mod msi_bundle;
 mod osx_bundle;
@@ -20,6 +21,7 @@ pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
             PackageType::WindowsMsi => msi_bundle::bundle_project(&settings)?,
             PackageType::Deb => deb_bundle::bundle_project(&settings)?,
             PackageType::Rpm => rpm_bundle::bundle_project(&settings)?,
+            PackageType::Flatpak => flatpak_bundle::bundle_project(&settings)?,
         });
     }
     Ok(paths)
