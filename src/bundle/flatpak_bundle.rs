@@ -67,6 +67,55 @@ modules:
     sources:
 {sources}";
 
+const MAKE: &str = "
+BASE_DIR=$(realpath ../..)
+
+# The name of the rust binary
+BIN_NAME=$(shell sed -n 's/name = \"\(.*\)\"/\1/p' $(BASE_DIR)/Cargo.toml | head -n1)
+# The app id (e.g. org.example.MyApp)
+APP_ID=$(shell sed -n 's/id = \"\(.*\)\"/\1/p' $(BASE_DIR)/Cargo.toml | head -n1)
+
+# The rust target directory
+TARGET_DIR=$(BASE_DIR)/target
+# The gtk-rust-app out directory
+GEN_DIR=$(BASE_DIR)/target/gra-gen
+
+ROOT=/app
+# The binary directory inside the flatpak container
+BIN_DIR=$(ROOT)/bin
+# The share directory
+SHARE_DIR=$(ROOT)/share
+
+.PHONY: .install .uninstall";
+
+const XML: &str = "
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<component type=\"desktop\">
+    <id>{id}</id>
+    <name>{name}</name>
+    <project_license>{license}</project_license>
+    <metadata_license>{metadata_license}</metadata_license>
+    {author}
+    <summary>{summary}</summary>
+    <url type=\"homepage\">{homepage}</url>
+    <url type=\"bugtracker\">{repository}</url>
+    <description>
+        {description}
+    </description>
+    <launchable type=\"desktop-id\">{id}.desktop</launchable>
+    <provides>
+        <binary>{id}</binary>
+    </provides>
+{categories}
+{screenshots}
+{releases}
+{content_rating}
+{recommends}
+    <translation type=\"gettext\">{name}</translation>
+</component>";
+
+
+
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     if true {
         generate(settings)?;
