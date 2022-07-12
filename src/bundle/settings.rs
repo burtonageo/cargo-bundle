@@ -85,7 +85,7 @@ struct BundleSettings {
     deb_depends: Option<Vec<String>>,
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
-    // Flatpak specific options
+    // Flatpak-specific options
     runtime: Option<String>,
     permissions: Option<Vec<String>>,
     modules: Option<Vec<String>>,
@@ -468,8 +468,11 @@ impl Settings {
         self.bundle_settings.runtime.as_ref().map(String::as_str)
     }
 
-    pub fn permissions(&self) -> Option<&Vec<String>> {
-        self.bundle_settings.permissions.as_ref()
+    pub fn permissions(&self) -> &[String] {
+        match self.bundle_settings.permissions {
+            Some(ref permissions) => permissions.as_slice(),
+            None => &[],
+        }
     }
 
     pub fn modules(&self) -> Option<&Vec<String>> {

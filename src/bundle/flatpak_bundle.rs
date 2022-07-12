@@ -70,11 +70,6 @@ modules:
 const MAKE: &str = "
 BASE_DIR=$(realpath ../..)
 
-# The name of the rust binary
-BIN_NAME=$(shell sed -n 's/name = \"\(.*\)\"/\1/p' $(BASE_DIR)/Cargo.toml | head -n1)
-# The app id (e.g. org.example.MyApp)
-APP_ID=$(shell sed -n 's/id = \"\(.*\)\"/\1/p' $(BASE_DIR)/Cargo.toml | head -n1)
-
 # The rust target directory
 TARGET_DIR=$(BASE_DIR)/target
 # The gtk-rust-app out directory
@@ -114,8 +109,6 @@ const XML: &str = "
     <translation type=\"gettext\">{name}</translation>
 </component>";
 
-
-
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     if true {
         generate(settings)?;
@@ -141,7 +134,7 @@ fn generate(settings: &Settings) -> ::Result<()> {
     create_flatpak_yml(&data_dir, YML_DEV, Some(".dev"), settings).expect("Unable to create flatpak yml");
     create_flatpak_yml(&data_dir, YML, None, settings).expect("Unable to create flatpak yml");
 
-    create_app_xml();
+    create_app_xml(settings);
     Ok(())
 }
 
@@ -176,9 +169,8 @@ fn create_flatpak_yml(path: &Path, template: &str, infix: Option<&str>, settings
 
     let mut file = File::create(path)?;
 
-    let permissions = settings
+    let permissions = &settings
         .permissions()
-        .unwrap_or_else(vec![""])
         .iter()
         .map(|p| format!("- --{}", p))
         .collect::<Vec<String>>()
@@ -209,7 +201,30 @@ fn create_flatpak_yml(path: &Path, template: &str, infix: Option<&str>, settings
     Ok(())
 }
 
-fn create_app_xml() {}
+fn create_app_xml(settings: &Settings) -> ::Result<()> {
+    let mut path = settings
+        .project_out_directory()
+        .join("bundle/flatpak/data/")
+        .join(format!("{}.appdata.xml", settings.bundle_identifier()));
+
+    let mut file = File::create(path)?;
+
+    let template = XML;
+    file.write(
+        template
+            .replace("{id}", settings.bundle_identifier())
+            .replace("{name}", settings.bundle_name())
+            .replace("{summary}", settings.short_description())
+            .replace("{description}", settings.long_description().unwrap_or(""))
+            .replace("{license}", settings.copyright_string().unwrap_or(""))
+            .replace("{homepage}", settings.homepage_url())
+            .replace("{repository}", settings.homepage_url())
+            .replace("{metadata_license}", settings.copyright_string().unwrap_or(""))
+            .as_bytes(),
+    )?;
+
+    Ok(())
+}
 
 fn flatpak(release: bool, settings: &Settings) -> ::Result<()> {
     let flatpak_build_rel = settings.project_out_directory().join("bundle/flatpak/");
