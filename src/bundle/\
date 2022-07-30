@@ -35,7 +35,7 @@ modules:
   - name: {name}
     buildsystem: simple
     build-commands:
-      - cargo build --release --offline
+      - cargo build --release
       - make -C install
     sources:
       - type: archive
@@ -66,15 +66,27 @@ modules:
   - name: {name}
     buildsystem: simple
     build-commands:
-      - cargo build --release --offline
+      - cargo build --release
       - make -C install
     sources:
         - type: archive
           path: {archive_path}
-";
+
+{sources}";
 
 const MAKE: &str = "
-";
+BASE_DIR=$(realpath ../..)
+
+# The rust target directory
+TARGET_DIR=$(BASE_DIR)/target
+
+ROOT=/app
+# The binary directory inside the flatpak container
+BIN_DIR=$(ROOT)/bin
+# The share directory
+SHARE_DIR=$(ROOT)/share
+
+.PHONY: .install .uninstall";
 
 const XML: &str = "
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -141,21 +153,16 @@ fn generate(settings: &Settings) -> ::Result<()> {
 fn create_src_archive(settings: &Settings) -> ::Result<()> {
     let mut vendor = Command::new("cargo").args(["vendor"]).spawn().expect("vendoring failed").wait().expect("vendoring failed");
     
-    if !Path::new(".cargo/config.toml").exists() {
-        let cargo = &mut common::create_file(Path::new(".cargo/config.toml")).expect("Failed to make tmp file");
-        write!(cargo, "[sources.crates-io]\nreplace-with = \"vendored-sources\"\n\n[sources.vendored-sources]\ndirectory = \"deps\"")?;
-    } else {
-        let mut cargo_config = File::options().append(true).open(".cargo/config.toml")?;
-        cargo_config.write_all("\n[sources.crates-io]\nreplace-with = \"vendored-sources\"\n\n[sources.vendored-sources]\ndirectory = \"deps\"".as_bytes())?;
-    }
-
+    let cargo = &mut common::create_file(Path::new("/tmp/bundle/.cargo/config.toml")).expect("Failed to make tmp file");
+    write!(cargo, "[sources.crates-io]\nreplace-with = \"vendored-sources\"\n\n[sources.vendored-sources]\ndirectory = \"vendor\"")?;
+    
     let file = File::create("/tmp/placeholder.tar").expect("Failed to create archive");
     let mut tarfile = Builder::new(file);
-    tarfile.append_dir_all("vendor/src", "src").expect("src directory couldn't be put in archive");
-    tarfile.append_dir_all("vendor/deps", "vendor").expect("vendor directory couldn't be archived");
-    tarfile.append_path_with_name("Cargo.toml", "vendor/Cargo.toml").expect("Cargo.toml couldn't be put in archive");
-    tarfile.append_path_with_name("Cargo.lock", "vendor/Cargo.lock").expect("Cargo.lock couldn't be put in archive");
-    tarfile.append_dir_all("vendor/.cargo", ".cargo").expect("Couldn't add file to archive");
+    tarfile.append_dir_all("/tmp/bundle/.cargo", ".").expect("Couldn't add file to archive");
+    tarfile.append_dir_all("src", ".").expect("src directory couldn't be put in archive");
+    tarfile.append_dir_all("vendor", ".").expect("vendor directory couldn't be archived");
+    tarfile.append_path_with_name("Cargo.toml", "Cargo.toml").expect("Cargo.toml couldn't be put in archive");
+    tarfile.append_path_with_name("Cargo.lock", "Cargo.lock").expect("Cargo.lock couldn't be put in archive");
     for src in settings.resource_files() {
         let src = src?;
         tarfile.append_path(src);
@@ -226,7 +233,7 @@ fn create_flatpak_yml(path: &Path, template: &str, infix: Option<&str>, settings
                     .runtime()
                     .as_ref()
                     .map(|s| format!("\"{}\"", s))
-                    .unwrap_or_else(|| "\"42\"".to_string()),
+                    .unwrap_or_else(|| "\"3.36\"".to_string()),
             )
             .replace(
                 "{modules}",
