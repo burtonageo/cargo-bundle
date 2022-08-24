@@ -1,17 +1,12 @@
-use tar::Builder;
 use super::common;
 use libflate::gzip;
-use chrono;
-use dirs;
-use icns;
-use process::Command;
-use std::cmp::min;
-use std::ffi::OsStr;
 use std::fs::create_dir_all;
 use std::fs::{self, File};
+use std::io;
 use std::io::prelude::*;
-use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use tar::Builder;
 use {ResultExt, Settings};
 
 const YML_DEV: &str = "
@@ -35,8 +30,8 @@ modules:
   - name: {name}
     buildsystem: simple
     build-commands:
-      - cargo build --release --offline
-      - make -C install
+      - cargo build --offline
+      - make install
     sources:
       - type: archive
         path: {archive_path}
@@ -67,13 +62,38 @@ modules:
     buildsystem: simple
     build-commands:
       - cargo build --release --offline
-      - make -C install
+      - make install
     sources:
         - type: archive
           path: {archive_path}
 ";
 
 const MAKE: &str = "
+.RECIPEPREFIX = *
+BASE_DIR=$(realpath .)
+
+RELEASE={RELEASE}
+
+BIN_NAME={BIN_NAME}
+ROOT=/app
+BIN_DIR=$(ROOT)/bin
+SHARE_DIR=$(ROOT)/share
+TARGET_DIR=$(BASE_DIR)/target
+
+install:
+* @echo \"Installing binary into $(BIN_DIR)/{APP_ID}\"
+* @strip \"$(TARGET_DIR)/$(RELEASE)/$(BIN_NAME)\"
+* @mkdir -p $(BIN_DIR)
+* @install \"$(TARGET_DIR)/$(RELEASE)/$(BIN_NAME)\" \"$(BIN_DIR)/{APP_ID}\"
+    
+* @echo Installing icons into $(SHARE_DIR)/icons/hicolor
+* @# Force cache of icons to refresh
+* @mkdir -p $(SHARE_DIR)/applications/
+* @mkdir -p $(SHARE_DIR)/metainfo/
+
+* @echo Installing .desktop and .xml into $(SHARE_DIR)/applications, $(SHARE_DIR)/metainfo
+* @install -m 644 {APP_ID}.appdata.xml $(SHARE_DIR)/metainfo/$(APP_ID).appdata.xml
+* @install -m 644 {APP_ID}.desktop $(SHARE_DIR)/applications/{APP_ID}.desktop
 ";
 
 const XML: &str = "
@@ -103,20 +123,29 @@ const XML: &str = "
 </component>";
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
-    let dev = true;
+    let mut dev = true;
+    if !(settings.build_profile() == "dev") {
+        dev = false;
+    }
     let generate_only = false;
-    
+
     if generate_only {
         generate(settings)?;
-        return Ok(vec![PathBuf::from(settings.project_out_directory())]);
+        return Ok(vec![PathBuf::from(
+            settings.project_out_directory().join("bundle/flatpak"),
+        )]);
     } else if dev {
         generate(settings)?;
         flatpak(true, settings)?;
-        return Ok(vec![PathBuf::from(settings.project_out_directory())]);
+        return Ok(vec![PathBuf::from(
+            settings.project_out_directory().join("bundle/flatpak"),
+        )]);
     } else {
         generate(settings)?;
         flatpak(false, settings)?;
-        return Ok(vec![PathBuf::from(settings.project_out_directory())]);
+        return Ok(vec![PathBuf::from(
+            settings.project_out_directory().join("bundle/flatpak"),
+        )]);
     }
 }
 
@@ -128,55 +157,123 @@ fn generate(settings: &Settings) -> ::Result<()> {
     fs::create_dir_all(&gen_path).chain_err(|| format!("Failed to create bundle directory at {:?}", gen_path))?;
 
     let data_dir = gen_path.join("data");
-    create_dir_all(&data_dir).expect("Could not create data build directory.");
-    create_src_archive(settings);
-    create_desktop_file(settings, &data_dir).expect("Could not create desktop file");
-    create_flatpak_yml(&data_dir, YML_DEV, Some(".dev"), settings).expect("Unable to create flatpak yml");
-    create_flatpak_yml(&data_dir, YML, None, settings).expect("Unable to create flatpak yml");
+    create_dir_all(&data_dir).chain_err(|| "Could not create data build directory.")?;
+    create_desktop_file(settings, &data_dir).chain_err(|| "Could not create desktop file")?;
+    create_makefile(settings).chain_err(|| "Could not create Makefile")?;
+    create_app_xml(settings).chain_err(|| "Unable to create XML")?;
+    create_icons(settings).chain_err(|| "Unable to create icons")?;
+    create_src_archive(settings)?;
+    create_flatpak_yml(&data_dir, YML_DEV, Some(".dev"), settings).chain_err(|| "Unable to create flatpak yml")?;
+    create_flatpak_yml(&data_dir, YML, None, settings).chain_err(|| "Unable to create flatpak yml")?;
 
-    create_app_xml(settings);
+    Ok(())
+}
+
+fn create_icons(settings: &Settings) -> ::Result<()> {
+    Ok(())
+}
+
+fn create_makefile(settings: &Settings) -> ::Result<()> {
+    let path = settings.project_out_directory().join("bundle/flatpak/data/Makefile");
+
+    let mut file = File::create(path)?;
+
+    let mut profile = settings.build_profile();
+    if settings.build_profile() == "dev" {
+        profile = "debug";
+    }
+
+    let template = MAKE;
+    file.write(
+        template
+            .replace("{APP_ID}", settings.bundle_identifier())
+            .replace("{BIN_NAME}", settings.binary_name())
+            .replace("{RELEASE}", profile)
+            .as_bytes(),
+    )?;
+
     Ok(())
 }
 
 fn create_src_archive(settings: &Settings) -> ::Result<()> {
-    let mut vendor = Command::new("cargo").args(["vendor"]).spawn().expect("vendoring failed").wait().expect("vendoring failed");
-    
+    Command::new("cargo").args(["vendor"]).output().ok();
+
     if !Path::new(".cargo/config.toml").exists() {
-        let cargo = &mut common::create_file(Path::new(".cargo/config.toml")).expect("Failed to make tmp file");
+        let cargo =
+            &mut common::create_file(Path::new(".cargo/config.toml")).chain_err(|| "Failed to make tmp file")?;
         write!(cargo, "[sources.crates-io]\nreplace-with = \"vendored-sources\"\n\n[sources.vendored-sources]\ndirectory = \"deps\"")?;
-    } else {
+    } else if !config_check()? {
         let mut cargo_config = File::options().append(true).open(".cargo/config.toml")?;
         cargo_config.write_all("\n[sources.crates-io]\nreplace-with = \"vendored-sources\"\n\n[sources.vendored-sources]\ndirectory = \"deps\"".as_bytes())?;
     }
 
-    let file = File::create("/tmp/placeholder.tar").expect("Failed to create archive");
+    let file = File::create("/tmp/placeholder.tar").chain_err(|| "Failed to create archive")?;
     let mut tarfile = Builder::new(file);
-    tarfile.append_dir_all("vendor/src", "src").expect("src directory couldn't be put in archive");
-    tarfile.append_dir_all("vendor/deps", "vendor").expect("vendor directory couldn't be archived");
-    tarfile.append_path_with_name("Cargo.toml", "vendor/Cargo.toml").expect("Cargo.toml couldn't be put in archive");
-    tarfile.append_path_with_name("Cargo.lock", "vendor/Cargo.lock").expect("Cargo.lock couldn't be put in archive");
-    tarfile.append_dir_all("vendor/.cargo", ".cargo").expect("Couldn't add file to archive");
+    tarfile
+        .append_dir_all("vendor/src", "src")
+        .chain_err(|| "src directory couldn't be put in archive")?;
+    tarfile.append_dir_all("vendor/deps", "vendor").ok();
+    tarfile
+        .append_path_with_name("Cargo.toml", "vendor/Cargo.toml")
+        .chain_err(|| "Cargo.toml couldn't be put in archive")?;
+    tarfile
+        .append_path_with_name("Cargo.lock", "vendor/Cargo.lock")
+        .chain_err(|| "Cargo.lock couldn't be put in archive")?;
+    tarfile
+        .append_dir_all("vendor/.cargo", ".cargo")
+        .chain_err(|| "Couldn't add file to archive")?;
+
+    let xml = format!("{}.appdata.xml", settings.bundle_identifier());
+    let desktop = format!("{}.desktop", settings.bundle_identifier());
+    let out_dir = settings.project_out_directory().join("bundle/flatpak/data");
+    let xml_path = format!("vendor/{}", xml);
+    let desktop_path = format!("vendor/{}", desktop);
+    let desktop_current = format!("{}/{}", out_dir.to_str().unwrap(), desktop);
+    let xml_current = format!("{}/{}", out_dir.to_str().unwrap(), xml);
+    let makefile_current = format!("{}/Makefile", out_dir.to_str().unwrap());
+
+    tarfile
+        .append_path_with_name(xml_current, xml_path)
+        .chain_err(|| "XML file couldn't be put in archive")?;
+    tarfile
+        .append_path_with_name(desktop_current, desktop_path)
+        .chain_err(|| ".desktop file couldn't be put in archive")?;
+    tarfile
+        .append_path_with_name(makefile_current, "vendor/Makefile")
+        .chain_err(|| "Makefile coud not be put in archive")?;
     for src in settings.resource_files() {
         let src = src?;
-        tarfile.append_path(src);
+        tarfile.append_path(src).chain_err(|| "Couldn't add resources")?;
     }
 
-    let mut input = File::open("/tmp/placeholder.tar").expect("Not able to open file");
-    let mut path = settings
+    let mut input = File::open("/tmp/placeholder.tar").chain_err(|| format!("Not able to open file"))?;
+    let path = settings
         .project_out_directory()
         .join("bundle/flatpak/data/")
-        .join(format!("{}{}.tar.gz", settings.bundle_identifier(), settings.version_string()));
+        .join(format!(
+            "{}.{}.tar.gz",
+            settings.bundle_identifier(),
+            settings.version_string()
+        ));
 
-    let output = Box::new(fs::File::create(path).expect(&format!("Can't create file: {}{}.tar.gz", settings.bundle_identifier(), settings.version_string())));
-    let mut output = io::BufWriter::new(output);
-    let mut encoder = gzip::Encoder::new(output).expect("Failed to encode");
-    io::copy(&mut input, &mut encoder).expect("Encoding GZIP stream failed");
-    encoder.finish().into_result().unwrap();
+    let output = Box::new(fs::File::create(path).chain_err(|| {
+        format!(
+            "Can't create file: {}.{}.tar.gz",
+            settings.bundle_identifier(),
+            settings.version_string()
+        )
+    })?);
+    let output = io::BufWriter::new(output);
+    let mut encoder = gzip::Encoder::new(output).chain_err(|| format!("Failed to encode"))?;
+    io::copy(&mut input, &mut encoder).chain_err(|| format!("Encoding GZIP stream failed"))?;
+    encoder
+        .finish()
+        .into_result()
+        .chain_err(|| format!("Encoding GZIP failed"))?;
 
-    std::fs::remove_file("/tmp/placeholder.tar").expect("placeholder.tar deletion failed");
+    std::fs::remove_file("/tmp/placeholder.tar").chain_err(|| format!("placeholder.tar deletion failed"))?;
     Ok(())
 }
-
 
 fn create_desktop_file(settings: &Settings, path: &Path) -> ::Result<()> {
     let mut path = PathBuf::from(path);
@@ -191,7 +288,13 @@ fn create_desktop_file(settings: &Settings, path: &Path) -> ::Result<()> {
         settings.bundle_name(),
         settings.short_description()
     )?;
-    write!(file, "\nCategories={:?}", settings.app_category().unwrap())?;
+    write!(
+        file,
+        "\nCategories={:?}",
+        settings
+            .app_category()
+            .chain_err(|| format!("Failed to read categories"))?
+    )?;
     write!(
         file,
         "\nIcon={}\nExec={}",
@@ -238,7 +341,11 @@ fn create_flatpak_yml(path: &Path, template: &str, infix: Option<&str>, settings
             )
             .replace(
                 "{archive_path}",
-                &format!("{}{}.tar.gz", &settings.bundle_identifier(), &settings.version_string())
+                &format!(
+                    "{}.{}.tar.gz",
+                    &settings.bundle_identifier(),
+                    &settings.version_string()
+                ),
             )
             .as_bytes(),
     )?;
@@ -246,7 +353,7 @@ fn create_flatpak_yml(path: &Path, template: &str, infix: Option<&str>, settings
 }
 
 fn create_app_xml(settings: &Settings) -> ::Result<()> {
-    let mut path = settings
+    let path = settings
         .project_out_directory()
         .join("bundle/flatpak/data/")
         .join(format!("{}.appdata.xml", settings.bundle_identifier()));
@@ -270,31 +377,41 @@ fn create_app_xml(settings: &Settings) -> ::Result<()> {
     Ok(())
 }
 
-fn flatpak(release: bool, settings: &Settings) -> ::Result<()> {
+fn flatpak(dev: bool, settings: &Settings) -> ::Result<()> {
     let flatpak_build_rel = settings.project_out_directory().join("bundle/flatpak/");
-    
+
+    let mut manifest = format!("data/{}.yml", settings.bundle_identifier());
+    if dev {
+        manifest = format!("data/{}.dev.yml", settings.bundle_identifier());
+    }
+
     let mut c = Command::new("flatpak-builder");
     c.current_dir(&flatpak_build_rel);
-    if release {
-        c.arg(format!("--repo={}repo", flatpak_build_rel.display()));
-        c.arg("--force-clean");
-        c.arg(format!("--state-dir={}/state", flatpak_build_rel.display()));
-        c.arg(format!("{}{}", flatpak_build_rel.display(), settings.binary_arch()));
-        c.arg(format!("data/{}.dev.yml", settings.bundle_identifier()));
-    
-        let mut c = c.spawn()?;
-        c.wait()?;
+    c.arg(format!("--repo={}repo", flatpak_build_rel.display()));
+    c.arg("--force-clean");
+    c.arg(format!("--state-dir={}/state", flatpak_build_rel.display()));
+    c.arg(format!("{}{}", flatpak_build_rel.display(), settings.binary_arch()));
+    c.arg(manifest);
 
-        let flatpak_file_name = format!("{}.flatpak", settings.bundle_name());
+    let mut c = c.spawn()?;
+    c.wait()?;
 
-        let mut c2 = Command::new("flatpak")
-            .current_dir(&flatpak_build_rel)
-            .arg("build-bundle")
-            .arg(format!("{}repo", flatpak_build_rel.display()))
-            .arg(format!("../{}", flatpak_file_name))
-            .arg(settings.bundle_identifier())
-            .spawn()?;
-        c2.wait()?;
-    }
+    let flatpak_file_name = format!("{}.flatpak", settings.bundle_name());
+
+    let mut c2 = Command::new("flatpak")
+        .current_dir(&flatpak_build_rel)
+        .arg("build-bundle")
+        .arg(format!("{}repo", flatpak_build_rel.display()))
+        .arg(format!("{}", flatpak_file_name))
+        .arg(settings.bundle_identifier())
+        .spawn()?;
+    c2.wait()?;
     Ok(())
+}
+
+fn config_check() -> ::Result<bool> {
+    let mut config = File::open(".cargo/config.toml")?;
+    let mut contents = String::new();
+    config.read_to_string(&mut contents)?;
+    Ok(contents.contains("[sources.crates-io]"))
 }
