@@ -76,6 +76,7 @@ struct BundleSettings {
     // OS-specific settings:
     linux_mime_types: Option<Vec<String>>,
     linux_exec_args: Option<String>,
+    linux_use_terminal: Option<bool>,
     deb_depends: Option<Vec<String>>,
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
@@ -287,6 +288,8 @@ impl Settings {
     /// Returns the path to the binary being bundled.
     pub fn binary_path(&self) -> &Path { &self.binary_path }
 
+    pub fn bundle_settings(&self) -> BundleSettings { self.bundle_settings.clone() }
+
     /// If a specific package type was specified by the command-line, returns
     /// that package type; otherwise, if a target triple was specified by the
     /// command-line, returns the native package type(s) for that target;
@@ -417,6 +420,10 @@ impl Settings {
             Some(ref mime_types) => mime_types.as_slice(),
             None => &[],
         }
+    }
+
+    pub fn linux_use_terminal(&self) -> Option<bool> {
+        self.bundle_settings.linux_use_terminal
     }
 
     pub fn linux_exec_args(&self) -> Option<&str> {
