@@ -107,6 +107,8 @@ These settings are used only when bundling `osx` packages.
   this config field, you may also want have your `build.rs` script emit
   `cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=10.11` (or whatever version number
   you want) to ensure that the compiled binary has the same minimum version.
+* `osx_url_schemes`: A list of strings indicating the URL schemes that the app
+  handles.
 
 ### Example `Cargo.toml`:
 
@@ -132,6 +134,7 @@ nisi ut aliquip ex ea commodo consequat.
 """
 deb_depends = ["libgl1-mesa-glx", "libsdl2-2.0-0 (>= 2.0.5)"]
 osx_frameworks = ["SDL2"]
+osx_url_schemes = ["com.doe.exampleapplication"]
 ```
 
 ## Contributing

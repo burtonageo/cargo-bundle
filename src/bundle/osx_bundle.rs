@@ -119,6 +119,26 @@ fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>,
     write!(file,
            "  <key>CFBundleShortVersionString</key>\n  <string>{}</string>\n",
            settings.version_string())?;
+    if !settings.osx_url_schemes().is_empty() {
+        write!(file,
+            "  <key>CFBundleURLTypes</key>\n  \
+               <array>\n    \
+                   <dict>\n      \
+                       <key>CFBundleURLName</key>\n      \
+                       <string>{}</string>\n      \
+                       <key>CFBundleTypeRole</key>\n      \
+                       <string>Viewer</string>\n      \
+                       <key>CFBundleURLSchemes</key>\n      \
+                       <array>\n",
+            settings.bundle_name())?;
+        for scheme in settings.osx_url_schemes() {
+            write!(file, "        <string>{}</string>\n", scheme)?;
+        }
+        write!(file,
+            "      </array>\n    \
+                </dict>\n  \
+             </array>\n")?;
+    }
     write!(file,
            "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
            build_number)?;

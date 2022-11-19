@@ -79,6 +79,7 @@ struct BundleSettings {
     deb_depends: Option<Vec<String>>,
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
+    osx_url_schemes: Option<Vec<String>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -432,6 +433,13 @@ impl Settings {
 
     pub fn osx_minimum_system_version(&self) -> Option<&str> {
         self.bundle_settings.osx_minimum_system_version.as_ref().map(String::as_str)
+    }
+
+    pub fn osx_url_schemes(&self) -> &[String] {
+        match self.bundle_settings.osx_url_schemes {
+            Some(ref urlosx_url_schemes) => urlosx_url_schemes.as_slice(),
+            None => &[],
+        }
     }
 }
 
