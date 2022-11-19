@@ -75,6 +75,7 @@ These settings are used only when bundling Linux compatible packages (currently 
   field in the `.desktop` file. For example if the binary is called `my_program` and
   `linux_exec_args = "%f"` then the Exec filed will be `Exec=my_program %f`. Find out more from the
   [specification](https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#exec-variables)
+* `linux_use_terminal`: A boolean variable indicating the app is a console app or a gui app, default it's set to false.
 
 ### Debian-specific settings
 

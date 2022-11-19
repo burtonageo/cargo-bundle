@@ -129,7 +129,7 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     write!(file, "Exec={}\n", exec)?;
     write!(file, "Icon={}\n", bin_name)?;
     write!(file, "Name={}\n", settings.bundle_name())?;
-    write!(file, "Terminal=false\n")?;
+    write!(file, "Terminal={}\n", settings.linux_use_terminal().unwrap_or(false))?;
     write!(file, "Type=Application\n")?;
     write!(file, "MimeType={}\n", mime_types)?;
     // The `Version` field is omitted on pupose. See `generate_control_file` for specifying
