@@ -48,7 +48,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     generate_info_plist(&bundle_dir, settings, &icon_filenames).chain_err(|| {
         "Failed to create Info.plist"
     })?;
-    let bin_path = bundle_dir.join(&settings.bundle_name());
+    let bin_path = bundle_dir.join(&settings.binary_name());
     common::copy_file(settings.binary_path(), &bin_path).chain_err(|| {
         format!("Failed to copy binary from {:?}", settings.binary_path())
     })?;
