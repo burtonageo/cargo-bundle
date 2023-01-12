@@ -160,3 +160,26 @@ pub fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::assert_matches::assert_matches;
+
+    #[test]
+    fn test_generate_desktop_file() {
+        use super::*;
+        use std::io::Read;
+        let  settings = Settings::default();
+        assert_matches!(generate_desktop_file(&settings, &PathBuf::from("target/test/")), Ok(()));
+
+        let  desktop_file_contents = {
+            let mut file = File::open("target/test/usr/share/applications/app.desktop").unwrap();
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            contents
+        };
+        assert_eq!(desktop_file_contents, "[Desktop Entry]\nEncoding=UTF-8\nComment=No description\n
+                                           Exec=app\nIcon=app\nName=app\nTerminal=false\nType=Application\n
+                                            MimeType=application/x-app\n");
+    }
+}
