@@ -531,6 +531,67 @@ impl<'a> Iterator for ResourcePaths<'a> {
     }
 }
 
+/// TODO: 2023-01-12: Review this code and see the default vales are reasonable, and if we should remove it!
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            package: PackageSettings::default(),
+            package_type: None,
+            target: None,
+            features: None,
+            project_out_directory: "target".into(),
+            build_artifact: BuildArtifact::Main,
+            profile: "dev".into(),
+            all_features: false,
+            no_default_features: false,
+            binary_path: "target/debug".into(),
+            binary_name: "app".to_string(),
+            bundle_settings: BundleSettings::default(),
+        }
+    }
+}
+
+/// TODO: 2023-01-12: Review this code and see the default vales are reasonable, and if we should remove it!
+impl Default for PackageSettings {
+    fn default() -> Self {
+        PackageSettings {
+            name: "app".to_string(),
+            version: "0.1.0".to_string(),
+            authors: None,
+            description: "No description".to_string(),
+            homepage: None,
+            metadata: None,
+        }
+    }
+}
+
+/// TODO: 2023-01-12: Review this code and see the default vales are reasonable, and if we should remove it!
+impl Default for BundleSettings {
+    fn default() -> Self {
+        BundleSettings {
+            name: None,
+            identifier: None,
+            category: None,
+            short_description: None,
+            long_description: None,
+            icon: None,
+            version: None,
+            resources: None,
+            deb_depends: None,
+            linux_mime_types: Some(vec!["application/x-app".to_string()]),
+            linux_use_terminal: None,
+            linux_exec_args: None,
+            osx_frameworks: None,
+            osx_minimum_system_version: None,
+            osx_url_schemes: None,
+            bin: None,
+            copyright: None,
+            script: None,
+            example: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AppCategory, BundleSettings, CargoSettings};
