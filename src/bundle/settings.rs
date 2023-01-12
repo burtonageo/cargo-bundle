@@ -289,7 +289,7 @@ impl Settings {
     /// Returns the path to the binary being bundled.
     pub fn binary_path(&self) -> &Path { &self.binary_path }
 
-    pub fn bundle_settings(&self) -> BundleSettings { self.bundle_settings.clone() }
+    fn bundle_settings(&self) -> BundleSettings { self.bundle_settings.clone() }
 
     /// If a specific package type was specified by the command-line, returns
     /// that package type; otherwise, if a target triple was specified by the
