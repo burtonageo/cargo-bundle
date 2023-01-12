@@ -1,15 +1,16 @@
 mod category;
 mod common;
-mod deb_bundle;
 mod ios_bundle;
 mod msi_bundle;
 mod osx_bundle;
 mod rpm_bundle;
 mod settings;
+mod linux;
 
 pub use self::common::{print_error, print_finished};
 pub use self::settings::{BuildArtifact, PackageType, Settings};
 use std::path::PathBuf;
+use bundle::linux::deb_bundle;
 
 pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
