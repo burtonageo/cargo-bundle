@@ -1,11 +1,13 @@
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::File;
+use std::io;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use image::{GenericImage, ImageDecoder};
 use image::png::{PNGDecoder, PNGEncoder};
 use libflate::gzip;
+use md5::Digest;
 use walkdir::WalkDir;
 use bundle::{common, Settings};
 
@@ -17,7 +19,7 @@ pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<(
     let file = &mut common::create_file(&desktop_file_path)?;
     let mime_types = settings.linux_mime_types().iter().fold(
         "".to_owned(),
-        |acc, s| format!("{}{};", acc, s)
+        |acc, s| format!("{}{};", acc, s),
     );
     // For more information about the format of this file, see
     // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
@@ -161,25 +163,50 @@ pub fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<
     Ok(())
 }
 
+/// Compute the md5 hash of the given file.
+pub fn generate_md5sum(file_path: &Path) -> ::Result<Digest> {
+    let mut file = File::open(file_path)?;
+    let mut hash = md5::Context::new();
+    io::copy(&mut file, &mut hash)?;
+    Ok(hash.compute())
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::assert_matches::assert_matches;
+    use std::fs::File;
+    use std::io::Write;
 
     #[test]
     fn test_generate_desktop_file() {
-        use super::*;
         use std::io::Read;
-        let  settings = Settings::default();
+        let settings = Settings::default();
         assert_matches!(generate_desktop_file(&settings, &PathBuf::from("target/test/")), Ok(()));
 
-        let  desktop_file_contents = {
+        let desktop_file_contents = {
             let mut file = File::open("target/test/usr/share/applications/app.desktop").unwrap();
             let mut contents = String::new();
             file.read_to_string(&mut contents).unwrap();
             contents
         };
-        assert_eq!(desktop_file_contents, "[Desktop Entry]\nEncoding=UTF-8\nComment=No description\n
-                                           Exec=app\nIcon=app\nName=app\nTerminal=false\nType=Application\n
-                                            MimeType=application/x-app\n");
+        assert_eq!(desktop_file_contents, "[Desktop Entry]\nEncoding=UTF-8\nComment=No description\n\
+        Exec=app\nIcon=app\nName=app\nTerminal=false\nType=Application\n\
+        MimeType=application/x-app;\n");
+    }
+
+    #[test]
+    fn test_generate_md5sum() {
+        let mut file = File::create("target/test/test.txt").unwrap();
+        file.write_all(b"test").unwrap();
+        let  md5_sums = generate_md5sum(&PathBuf::from("target/test/test.txt"));
+        assert_matches!(md5_sums, Ok(_));
+        let mut md5_str = String::new();
+
+        for b in md5_sums.unwrap().iter() {
+            md5_str.push_str(&format!("{:02x}", b));
+        }
+
+        assert_eq!(md5_str, "098f6bcd4621d373cade4e832627b4f6".to_string());
     }
 }

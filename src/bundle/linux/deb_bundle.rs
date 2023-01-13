@@ -20,13 +20,12 @@
 
 use {ResultExt, Settings};
 use ar;
-use md5;
-use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use bundle::common;
-use bundle::linux::common::{create_file_with_data, generate_desktop_file, generate_icon_files, tar_and_gzip_dir, total_dir_size};
+use bundle::linux::common::{create_file_with_data, generate_desktop_file,
+                            generate_icon_files, generate_md5sum, tar_and_gzip_dir, total_dir_size};
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let arch = match settings.binary_arch() {
@@ -43,7 +42,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let base_dir = settings.project_out_directory().join("bundle/deb");
     let package_dir = base_dir.join(&package_base_name);
     if package_dir.exists() {
-        fs::remove_dir_all(&package_dir).chain_err(|| {
+        std::fs::remove_dir_all(&package_dir).chain_err(|| {
             format!("Failed to remove old {}", package_base_name)
         })?;
     }
@@ -148,10 +147,7 @@ fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> ::Result<()> {
         if path.is_dir() {
             continue;
         }
-        let mut file = File::open(path)?;
-        let mut hash = md5::Context::new();
-        io::copy(&mut file, &mut hash)?;
-        for byte in hash.compute().iter() {
+        for byte in generate_md5sum(path).iter() {
             write!(md5sums_file, "{:02x}", byte)?;
         }
         let rel_path = path.strip_prefix(data_dir).unwrap();
