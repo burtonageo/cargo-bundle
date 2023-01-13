@@ -176,11 +176,10 @@ mod tests {
     use super::*;
     use std::assert_matches::assert_matches;
     use std::fs::File;
-    use std::io::Write;
+    use std::io::{Write, Read};
 
     #[test]
     fn test_generate_desktop_file() {
-        use std::io::Read;
         let settings = Settings::default();
         assert_matches!(generate_desktop_file(&settings, &PathBuf::from("target/test/")), Ok(()));
 
@@ -193,6 +192,18 @@ mod tests {
         assert_eq!(desktop_file_contents, "[Desktop Entry]\nEncoding=UTF-8\nComment=No description\n\
         Exec=app\nIcon=app\nName=app\nTerminal=false\nType=Application\n\
         MimeType=application/x-app;\n");
+    }
+
+    #[test]
+    fn test_tar_and_gzip_dir() {
+        let  dir = PathBuf::from("target/test/dir");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut file = File::create(dir.join("file.txt")).unwrap();
+        file.write_all(b"test").unwrap();
+        assert_matches!(tar_and_gzip_dir(&dir), Ok(_));
+
+        assert!(PathBuf::from("target/test/dir.tar.gz").exists());
+        assert!(PathBuf::from("target/test/dir.tar.gz").metadata().unwrap().len() > 0);
     }
 
     #[test]
