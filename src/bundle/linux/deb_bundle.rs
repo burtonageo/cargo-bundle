@@ -147,7 +147,7 @@ fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> ::Result<()> {
         if path.is_dir() {
             continue;
         }
-        for byte in generate_md5sum(path).iter() {
+        for byte in generate_md5sum(path)?.iter() {
             write!(md5sums_file, "{:02x}", byte)?;
         }
         let rel_path = path.strip_prefix(data_dir).unwrap();
