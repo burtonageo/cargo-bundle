@@ -174,7 +174,7 @@ pub fn generate_md5sum(file_path: &Path) -> ::Result<Digest> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use  tempfile::{tempfile, tempdir};
+    use  tempfile::tempdir;
     use std::assert_matches::assert_matches;
     use std::fs::File;
     use std::io::{Write, Read};
@@ -216,7 +216,8 @@ mod tests {
 
     #[test]
     fn test_create_file_with_data() {
-        let file_path = PathBuf::from("target/test/file.txt");
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("foo.txt");
         assert_matches!(create_file_with_data(&file_path, "test"), Ok(()));
         assert!(file_path.exists());
         assert_eq!(file_path.metadata().unwrap().len(), 4);
