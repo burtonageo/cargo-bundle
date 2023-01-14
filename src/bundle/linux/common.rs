@@ -198,12 +198,23 @@ mod tests {
     fn test_tar_and_gzip_dir() {
         let  dir = PathBuf::from("target/test/dir");
         std::fs::create_dir_all(&dir).unwrap();
-        let mut file = File::create(dir.join("file.txt")).unwrap();
-        file.write_all(b"test").unwrap();
+        File::create(dir.join("file1.txt")).unwrap()
+            .write_all(b"test").unwrap();
+        std::fs::create_dir_all(dir.join("subdir")).unwrap();
+        File::create(dir.join("subdir").join("file2.txt")).unwrap()
+            .write_all(b"test").unwrap();
         assert_matches!(tar_and_gzip_dir(&dir), Ok(_));
 
         assert!(PathBuf::from("target/test/dir.tar.gz").exists());
         assert!(PathBuf::from("target/test/dir.tar.gz").metadata().unwrap().len() > 0);
+    }
+
+    #[test]
+    fn test_create_file_with_data() {
+        let file_path = PathBuf::from("target/test/file.txt");
+        assert_matches!(create_file_with_data(&file_path, "test"), Ok(()));
+        assert!(file_path.exists());
+        assert_eq!(file_path.metadata().unwrap().len(), 4);
     }
 
     #[test]
