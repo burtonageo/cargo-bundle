@@ -183,6 +183,7 @@ mod tests {
     fn test_generate_desktop_file() {
         let settings = Settings::default();
         let  temp_dir = tempdir().unwrap();
+        println!("temp_dir: {:?}", temp_dir);
         assert_matches!(generate_desktop_file(&settings, temp_dir.path()), Ok(()));
 
         let desktop_file_contents = {
@@ -199,21 +200,18 @@ mod tests {
 
     #[test]
     fn test_tar_and_gzip_dir() {
-        let  dir = PathBuf::from("target/test/dir");
-        std::fs::create_dir_all(&dir).unwrap();
-        File::create(dir.join("file1.txt")).unwrap()
+        let temp_dir = tempdir().unwrap();
+        std::fs::create_dir(temp_dir.path().join("foo")).unwrap();
+        File::create(temp_dir.path().join("foo/file1.txt")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("foo/subdir")).unwrap();
+        File::create(temp_dir.path().join("foo/subdir/file2.txt")).unwrap()
             .write_all(b"test").unwrap();
-        std::fs::create_dir_all(dir.join("subdir")).unwrap();
-        File::create(dir.join("subdir").join("file2.txt")).unwrap()
-            .write_all(b"test").unwrap();
-        assert_matches!(tar_and_gzip_dir(&dir), Ok(_));
+        let  tar_gz_file = tar_and_gzip_dir(&temp_dir.path().join("foo"));
+        assert_matches!(tar_gz_file, Ok(_));
+        let tar_gz_file = tar_gz_file.unwrap();
 
-        assert!(PathBuf::from("target/test/dir.tar.gz").exists());
-        assert!(PathBuf::from("target/test/dir.tar.gz").metadata().unwrap().len() > 0);
-
-        // Clean up
-        std::fs::remove_file("target/test/dir.tar.gz").unwrap();
-        std::fs::remove_dir_all("target/test/dir").unwrap();
+        assert!(tar_gz_file.exists());
+        assert!(tar_gz_file.metadata().unwrap().len() > 0);
     }
 
     #[test]
