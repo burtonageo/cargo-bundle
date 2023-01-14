@@ -225,17 +225,13 @@ mod tests {
 
     #[test]
     fn test_total_dir_size() {
-        let dir = PathBuf::from("target/test/dir");
-        std::fs::create_dir_all(&dir).unwrap();
-        File::create(dir.join("file1.txt")).unwrap()
+        let temp_dir = tempdir().unwrap();
+        File::create(temp_dir.path().join("file1.txt")).unwrap()
             .write_all(b"test").unwrap();
-        std::fs::create_dir_all(dir.join("subdir")).unwrap();
-        File::create(dir.join("subdir").join("file2.txt")).unwrap()
+        std::fs::create_dir_all(temp_dir.path().join("subdir")).unwrap();
+        File::create(temp_dir.path().join("subdir/file2.txt")).unwrap()
             .write_all(b"test").unwrap();
-        assert_matches!(total_dir_size(&dir), Ok(8200));
-
-        // Clean up
-        std::fs::remove_dir_all("target/test/dir").unwrap();
+        assert_matches!(total_dir_size(temp_dir.path()), Ok(148));
     }
 
     #[test]
