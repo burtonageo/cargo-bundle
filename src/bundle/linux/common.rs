@@ -174,6 +174,7 @@ pub fn generate_md5sum(file_path: &Path) -> ::Result<Digest> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use  tempfile::{tempfile, tempdir};
     use std::assert_matches::assert_matches;
     use std::fs::File;
     use std::io::{Write, Read};
@@ -181,10 +182,12 @@ mod tests {
     #[test]
     fn test_generate_desktop_file() {
         let settings = Settings::default();
-        assert_matches!(generate_desktop_file(&settings, &PathBuf::from("target/test/")), Ok(()));
+        let  temp_dir = tempdir().unwrap();
+        assert_matches!(generate_desktop_file(&settings, temp_dir.path()), Ok(()));
 
         let desktop_file_contents = {
-            let mut file = File::open("target/test/usr/share/applications/app.desktop").unwrap();
+            let mut file = File::open(temp_dir.path()
+                .join("usr/share/applications/app.desktop")).unwrap();
             let mut contents = String::new();
             file.read_to_string(&mut contents).unwrap();
             contents
@@ -192,9 +195,6 @@ mod tests {
         assert_eq!(desktop_file_contents, "[Desktop Entry]\nEncoding=UTF-8\nComment=No description\n\
         Exec=app\nIcon=app\nName=app\nTerminal=false\nType=Application\n\
         MimeType=application/x-app;\n");
-
-        // Cleanup
-        std::fs::remove_dir_all("target/test/usr").unwrap();
     }
 
     #[test]
