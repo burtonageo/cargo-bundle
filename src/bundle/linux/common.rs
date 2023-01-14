@@ -192,6 +192,9 @@ mod tests {
         assert_eq!(desktop_file_contents, "[Desktop Entry]\nEncoding=UTF-8\nComment=No description\n\
         Exec=app\nIcon=app\nName=app\nTerminal=false\nType=Application\n\
         MimeType=application/x-app;\n");
+
+        // Cleanup
+        std::fs::remove_dir_all("target/test/usr").unwrap();
     }
 
     #[test]
@@ -207,6 +210,10 @@ mod tests {
 
         assert!(PathBuf::from("target/test/dir.tar.gz").exists());
         assert!(PathBuf::from("target/test/dir.tar.gz").metadata().unwrap().len() > 0);
+
+        // Clean up
+        std::fs::remove_file("target/test/dir.tar.gz").unwrap();
+        std::fs::remove_dir_all("target/test/dir").unwrap();
     }
 
     #[test]
@@ -215,6 +222,21 @@ mod tests {
         assert_matches!(create_file_with_data(&file_path, "test"), Ok(()));
         assert!(file_path.exists());
         assert_eq!(file_path.metadata().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn test_total_dir_size() {
+        let dir = PathBuf::from("target/test/dir");
+        std::fs::create_dir_all(&dir).unwrap();
+        File::create(dir.join("file1.txt")).unwrap()
+            .write_all(b"test").unwrap();
+        std::fs::create_dir_all(dir.join("subdir")).unwrap();
+        File::create(dir.join("subdir").join("file2.txt")).unwrap()
+            .write_all(b"test").unwrap();
+        assert_matches!(total_dir_size(&dir), Ok(8200));
+
+        // Clean up
+        std::fs::remove_dir_all("target/test/dir").unwrap();
     }
 
     #[test]
@@ -230,5 +252,8 @@ mod tests {
         }
 
         assert_eq!(md5_str, "098f6bcd4621d373cade4e832627b4f6".to_string());
+
+        // Clean up
+        std::fs::remove_file("target/test/test.txt").unwrap();
     }
 }
