@@ -236,9 +236,10 @@ mod tests {
 
     #[test]
     fn test_generate_md5sum() {
-        let mut file = File::create("target/test/test.txt").unwrap();
-        file.write_all(b"test").unwrap();
-        let  md5_sums = generate_md5sum(&PathBuf::from("target/test/test.txt"));
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("foo.txt");
+        File::create(&file_path).unwrap().write_all(b"test").unwrap();
+        let  md5_sums = generate_md5sum(file_path.as_path());
         assert_matches!(md5_sums, Ok(_));
         let mut md5_str = String::new();
 
@@ -247,8 +248,5 @@ mod tests {
         }
 
         assert_eq!(md5_str, "098f6bcd4621d373cade4e832627b4f6".to_string());
-
-        // Clean up
-        std::fs::remove_file("target/test/test.txt").unwrap();
     }
 }
