@@ -1,3 +1,4 @@
+use super::category::AppCategory;
 use clap::ArgMatches;
 use glob;
 use std;
@@ -5,7 +6,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use super::category::AppCategory;
 use target_build_utils::TargetInfo;
 use toml;
 use walkdir;
@@ -42,7 +42,9 @@ impl PackageType {
         }
     }
 
-    pub fn all() -> &'static [PackageType] { ALL_PACKAGE_TYPES }
+    pub fn all() -> &'static [PackageType] {
+        ALL_PACKAGE_TYPES
+    }
 }
 
 const ALL_PACKAGE_TYPES: &[PackageType] = &[
@@ -103,7 +105,7 @@ struct PackageSettings {
 
 #[derive(Clone, Debug, Deserialize)]
 struct WorkspaceSettings {
-    members: Option<Vec<String>>
+    members: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -147,7 +149,7 @@ impl Settings {
             Some(name) => match PackageType::from_short_name(name) {
                 Some(package_type) => Some(package_type),
                 None => bail!("Unsupported bundle format: {}", name),
-            }
+            },
             None => None,
         };
         let build_artifact = if let Some(bin) = matches.value_of("bin") {
@@ -175,34 +177,35 @@ impl Settings {
         };
         let features = match matches.value_of("features") {
             Some(features) => Some(features.into()),
-            None => None
+            None => None,
         };
         let cargo_settings = CargoSettings::load(&current_dir)?;
         let package = match cargo_settings.package {
             Some(package_info) => package_info,
-            None => bail!("No 'package' info found in 'Cargo.toml'")
+            None => bail!("No 'package' info found in 'Cargo.toml'"),
         };
         let workspace_dir = Settings::get_workspace_dir(&current_dir);
-        let target_dir = Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
-        let bundle_settings = if let Some(bundle_settings) = package.metadata.as_ref().and_then(|metadata| metadata.bundle.as_ref()) {
+        let target_dir =
+            Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
+        let bundle_settings = if let Some(bundle_settings) = package
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.bundle.as_ref())
+        {
             bundle_settings.clone()
         } else {
             bail!("No [package.metadata.bundle] section in Cargo.toml");
         };
         let (bundle_settings, binary_name) = match build_artifact {
-            BuildArtifact::Main => {
-                (bundle_settings, package.name.clone())
-            }
-            BuildArtifact::Bin(ref name) => {
-                (bundle_settings_from_table(&bundle_settings.bin, "bin",
-                                            name)?,
-                 name.clone())
-            }
-            BuildArtifact::Example(ref name) => {
-                (bundle_settings_from_table(&bundle_settings.example,
-                                            "example", name)?,
-                 name.clone())
-            }
+            BuildArtifact::Main => (bundle_settings, package.name.clone()),
+            BuildArtifact::Bin(ref name) => (
+                bundle_settings_from_table(&bundle_settings.bin, "bin", name)?,
+                name.clone(),
+            ),
+            BuildArtifact::Example(ref name) => (
+                bundle_settings_from_table(&bundle_settings.example, "example", name)?,
+                name.clone(),
+            ),
         };
         let binary_path = target_dir.join(&binary_name);
         Ok(Settings {
@@ -231,10 +234,12 @@ impl Settings {
         This function determines where 'target' dir is and suffixes it with 'release' or 'debug'
         to determine where the compiled binary will be located.
     */
-    fn get_target_dir(project_root_dir: &PathBuf,
-                      target: &Option<(String, TargetInfo)>,
-                      profile: &str, build_artifact: &BuildArtifact)
-                      -> PathBuf {
+    fn get_target_dir(
+        project_root_dir: &PathBuf,
+        target: &Option<(String, TargetInfo)>,
+        profile: &str,
+        build_artifact: &BuildArtifact,
+    ) -> PathBuf {
         let mut path = project_root_dir.join("target");
         if let &Some((ref triple, _)) = target {
             path.push(triple);
@@ -284,12 +289,18 @@ impl Settings {
     }
 
     /// Returns the file name of the binary being bundled.
-    pub fn binary_name(&self) -> &str { &self.binary_name }
+    pub fn binary_name(&self) -> &str {
+        &self.binary_name
+    }
 
     /// Returns the path to the binary being bundled.
-    pub fn binary_path(&self) -> &Path { &self.binary_path }
+    pub fn binary_path(&self) -> &Path {
+        &self.binary_path
+    }
 
-    pub fn bundle_settings(&self) -> BundleSettings { self.bundle_settings.clone() }
+    pub fn bundle_settings(&self) -> BundleSettings {
+        self.bundle_settings.clone()
+    }
 
     /// If a specific package type was specified by the command-line, returns
     /// that package type; otherwise, if a target triple was specified by the
@@ -333,22 +344,37 @@ impl Settings {
     }
 
     /// Returns the artifact that is being bundled.
-    pub fn build_artifact(&self) -> &BuildArtifact { &self.build_artifact }
+    pub fn build_artifact(&self) -> &BuildArtifact {
+        &self.build_artifact
+    }
 
     /// Returns true if the bundle is being compiled in release mode, false if
     /// it's being compiled in debug mode.
-    pub fn build_profile(&self) -> &str { &self.profile }
+    pub fn build_profile(&self) -> &str {
+        &self.profile
+    }
 
-    pub fn all_features(&self) -> bool { self.all_features }
+    pub fn all_features(&self) -> bool {
+        self.all_features
+    }
 
-    pub fn no_default_features(&self) -> bool { self.no_default_features }
+    pub fn no_default_features(&self) -> bool {
+        self.no_default_features
+    }
 
     pub fn bundle_name(&self) -> &str {
-        self.bundle_settings.name.as_ref().unwrap_or(&self.package.name)
+        self.bundle_settings
+            .name
+            .as_ref()
+            .unwrap_or(&self.package.name)
     }
 
     pub fn bundle_identifier(&self) -> &str {
-        self.bundle_settings.identifier.as_ref().map(String::as_str).unwrap_or("")
+        self.bundle_settings
+            .identifier
+            .as_ref()
+            .map(String::as_str)
+            .unwrap_or("")
     }
 
     /// Returns an iterator over the icon files to be used for this bundle.
@@ -369,7 +395,10 @@ impl Settings {
     }
 
     pub fn version_string(&self) -> &str {
-        self.bundle_settings.version.as_ref().unwrap_or(&self.package.version)
+        self.bundle_settings
+            .version
+            .as_ref()
+            .unwrap_or(&self.package.version)
     }
 
     pub fn copyright_string(&self) -> Option<&str> {
@@ -393,7 +422,12 @@ impl Settings {
     }
 
     pub fn homepage_url(&self) -> &str {
-        &self.package.homepage.as_ref().map(String::as_str).unwrap_or("")
+        &self
+            .package
+            .homepage
+            .as_ref()
+            .map(String::as_str)
+            .unwrap_or("")
     }
 
     pub fn app_category(&self) -> Option<AppCategory> {
@@ -401,12 +435,17 @@ impl Settings {
     }
 
     pub fn short_description(&self) -> &str {
-        self.bundle_settings.short_description.as_ref().
-            unwrap_or(&self.package.description)
+        self.bundle_settings
+            .short_description
+            .as_ref()
+            .unwrap_or(&self.package.description)
     }
 
     pub fn long_description(&self) -> Option<&str> {
-        self.bundle_settings.long_description.as_ref().map(String::as_str)
+        self.bundle_settings
+            .long_description
+            .as_ref()
+            .map(String::as_str)
     }
 
     pub fn debian_dependencies(&self) -> &[String] {
@@ -428,7 +467,10 @@ impl Settings {
     }
 
     pub fn linux_exec_args(&self) -> Option<&str> {
-        self.bundle_settings.linux_exec_args.as_ref().map(String::as_str)
+        self.bundle_settings
+            .linux_exec_args
+            .as_ref()
+            .map(String::as_str)
     }
 
     pub fn osx_frameworks(&self) -> &[String] {
@@ -439,7 +481,10 @@ impl Settings {
     }
 
     pub fn osx_minimum_system_version(&self) -> Option<&str> {
-        self.bundle_settings.osx_minimum_system_version.as_ref().map(String::as_str)
+        self.bundle_settings
+            .osx_minimum_system_version
+            .as_ref()
+            .map(String::as_str)
     }
 
     pub fn osx_url_schemes(&self) -> &[String] {
@@ -450,14 +495,19 @@ impl Settings {
     }
 }
 
-fn bundle_settings_from_table(opt_map: &Option<HashMap<String, BundleSettings>>,
-                              map_name: &str, bundle_name: &str)
-                              -> ::Result<BundleSettings> {
+fn bundle_settings_from_table(
+    opt_map: &Option<HashMap<String, BundleSettings>>,
+    map_name: &str,
+    bundle_name: &str,
+) -> ::Result<BundleSettings> {
     if let Some(bundle_settings) = opt_map.as_ref().and_then(|map| map.get(bundle_name)) {
         Ok(bundle_settings.clone())
     } else {
-        bail!("No [package.metadata.bundle.{}.{}] section in Cargo.toml",
-              map_name, bundle_name);
+        bail!(
+            "No [package.metadata.bundle.{}.{}] section in Cargo.toml",
+            map_name,
+            bundle_name
+        );
     }
 }
 
@@ -574,12 +624,19 @@ mod tests {
         assert_eq!(bundle.identifier, Some("com.example.app".to_string()));
         assert_eq!(bundle.icon, None);
         assert_eq!(bundle.version, None);
-        assert_eq!(bundle.resources,
-                   Some(vec!["data".to_string(), "foo/bar".to_string()]));
+        assert_eq!(
+            bundle.resources,
+            Some(vec!["data".to_string(), "foo/bar".to_string()])
+        );
         assert_eq!(bundle.category, Some(AppCategory::PuzzleGame));
-        assert_eq!(bundle.long_description,
-                   Some("This is an example of a\n\
-                         simple application.\n".to_string()));
+        assert_eq!(
+            bundle.long_description,
+            Some(
+                "This is an example of a\n\
+                         simple application.\n"
+                    .to_string()
+            )
+        );
     }
 
     #[test]
