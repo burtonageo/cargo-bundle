@@ -19,11 +19,10 @@
 // generate postinst or prerm files.
 
 use super::common;
-use {ResultExt, Settings};
 use ar;
 use icns;
-use image::{self, GenericImage, ImageDecoder};
 use image::png::{PNGDecoder, PNGEncoder};
+use image::{self, GenericImage, ImageDecoder};
 use libflate::gzip;
 use md5;
 use std::collections::BTreeSet;
@@ -33,71 +32,63 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use tar;
 use walkdir::WalkDir;
+use {ResultExt, Settings};
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let arch = match settings.binary_arch() {
         "x86" => "i386",
         "x86_64" => "amd64",
         "arm" => "armhf", // ARM64 is detected differently, armel isn't supported, so armhf is the only reasonable choice here.
-	"aarch64" => "arm64",
+        "aarch64" => "arm64",
         other => other,
     };
-    let package_base_name = format!("{}_{}_{}", settings.binary_name(),
-                                    settings.version_string(), arch);
+    let package_base_name = format!(
+        "{}_{}_{}",
+        settings.binary_name(),
+        settings.version_string(),
+        arch
+    );
     let package_name = format!("{}.deb", package_base_name);
     common::print_bundling(&package_name)?;
     let base_dir = settings.project_out_directory().join("bundle/deb");
     let package_dir = base_dir.join(&package_base_name);
     if package_dir.exists() {
-        fs::remove_dir_all(&package_dir).chain_err(|| {
-            format!("Failed to remove old {}", package_base_name)
-        })?;
+        fs::remove_dir_all(&package_dir)
+            .chain_err(|| format!("Failed to remove old {}", package_base_name))?;
     }
     let package_path = base_dir.join(package_name);
 
     // Generate data files.
     let data_dir = package_dir.join("data");
     let binary_dest = data_dir.join("usr/bin").join(settings.binary_name());
-    common::copy_file(settings.binary_path(), &binary_dest).chain_err(|| {
-        "Failed to copy binary file"
-    })?;
-    transfer_resource_files(settings, &data_dir).chain_err(|| {
-        "Failed to copy resource files"
-    })?;
-    generate_icon_files(settings, &data_dir).chain_err(|| {
-        "Failed to create icon files"
-    })?;
-    generate_desktop_file(settings, &data_dir).chain_err(|| {
-        "Failed to create desktop file"
-    })?;
+    common::copy_file(settings.binary_path(), &binary_dest)
+        .chain_err(|| "Failed to copy binary file")?;
+    transfer_resource_files(settings, &data_dir).chain_err(|| "Failed to copy resource files")?;
+    generate_icon_files(settings, &data_dir).chain_err(|| "Failed to create icon files")?;
+    generate_desktop_file(settings, &data_dir).chain_err(|| "Failed to create desktop file")?;
 
     // Generate control files.
     let control_dir = package_dir.join("control");
-    generate_control_file(settings, arch, &control_dir, &data_dir).chain_err(|| {
-        "Failed to create control file"
-    })?;
-    generate_md5sums(&control_dir, &data_dir).chain_err(|| {
-        "Failed to create md5sums file"
-    })?;
+    generate_control_file(settings, arch, &control_dir, &data_dir)
+        .chain_err(|| "Failed to create control file")?;
+    generate_md5sums(&control_dir, &data_dir).chain_err(|| "Failed to create md5sums file")?;
 
     // Generate `debian-binary` file; see
     // http://www.tldp.org/HOWTO/Debian-Binary-Package-Building-HOWTO/x60.html#AEN66
     let debian_binary_path = package_dir.join("debian-binary");
-    create_file_with_data(&debian_binary_path, "2.0\n").chain_err(|| {
-        "Failed to create debian-binary file"
-    })?;
+    create_file_with_data(&debian_binary_path, "2.0\n")
+        .chain_err(|| "Failed to create debian-binary file")?;
 
     // Apply tar/gzip/ar to create the final package file.
-    let control_tar_gz_path = tar_and_gzip_dir(control_dir).chain_err(|| {
-        "Failed to tar/gzip control directory"
-    })?;
-    let data_tar_gz_path = tar_and_gzip_dir(data_dir).chain_err(|| {
-        "Failed to tar/gzip data directory"
-    })?;
-    create_archive(vec![debian_binary_path, control_tar_gz_path, data_tar_gz_path],
-                   &package_path).chain_err(|| {
-        "Failed to create package archive"
-    })?;
+    let control_tar_gz_path =
+        tar_and_gzip_dir(control_dir).chain_err(|| "Failed to tar/gzip control directory")?;
+    let data_tar_gz_path =
+        tar_and_gzip_dir(data_dir).chain_err(|| "Failed to tar/gzip data directory")?;
+    create_archive(
+        vec![debian_binary_path, control_tar_gz_path, data_tar_gz_path],
+        &package_path,
+    )
+    .chain_err(|| "Failed to create package archive")?;
     Ok(vec![package_path])
 }
 
@@ -105,12 +96,14 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     let bin_name = settings.binary_name();
     let desktop_file_name = format!("{}.desktop", bin_name);
-    let desktop_file_path = data_dir.join("usr/share/applications").join(desktop_file_name);
+    let desktop_file_path = data_dir
+        .join("usr/share/applications")
+        .join(desktop_file_name);
     let file = &mut common::create_file(&desktop_file_path)?;
-    let mime_types = settings.linux_mime_types().iter().fold(
-        "".to_owned(),
-        |acc, s| format!("{}{};", acc, s)
-    );
+    let mime_types = settings
+        .linux_mime_types()
+        .iter()
+        .fold("".to_owned(), |acc, s| format!("{}{};", acc, s));
     // For more information about the format of this file, see
     // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
     write!(file, "[Desktop Entry]\n")?;
@@ -129,7 +122,11 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     write!(file, "Exec={}\n", exec)?;
     write!(file, "Icon={}\n", bin_name)?;
     write!(file, "Name={}\n", settings.bundle_name())?;
-    write!(file, "Terminal={}\n", settings.linux_use_terminal().unwrap_or(false))?;
+    write!(
+        file,
+        "Terminal={}\n",
+        settings.linux_use_terminal().unwrap_or(false)
+    )?;
     write!(file, "Type=Application\n")?;
     write!(file, "MimeType={}\n", mime_types)?;
     // The `Version` field is omitted on pupose. See `generate_control_file` for specifying
@@ -137,14 +134,21 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
     Ok(())
 }
 
-fn generate_control_file(settings: &Settings, arch: &str, control_dir: &Path, data_dir: &Path) -> ::Result<()> {
+fn generate_control_file(
+    settings: &Settings,
+    arch: &str,
+    control_dir: &Path,
+    data_dir: &Path,
+) -> ::Result<()> {
     // For more information about the format of this file, see
     // https://www.debian.org/doc/debian-policy/ch-controlfields.html
     let dest_path = control_dir.join("control");
     let mut file = common::create_file(&dest_path)?;
-    writeln!(&mut file, "Package: {}",
-             str::replace(settings.bundle_name(), " ", "-")
-             .to_ascii_lowercase())?;
+    writeln!(
+        &mut file,
+        "Package: {}",
+        str::replace(settings.bundle_name(), " ", "-").to_ascii_lowercase()
+    )?;
     writeln!(&mut file, "Version: {}", settings.version_string())?;
     writeln!(&mut file, "Architecture: {}", arch)?;
     writeln!(&mut file, "Installed-Size: {}", total_dir_size(data_dir)?)?;
@@ -196,11 +200,10 @@ fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> ::Result<()> {
             write!(md5sums_file, "{:02x}", byte)?;
         }
         let rel_path = path.strip_prefix(data_dir).unwrap();
-        let path_str = rel_path.to_str()
-            .ok_or_else(|| {
-                            let msg = format!("Non-UTF-8 path: {:?}", rel_path);
-                            io::Error::new(io::ErrorKind::InvalidData, msg)
-                        })?;
+        let path_str = rel_path.to_str().ok_or_else(|| {
+            let msg = format!("Non-UTF-8 path: {:?}", rel_path);
+            io::Error::new(io::ErrorKind::InvalidData, msg)
+        })?;
         write!(md5sums_file, "  {}\n", path_str)?;
     }
     Ok(())
@@ -213,9 +216,8 @@ fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> ::Result<()>
     for src in settings.resource_files() {
         let src = src?;
         let dest = resource_dir.join(common::resource_relpath(&src));
-        common::copy_file(&src, &dest).chain_err(|| {
-            format!("Failed to copy resource file {:?}", src)
-        })?;
+        common::copy_file(&src, &dest)
+            .chain_err(|| format!("Failed to copy resource file {:?}", src))?;
     }
     Ok(())
 }
@@ -224,11 +226,13 @@ fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> ::Result<()>
 fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> {
     let base_dir = data_dir.join("usr/share/icons/hicolor");
     let get_dest_path = |width: u32, height: u32, is_high_density: bool| {
-        base_dir.join(format!("{}x{}{}/apps/{}.png",
-                              width,
-                              height,
-                              if is_high_density { "@2x" } else { "" },
-                              settings.binary_name()))
+        base_dir.join(format!(
+            "{}x{}{}/apps/{}.png",
+            width,
+            height,
+            if is_high_density { "@2x" } else { "" },
+            settings.binary_name()
+        ))
     };
     let mut sizes = BTreeSet::new();
     // Prefer PNG files.
@@ -293,9 +297,7 @@ fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> ::Result<()> {
 fn total_dir_size(dir: &Path) -> ::Result<u64> {
     let mut total: u64 = 0;
     for entry in WalkDir::new(&dir) {
-        total += entry?
-            .metadata()?
-            .len();
+        total += entry?.metadata()?.len();
     }
     Ok(total)
 }
@@ -343,7 +345,6 @@ fn create_archive(srcs: Vec<PathBuf>, dest: &Path) -> ::Result<()> {
     for path in &srcs {
         builder.append_path(path)?;
     }
-    builder.into_inner()?
-        .flush()?;
+    builder.into_inner()?.flush()?;
     Ok(())
 }

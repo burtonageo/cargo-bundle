@@ -1,4 +1,3 @@
-use ::ResultExt;
 use std;
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -6,6 +5,7 @@ use std::io::{self, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 use term;
 use walkdir;
+use ResultExt;
 
 /// Returns true if the path has a filename indicating that it is a high-desity
 /// "retina" icon.  Specifically, returns true the the file stem ends with
@@ -23,13 +23,10 @@ pub fn is_retina<P: AsRef<Path>>(path: P) -> bool {
 /// needed.
 pub fn create_file(path: &Path) -> ::Result<BufWriter<File>> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(&parent).chain_err(|| {
-            format!("Failed to create directory {:?}", parent)
-        })?;
+        fs::create_dir_all(&parent)
+            .chain_err(|| format!("Failed to create directory {:?}", parent))?;
     }
-    let file = File::create(path).chain_err(|| {
-        format!("Failed to create file {:?}", path)
-    })?;
+    let file = File::create(path).chain_err(|| format!("Failed to create file {:?}", path))?;
     Ok(BufWriter::new(file))
 }
 
@@ -64,12 +61,8 @@ pub fn copy_file(from: &Path, to: &Path) -> ::Result<()> {
         bail!("{:?} is not a file", from);
     }
     let dest_dir = to.parent().unwrap();
-    fs::create_dir_all(dest_dir).chain_err(|| {
-        format!("Failed to create {:?}", dest_dir)
-    })?;
-    fs::copy(from, to).chain_err(|| {
-        format!("Failed to copy {:?} to {:?}", from, to)
-    })?;
+    fs::create_dir_all(dest_dir).chain_err(|| format!("Failed to create {:?}", dest_dir))?;
+    fs::copy(from, to).chain_err(|| format!("Failed to copy {:?} to {:?}", from, to))?;
     Ok(())
 }
 
@@ -88,9 +81,7 @@ pub fn copy_dir(from: &Path, to: &Path) -> ::Result<()> {
         bail!("{:?} already exists", to);
     }
     let parent = to.parent().unwrap();
-    fs::create_dir_all(parent).chain_err(|| {
-        format!("Failed to create {:?}", parent)
-    })?;
+    fs::create_dir_all(parent).chain_err(|| format!("Failed to create {:?}", parent))?;
     for entry in walkdir::WalkDir::new(from) {
         let entry = entry?;
         debug_assert!(entry.path().starts_with(from));
@@ -151,7 +142,10 @@ pub fn print_finished(output_paths: &Vec<PathBuf>) -> ::Result<()> {
     Ok(())
 }
 
-fn safe_term_attr<T : term::Terminal + ?Sized>(output: &mut Box<T>, attr: term::Attr) -> term::Result<()> {
+fn safe_term_attr<T: term::Terminal + ?Sized>(
+    output: &mut Box<T>,
+    attr: term::Attr,
+) -> term::Result<()> {
     match output.supports_attr(attr) {
         true => output.attr(attr),
         false => Ok(()),
@@ -230,10 +224,10 @@ pub fn print_error(error: &::Error) -> ::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::{copy_dir, create_file, is_retina, resource_relpath, symlink_file};
     use std;
     use std::io::Write;
     use std::path::PathBuf;
-    use super::{copy_dir, create_file, symlink_file, is_retina, resource_relpath};
     use tempfile;
 
     #[test]
@@ -260,23 +254,40 @@ mod tests {
             let mut file = create_file(&tmp.path().join("orig/sub/file.txt")).unwrap();
             write!(file, "Hello, world!\n").unwrap();
         }
-        symlink_file(&PathBuf::from("sub/file.txt"),
-                     &tmp.path().join("orig/link")).unwrap();
-        assert_eq!(std::fs::read(tmp.path().join("orig/link")).unwrap().as_slice(),
-                   b"Hello, world!\n");
+        symlink_file(
+            &PathBuf::from("sub/file.txt"),
+            &tmp.path().join("orig/link"),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read(tmp.path().join("orig/link"))
+                .unwrap()
+                .as_slice(),
+            b"Hello, world!\n"
+        );
         // Copy ${TMP}/orig to ${TMP}/parent/copy, and make sure that the
         // directory structure, file, and symlink got copied correctly.
         copy_dir(&tmp.path().join("orig"), &tmp.path().join("parent/copy")).unwrap();
         assert!(tmp.path().join("parent/copy").is_dir());
         assert!(tmp.path().join("parent/copy/sub").is_dir());
         assert!(tmp.path().join("parent/copy/sub/file.txt").is_file());
-        assert_eq!(std::fs::read(tmp.path().join("parent/copy/sub/file.txt")).unwrap().as_slice(),
-                   b"Hello, world!\n");
+        assert_eq!(
+            std::fs::read(tmp.path().join("parent/copy/sub/file.txt"))
+                .unwrap()
+                .as_slice(),
+            b"Hello, world!\n"
+        );
         assert!(tmp.path().join("parent/copy/link").exists());
-        assert_eq!(std::fs::read_link(tmp.path().join("parent/copy/link")).unwrap(),
-                   PathBuf::from("sub/file.txt"));
-        assert_eq!(std::fs::read(tmp.path().join("parent/copy/link")).unwrap().as_slice(),
-                   b"Hello, world!\n");
+        assert_eq!(
+            std::fs::read_link(tmp.path().join("parent/copy/link")).unwrap(),
+            PathBuf::from("sub/file.txt")
+        );
+        assert_eq!(
+            std::fs::read(tmp.path().join("parent/copy/link"))
+                .unwrap()
+                .as_slice(),
+            b"Hello, world!\n"
+        );
     }
 
     #[test]
@@ -287,11 +298,17 @@ mod tests {
 
     #[test]
     fn resource_relative_paths() {
-        assert_eq!(resource_relpath(&PathBuf::from("./data/images/button.png")),
-                   PathBuf::from("data/images/button.png"));
-        assert_eq!(resource_relpath(&PathBuf::from("../../images/wheel.png")),
-                   PathBuf::from("_up_/_up_/images/wheel.png"));
-        assert_eq!(resource_relpath(&PathBuf::from("/home/ferris/crab.png")),
-                   PathBuf::from("_root_/home/ferris/crab.png"));
+        assert_eq!(
+            resource_relpath(&PathBuf::from("./data/images/button.png")),
+            PathBuf::from("data/images/button.png")
+        );
+        assert_eq!(
+            resource_relpath(&PathBuf::from("../../images/wheel.png")),
+            PathBuf::from("_up_/_up_/images/wheel.png")
+        );
+        assert_eq!(
+            resource_relpath(&PathBuf::from("/home/ferris/crab.png")),
+            PathBuf::from("_root_/home/ferris/crab.png")
+        );
     }
 }
