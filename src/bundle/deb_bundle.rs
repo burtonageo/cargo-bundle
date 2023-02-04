@@ -19,6 +19,7 @@
 // generate postinst or prerm files.
 
 use super::common;
+use crate::{ResultExt, Settings};
 use ar;
 use icns;
 use image::png::{PNGDecoder, PNGEncoder};
@@ -32,9 +33,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use tar;
 use walkdir::WalkDir;
-use {ResultExt, Settings};
 
-pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
+pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let arch = match settings.binary_arch() {
         "x86" => "i386",
         "x86_64" => "amd64",
@@ -93,7 +93,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
 }
 
 /// Generate the application desktop file and store it under the `data_dir`.
-fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
+fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
     let bin_name = settings.binary_name();
     let desktop_file_name = format!("{}.desktop", bin_name);
     let desktop_file_path = data_dir
@@ -139,7 +139,7 @@ fn generate_control_file(
     arch: &str,
     control_dir: &Path,
     data_dir: &Path,
-) -> ::Result<()> {
+) -> crate::Result<()> {
     // For more information about the format of this file, see
     // https://www.debian.org/doc/debian-policy/ch-controlfields.html
     let dest_path = control_dir.join("control");
@@ -184,7 +184,7 @@ fn generate_control_file(
 
 /// Create an `md5sums` file in the `control_dir` containing the MD5 checksums
 /// for each file within the `data_dir`.
-fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> ::Result<()> {
+fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> crate::Result<()> {
     let md5sums_path = control_dir.join("md5sums");
     let mut md5sums_file = common::create_file(&md5sums_path)?;
     for entry in WalkDir::new(data_dir) {
@@ -211,7 +211,7 @@ fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> ::Result<()> {
 
 /// Copy the bundle's resource files into an appropriate directory under the
 /// `data_dir`.
-fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> ::Result<()> {
+fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
     let resource_dir = data_dir.join("usr/lib").join(settings.binary_name());
     for src in settings.resource_files() {
         let src = src?;
@@ -223,7 +223,7 @@ fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> ::Result<()>
 }
 
 /// Generate the icon files and store them under the `data_dir`.
-fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> {
+fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> crate::Result<()> {
     let base_dir = data_dir.join("usr/share/icons/hicolor");
     let get_dest_path = |width: u32, height: u32, is_high_density: bool| {
         base_dir.join(format!(
@@ -285,7 +285,7 @@ fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> 
 
 /// Create an empty file at the given path, creating any parent directories as
 /// needed, then write `data` into the file.
-fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> ::Result<()> {
+fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> crate::Result<()> {
     let mut file = common::create_file(path.as_ref())?;
     file.write_all(data.as_bytes())?;
     file.flush()?;
@@ -294,7 +294,7 @@ fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> ::Result<()> {
 
 /// Computes the total size, in bytes, of the given directory and all of its
 /// contents.
-fn total_dir_size(dir: &Path) -> ::Result<u64> {
+fn total_dir_size(dir: &Path) -> crate::Result<u64> {
     let mut total: u64 = 0;
     for entry in WalkDir::new(&dir) {
         total += entry?.metadata()?.len();
@@ -303,7 +303,7 @@ fn total_dir_size(dir: &Path) -> ::Result<u64> {
 }
 
 /// Writes a tar file to the given writer containing the given directory.
-fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> ::Result<W> {
+fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> crate::Result<W> {
     let src_dir = src_dir.as_ref();
     let mut tar_builder = tar::Builder::new(dest_file);
     for entry in WalkDir::new(&src_dir) {
@@ -327,7 +327,7 @@ fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> ::
 /// Creates a `.tar.gz` file from the given directory (placing the new file
 /// within the given directory's parent directory), then deletes the original
 /// directory and returns the path to the new file.
-fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> ::Result<PathBuf> {
+fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> crate::Result<PathBuf> {
     let src_dir = src_dir.as_ref();
     let dest_path = src_dir.with_extension("tar.gz");
     let dest_file = common::create_file(&dest_path)?;
@@ -340,7 +340,7 @@ fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> ::Result<PathBuf> {
 
 /// Creates an `ar` archive from the given source files and writes it to the
 /// given destination path.
-fn create_archive(srcs: Vec<PathBuf>, dest: &Path) -> ::Result<()> {
+fn create_archive(srcs: Vec<PathBuf>, dest: &Path) -> crate::Result<()> {
     let mut builder = ar::Builder::new(common::create_file(&dest)?);
     for path in &srcs {
         builder.append_path(path)?;

@@ -28,7 +28,7 @@ extern crate tempfile;
 
 mod bundle;
 
-use bundle::{bundle_project, BuildArtifact, PackageType, Settings};
+use crate::bundle::{bundle_project, BuildArtifact, PackageType, Settings};
 use clap::{App, AppSettings, Arg, SubCommand};
 use std::env;
 use std::process;
@@ -48,7 +48,7 @@ error_chain! {
 }
 
 /// Runs `cargo build` to make sure the binary file is up-to-date.
-fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
+fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
     if std::env::var("CARGO_BUNDLE_SKIP_BUILD").is_ok() {
         return Ok(());
     }
@@ -95,7 +95,7 @@ fn build_project_if_unbuilt(settings: &Settings) -> ::Result<()> {
     Ok(())
 }
 
-fn run() -> ::Result<()> {
+fn run() -> crate::Result<()> {
     let all_formats: Vec<&str> = PackageType::all()
         .iter()
         .map(PackageType::short_name)
