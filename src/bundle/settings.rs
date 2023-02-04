@@ -134,7 +134,7 @@ impl CargoSettings {
     /*
         Try to load a set of CargoSettings from a "Cargo.toml" file in the specified directory
     */
-    fn load(dir: &PathBuf) -> ::Result<Self> {
+    fn load(dir: &PathBuf) -> crate::Result<Self> {
         let toml_path = dir.join("Cargo.toml");
         let mut toml_str = String::new();
         let mut toml_file = File::open(toml_path)?;
@@ -144,7 +144,7 @@ impl CargoSettings {
 }
 
 impl Settings {
-    pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> ::Result<Self> {
+    pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> crate::Result<Self> {
         let package_type = match matches.value_of("format") {
             Some(name) => match PackageType::from_short_name(name) {
                 Some(package_type) => Some(package_type),
@@ -298,16 +298,12 @@ impl Settings {
         &self.binary_path
     }
 
-    pub fn bundle_settings(&self) -> BundleSettings {
-        self.bundle_settings.clone()
-    }
-
     /// If a specific package type was specified by the command-line, returns
     /// that package type; otherwise, if a target triple was specified by the
     /// command-line, returns the native package type(s) for that target;
     /// otherwise, returns the native package type(s) for the host platform.
     /// Fails if the host/target's native package type is not supported.
-    pub fn package_types(&self) -> ::Result<Vec<PackageType>> {
+    pub fn package_types(&self) -> crate::Result<Vec<PackageType>> {
         if let Some(package_type) = self.package_type {
             Ok(vec![package_type])
         } else {
@@ -499,7 +495,7 @@ fn bundle_settings_from_table(
     opt_map: &Option<HashMap<String, BundleSettings>>,
     map_name: &str,
     bundle_name: &str,
-) -> ::Result<BundleSettings> {
+) -> crate::Result<BundleSettings> {
     if let Some(bundle_settings) = opt_map.as_ref().and_then(|map| map.get(bundle_name)) {
         Ok(bundle_settings.clone())
     } else {
@@ -530,15 +526,15 @@ impl<'a> ResourcePaths<'a> {
 }
 
 impl<'a> Iterator for ResourcePaths<'a> {
-    type Item = ::Result<PathBuf>;
+    type Item = crate::Result<PathBuf>;
 
-    fn next(&mut self) -> Option<::Result<PathBuf>> {
+    fn next(&mut self) -> Option<crate::Result<PathBuf>> {
         loop {
             if let Some(ref mut walk_entries) = self.walk_iter {
                 if let Some(entry) = walk_entries.next() {
                     let entry = match entry {
                         Ok(entry) => entry,
-                        Err(error) => return Some(Err(::Error::from(error))),
+                        Err(error) => return Some(Err(crate::Error::from(error))),
                     };
                     let path = entry.path();
                     if path.is_dir() {
@@ -552,7 +548,7 @@ impl<'a> Iterator for ResourcePaths<'a> {
                 if let Some(glob_result) = glob_paths.next() {
                     let path = match glob_result {
                         Ok(path) => path,
-                        Err(error) => return Some(Err(::Error::from(error))),
+                        Err(error) => return Some(Err(crate::Error::from(error))),
                     };
                     if path.is_dir() {
                         if self.allow_walk {
@@ -561,7 +557,7 @@ impl<'a> Iterator for ResourcePaths<'a> {
                             continue;
                         } else {
                             let msg = format!("{:?} is a directory", path);
-                            return Some(Err(::Error::from(msg)));
+                            return Some(Err(crate::Error::from(msg)));
                         }
                     }
                     return Some(Ok(path));
@@ -571,7 +567,7 @@ impl<'a> Iterator for ResourcePaths<'a> {
             if let Some(pattern) = self.pattern_iter.next() {
                 let glob = match glob::glob(pattern) {
                     Ok(glob) => glob,
-                    Err(error) => return Some(Err(::Error::from(error))),
+                    Err(error) => return Some(Err(crate::Error::from(error))),
                 };
                 self.glob_iter = Some(glob);
                 continue;

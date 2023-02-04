@@ -18,6 +18,7 @@
 // files into the `Contents` directory of the bundle.
 
 use super::common;
+use crate::{ResultExt, Settings};
 use chrono;
 use dirs;
 use icns;
@@ -28,9 +29,8 @@ use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
-use {ResultExt, Settings};
 
-pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
+pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
     let app_bundle_path = settings
@@ -73,7 +73,7 @@ pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     Ok(vec![app_bundle_path])
 }
 
-fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::Result<()> {
+fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> crate::Result<()> {
     let dest_dir = bundle_directory.join("MacOS");
     common::copy_file(
         settings.binary_path(),
@@ -85,7 +85,7 @@ fn create_info_plist(
     bundle_dir: &Path,
     bundle_icon_file: Option<PathBuf>,
     settings: &Settings,
-) -> ::Result<()> {
+) -> crate::Result<()> {
     let build_number = chrono::Utc::now().format("%Y%m%d.%H%M%S");
     let file = &mut common::create_file(&bundle_dir.join("Info.plist"))?;
     write!(
@@ -203,7 +203,7 @@ fn create_info_plist(
     Ok(())
 }
 
-fn copy_framework_from(dest_dir: &Path, framework: &str, src_dir: &Path) -> ::Result<bool> {
+fn copy_framework_from(dest_dir: &Path, framework: &str, src_dir: &Path) -> crate::Result<bool> {
     let src_name = format!("{}.framework", framework);
     let src_path = src_dir.join(&src_name);
     if src_path.exists() {
@@ -214,7 +214,7 @@ fn copy_framework_from(dest_dir: &Path, framework: &str, src_dir: &Path) -> ::Re
     }
 }
 
-fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::Result<()> {
+fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> crate::Result<()> {
     let frameworks = settings.osx_frameworks();
     if frameworks.is_empty() {
         return Ok(());
@@ -261,7 +261,10 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::
 /// Given a list of icon files, try to produce an ICNS file in the resources
 /// directory and return the path to it.  Returns `Ok(None)` if no usable icons
 /// were provided.
-fn create_icns_file(resources_dir: &PathBuf, settings: &Settings) -> ::Result<Option<PathBuf>> {
+fn create_icns_file(
+    resources_dir: &PathBuf,
+    settings: &Settings,
+) -> crate::Result<Option<PathBuf>> {
     if settings.icon_files().count() == 0 {
         return Ok(None);
     }
