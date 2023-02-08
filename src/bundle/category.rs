@@ -1,6 +1,4 @@
-use serde;
 use std::fmt;
-use strsim;
 
 const CONFIDENCE_THRESHOLD: f64 = 0.8;
 
@@ -62,8 +60,8 @@ impl AppCategory {
         if input.starts_with(OSX_APP_CATEGORY_PREFIX) {
             input = input.split_at(OSX_APP_CATEGORY_PREFIX.len()).1.to_string();
         }
-        input = input.replace(" ", "");
-        input = input.replace("-", "");
+        input = input.replace(' ', "");
+        input = input.replace('-', "");
 
         // Find best match:
         let mut best_confidence = 0.0;
@@ -241,8 +239,7 @@ impl<'d> serde::de::Visitor<'d> for AppCategoryVisitor {
             Some(string) => {
                 write!(
                     formatter,
-                    "a valid app category string (did you mean \"{}\"?)",
-                    string
+                    "a valid app category string (did you mean \"{string}\"?)"
                 )
             }
             None => write!(formatter, "a valid app category string"),

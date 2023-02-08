@@ -1,14 +1,11 @@
 use super::category::AppCategory;
 use clap::ArgMatches;
-use glob;
-use std;
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use target_build_utils::TargetInfo;
-use toml;
-use walkdir;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackageType {
@@ -74,7 +71,6 @@ struct BundleSettings {
     category: Option<AppCategory>,
     short_description: Option<String>,
     long_description: Option<String>,
-    script: Option<PathBuf>,
     // OS-specific settings:
     linux_mime_types: Option<Vec<String>>,
     linux_exec_args: Option<String>,
@@ -104,14 +100,8 @@ struct PackageSettings {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct WorkspaceSettings {
-    members: Option<Vec<String>>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
 struct CargoSettings {
     package: Option<PackageSettings>, // "Ancestor" workspace Cargo.toml files may not have package info
-    workspace: Option<WorkspaceSettings>, // "Ancestor" workspace Cargo.toml files may declare workspaces
 }
 
 #[derive(Clone, Debug)]
@@ -134,7 +124,7 @@ impl CargoSettings {
     /*
         Try to load a set of CargoSettings from a "Cargo.toml" file in the specified directory
     */
-    fn load(dir: &PathBuf) -> crate::Result<Self> {
+    fn load(dir: &Path) -> crate::Result<Self> {
         let toml_path = dir.join("Cargo.toml");
         let mut toml_str = String::new();
         let mut toml_file = File::open(toml_path)?;
@@ -175,16 +165,13 @@ impl Settings {
             Some(triple) => Some((triple.to_string(), TargetInfo::from_str(triple)?)),
             None => None,
         };
-        let features = match matches.value_of("features") {
-            Some(features) => Some(features.into()),
-            None => None,
-        };
+        let features = matches.value_of("features").map(|features| features.into());
         let cargo_settings = CargoSettings::load(&current_dir)?;
         let package = match cargo_settings.package {
             Some(package_info) => package_info,
             None => bail!("No 'package' info found in 'Cargo.toml'"),
         };
-        let workspace_dir = Settings::get_workspace_dir(&current_dir);
+        let workspace_dir = Settings::get_workspace_dir(current_dir);
         let target_dir =
             Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
         let bundle_settings = if let Some(bundle_settings) = package
@@ -235,7 +222,7 @@ impl Settings {
         to determine where the compiled binary will be located.
     */
     fn get_target_dir(
-        project_root_dir: &PathBuf,
+        project_root_dir: &Path,
         target: &Option<(String, TargetInfo)>,
         profile: &str,
         build_artifact: &BuildArtifact,
@@ -260,7 +247,7 @@ impl Settings {
             - Stop at the first one found.
             - If one is found before reaching "/" then this folder belongs to that parent workspace
     */
-    fn get_workspace_dir(current_dir: &PathBuf) -> PathBuf {
+    fn get_workspace_dir(current_dir: PathBuf) -> PathBuf {
         let mut dir = current_dir.clone();
         while dir.pop() {
             let set = CargoSettings::load(&dir);
@@ -270,7 +257,7 @@ impl Settings {
         }
 
         // Nothing found walking up the file system, return the starting directory
-        current_dir.clone()
+        current_dir
     }
 
     /// Returns the directory where the bundle should be placed.
@@ -366,11 +353,7 @@ impl Settings {
     }
 
     pub fn bundle_identifier(&self) -> &str {
-        self.bundle_settings
-            .identifier
-            .as_ref()
-            .map(String::as_str)
-            .unwrap_or("")
+        self.bundle_settings.identifier.as_deref().unwrap_or("")
     }
 
     /// Returns an iterator over the icon files to be used for this bundle.
@@ -398,7 +381,7 @@ impl Settings {
     }
 
     pub fn copyright_string(&self) -> Option<&str> {
-        self.bundle_settings.copyright.as_ref().map(String::as_str)
+        self.bundle_settings.copyright.as_deref()
     }
 
     pub fn author_names(&self) -> &[String] {
@@ -418,12 +401,7 @@ impl Settings {
     }
 
     pub fn homepage_url(&self) -> &str {
-        &self
-            .package
-            .homepage
-            .as_ref()
-            .map(String::as_str)
-            .unwrap_or("")
+        self.package.homepage.as_deref().unwrap_or("")
     }
 
     pub fn app_category(&self) -> Option<AppCategory> {
@@ -438,10 +416,7 @@ impl Settings {
     }
 
     pub fn long_description(&self) -> Option<&str> {
-        self.bundle_settings
-            .long_description
-            .as_ref()
-            .map(String::as_str)
+        self.bundle_settings.long_description.as_deref()
     }
 
     pub fn debian_dependencies(&self) -> &[String] {
@@ -463,10 +438,7 @@ impl Settings {
     }
 
     pub fn linux_exec_args(&self) -> Option<&str> {
-        self.bundle_settings
-            .linux_exec_args
-            .as_ref()
-            .map(String::as_str)
+        self.bundle_settings.linux_exec_args.as_deref()
     }
 
     pub fn osx_frameworks(&self) -> &[String] {
@@ -477,10 +449,7 @@ impl Settings {
     }
 
     pub fn osx_minimum_system_version(&self) -> Option<&str> {
-        self.bundle_settings
-            .osx_minimum_system_version
-            .as_ref()
-            .map(String::as_str)
+        self.bundle_settings.osx_minimum_system_version.as_deref()
     }
 
     pub fn osx_url_schemes(&self) -> &[String] {
@@ -556,7 +525,7 @@ impl<'a> Iterator for ResourcePaths<'a> {
                             self.walk_iter = Some(walk.into_iter());
                             continue;
                         } else {
-                            let msg = format!("{:?} is a directory", path);
+                            let msg = format!("{path:?} is a directory");
                             return Some(Err(crate::Error::from(msg)));
                         }
                     }
@@ -580,7 +549,6 @@ impl<'a> Iterator for ResourcePaths<'a> {
 #[cfg(test)]
 mod tests {
     use super::{AppCategory, BundleSettings, CargoSettings};
-    use toml;
 
     #[test]
     fn parse_cargo_toml() {

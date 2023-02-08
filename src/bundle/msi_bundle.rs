@@ -1,9 +1,7 @@
 use super::common;
 use super::settings::Settings;
 use crate::ResultExt;
-use cab;
-use msi;
-use std;
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fs;
@@ -114,14 +112,13 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     )?;
     let icon_name = format!("{}.ico", settings.binary_name());
     {
-        let stream_name = format!("Icon.{}", icon_name);
+        let stream_name = format!("Icon.{icon_name}");
         let mut stream = package.write_stream(&stream_name)?;
         create_app_icon(&mut stream, settings)?;
     }
-    package.insert_rows(msi::Insert::into("Icon").row(vec![
-        msi::Value::Str(icon_name.clone()),
-        msi::Value::from("Name"),
-    ]))?;
+    package.insert_rows(
+        msi::Insert::into("Icon").row(vec![msi::Value::Str(icon_name), msi::Value::from("Name")]),
+    )?;
 
     package.flush()?;
     Ok(vec![msi_path])
@@ -129,8 +126,8 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
 
 fn new_empty_package(msi_path: &Path) -> crate::Result<Package> {
     if let Some(parent) = msi_path.parent() {
-        fs::create_dir_all(&parent)
-            .chain_err(|| format!("Failed to create directory {:?}", parent))?;
+        fs::create_dir_all(parent)
+            .chain_err(|| format!("Failed to create directory {parent:?}"))?;
     }
     let msi_file = fs::OpenOptions::new()
         .read(true)
@@ -138,7 +135,7 @@ fn new_empty_package(msi_path: &Path) -> crate::Result<Package> {
         .create(true)
         .truncate(true)
         .open(msi_path)
-        .chain_err(|| format!("Failed to create file {:?}", msi_path))?;
+        .chain_err(|| format!("Failed to create file {msi_path:?}"))?;
     let package = msi::Package::create(msi::PackageType::Installer, msi_file)?;
     Ok(package)
 }
@@ -146,7 +143,7 @@ fn new_empty_package(msi_path: &Path) -> crate::Result<Package> {
 // Generates a GUID for the package, based on `settings.bundle_identifier()`.
 fn generate_package_guid(settings: &Settings) -> Uuid {
     let namespace = Uuid::from_bytes(UUID_NAMESPACE);
-    Uuid::new_v5(&namespace, &settings.bundle_identifier().as_bytes())
+    Uuid::new_v5(&namespace, settings.bundle_identifier().as_bytes())
 }
 
 // Populates the summary metadata for the package from the bundle settings.
@@ -169,7 +166,7 @@ fn create_property_table(
     package_guid: Uuid,
     settings: &Settings,
 ) -> crate::Result<()> {
-    let authors = settings.authors_comma_separated().unwrap_or(String::new());
+    let authors = settings.authors_comma_separated().unwrap_or_default();
     package.create_table(
         "Property",
         vec![
@@ -240,7 +237,7 @@ fn collect_resource_info(settings: &Settings) -> crate::Result<Vec<ResourceInfo>
 // with.
 fn collect_directory_info(
     settings: &Settings,
-    resources: &mut Vec<ResourceInfo>,
+    resources: &mut [ResourceInfo],
 ) -> crate::Result<Vec<DirectoryInfo>> {
     let mut dir_map = BTreeMap::<PathBuf, DirectoryInfo>::new();
     let mut dir_index: i32 = 0;
@@ -262,7 +259,7 @@ fn collect_directory_info(
                 if dir_map.contains_key(&dir_path) {
                     dir_key = dir_map.get(&dir_path).unwrap().key.clone();
                 } else {
-                    let new_key = format!("RDIR{:04}", dir_index);
+                    let new_key = format!("RDIR{dir_index:04}");
                     dir_map.insert(
                         dir_path.clone(),
                         DirectoryInfo {
@@ -282,7 +279,7 @@ fn collect_directory_info(
         directory.files.push(resource.filename.clone());
         resource.component_key = dir_key.to_string();
     }
-    Ok(dir_map.into_iter().map(|(_k, v)| v).collect())
+    Ok(dir_map.into_values().collect())
 }
 
 // Divides up the list of resource into some number of cabinets, subject to a
@@ -594,7 +591,7 @@ fn create_file_table(package: &mut Package, cabinets: &[CabinetInfo]) -> crate::
     for cabinet in cabinets.iter() {
         for resource in cabinet.resources.iter() {
             rows.push(vec![
-                msi::Value::Str(format!("r{:04}", sequence)),
+                msi::Value::Str(format!("r{sequence:04}")),
                 msi::Value::Str(resource.component_key.clone()),
                 msi::Value::Str(resource.filename.clone()),
                 msi::Value::Int(resource.size as i32),

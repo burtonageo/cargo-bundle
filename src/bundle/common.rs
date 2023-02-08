@@ -1,11 +1,9 @@
 use crate::ResultExt;
-use std;
+
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
-use term;
-use walkdir;
 
 /// Returns true if the path has a filename indicating that it is a high-desity
 /// "retina" icon.  Specifically, returns true the the file stem ends with
@@ -23,10 +21,10 @@ pub fn is_retina<P: AsRef<Path>>(path: P) -> bool {
 /// needed.
 pub fn create_file(path: &Path) -> crate::Result<BufWriter<File>> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(&parent)
-            .chain_err(|| format!("Failed to create directory {:?}", parent))?;
+        fs::create_dir_all(parent)
+            .chain_err(|| format!("Failed to create directory {parent:?}"))?;
     }
-    let file = File::create(path).chain_err(|| format!("Failed to create file {:?}", path))?;
+    let file = File::create(path).chain_err(|| format!("Failed to create file {path:?}"))?;
     Ok(BufWriter::new(file))
 }
 
@@ -61,8 +59,8 @@ pub fn copy_file(from: &Path, to: &Path) -> crate::Result<()> {
         bail!("{:?} is not a file", from);
     }
     let dest_dir = to.parent().unwrap();
-    fs::create_dir_all(dest_dir).chain_err(|| format!("Failed to create {:?}", dest_dir))?;
-    fs::copy(from, to).chain_err(|| format!("Failed to copy {:?} to {:?}", from, to))?;
+    fs::create_dir_all(dest_dir).chain_err(|| format!("Failed to create {dest_dir:?}"))?;
+    fs::copy(from, to).chain_err(|| format!("Failed to copy {from:?} to {to:?}"))?;
     Ok(())
 }
 
@@ -81,7 +79,7 @@ pub fn copy_dir(from: &Path, to: &Path) -> crate::Result<()> {
         bail!("{:?} already exists", to);
     }
     let parent = to.parent().unwrap();
-    fs::create_dir_all(parent).chain_err(|| format!("Failed to create {:?}", parent))?;
+    fs::create_dir_all(parent).chain_err(|| format!("Failed to create {parent:?}"))?;
     for entry in walkdir::WalkDir::new(from) {
         let entry = entry?;
         debug_assert!(entry.path().starts_with(from));
@@ -156,15 +154,15 @@ fn print_progress(step: &str, msg: &str) -> crate::Result<()> {
     if let Some(mut output) = term::stderr() {
         safe_term_attr(&mut output, term::Attr::Bold)?;
         output.fg(term::color::GREEN)?;
-        write!(output, "    {}", step)?;
+        write!(output, "    {step}")?;
         output.reset()?;
-        write!(output, " {}\n", msg)?;
+        writeln!(output, " {msg}")?;
         output.flush()?;
         Ok(())
     } else {
         let mut output = io::stderr();
-        write!(output, "    {}", step)?;
-        write!(output, " {}\n", msg)?;
+        write!(output, "    {step}")?;
+        writeln!(output, " {msg}")?;
         output.flush()?;
         Ok(())
     }
@@ -177,13 +175,13 @@ pub fn print_warning(message: &str) -> crate::Result<()> {
         output.fg(term::color::YELLOW)?;
         write!(output, "warning:")?;
         output.reset()?;
-        write!(output, " {}\n", message)?;
+        writeln!(output, " {message}")?;
         output.flush()?;
         Ok(())
     } else {
         let mut output = io::stderr();
         write!(output, "warning:")?;
-        write!(output, " {}\n", message)?;
+        writeln!(output, " {message}")?;
         output.flush()?;
         Ok(())
     }
@@ -197,25 +195,25 @@ pub fn print_error(error: &crate::Error) -> crate::Result<()> {
         write!(output, "error:")?;
         output.reset()?;
         safe_term_attr(&mut output, term::Attr::Bold)?;
-        writeln!(output, " {}", error)?;
+        writeln!(output, " {error}")?;
         output.reset()?;
         for cause in error.iter().skip(1) {
-            writeln!(output, "  Caused by: {}", cause)?;
+            writeln!(output, "  Caused by: {cause}")?;
         }
         if let Some(backtrace) = error.backtrace() {
-            writeln!(output, "{:?}", backtrace)?;
+            writeln!(output, "{backtrace:?}")?;
         }
         output.flush()?;
         Ok(())
     } else {
         let mut output = io::stderr();
         write!(output, "error:")?;
-        writeln!(output, " {}", error)?;
+        writeln!(output, " {error}")?;
         for cause in error.iter().skip(1) {
-            writeln!(output, "  Caused by: {}", cause)?;
+            writeln!(output, "  Caused by: {cause}")?;
         }
         if let Some(backtrace) = error.backtrace() {
-            writeln!(output, "{:?}", backtrace)?;
+            writeln!(output, "{backtrace:?}")?;
         }
         output.flush()?;
         Ok(())
@@ -225,10 +223,9 @@ pub fn print_error(error: &crate::Error) -> crate::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{copy_dir, create_file, is_retina, resource_relpath, symlink_file};
-    use std;
+
     use std::io::Write;
     use std::path::PathBuf;
-    use tempfile;
 
     #[test]
     fn create_file_with_parent_dirs() {
@@ -236,7 +233,7 @@ mod tests {
         assert!(!tmp.path().join("parent").exists());
         {
             let mut file = create_file(&tmp.path().join("parent/file.txt")).unwrap();
-            write!(file, "Hello, world!\n").unwrap();
+            writeln!(file, "Hello, world!").unwrap();
         }
         assert!(tmp.path().join("parent").is_dir());
         assert!(tmp.path().join("parent/file.txt").is_file());
@@ -252,7 +249,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         {
             let mut file = create_file(&tmp.path().join("orig/sub/file.txt")).unwrap();
-            write!(file, "Hello, world!\n").unwrap();
+            writeln!(file, "Hello, world!").unwrap();
         }
         symlink_file(
             &PathBuf::from("sub/file.txt"),

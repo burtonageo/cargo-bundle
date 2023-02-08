@@ -55,18 +55,18 @@ fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
 
     let mut args = vec!["build".to_string()];
     if let Some(triple) = settings.target_triple() {
-        args.push(format!("--target={}", triple));
+        args.push(format!("--target={triple}"));
     }
     if let Some(features) = settings.features() {
-        args.push(format!("--features={}", features));
+        args.push(format!("--features={features}"));
     }
     match settings.build_artifact() {
-        &BuildArtifact::Main => {}
-        &BuildArtifact::Bin(ref name) => {
-            args.push(format!("--bin={}", name));
+        BuildArtifact::Main => {}
+        BuildArtifact::Bin(name) => {
+            args.push(format!("--bin={name}"));
         }
-        &BuildArtifact::Example(ref name) => {
-            args.push(format!("--example={}", name));
+        BuildArtifact::Example(name) => {
+            args.push(format!("--example={name}"));
         }
     }
     match settings.build_profile() {
