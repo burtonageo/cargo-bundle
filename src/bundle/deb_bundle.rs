@@ -20,18 +20,17 @@
 
 use super::common;
 use crate::{ResultExt, Settings};
-use ar;
-use icns;
+
 use image::png::{PNGDecoder, PNGEncoder};
 use image::{self, GenericImage, ImageDecoder};
 use libflate::gzip;
-use md5;
+
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use tar;
+
 use walkdir::WalkDir;
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
@@ -48,13 +47,13 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         settings.version_string(),
         arch
     );
-    let package_name = format!("{}.deb", package_base_name);
+    let package_name = format!("{package_base_name}.deb");
     common::print_bundling(&package_name)?;
     let base_dir = settings.project_out_directory().join("bundle/deb");
     let package_dir = base_dir.join(&package_base_name);
     if package_dir.exists() {
         fs::remove_dir_all(&package_dir)
-            .chain_err(|| format!("Failed to remove old {}", package_base_name))?;
+            .chain_err(|| format!("Failed to remove old {package_base_name}"))?;
     }
     let package_path = base_dir.join(package_name);
 
@@ -95,7 +94,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
 /// Generate the application desktop file and store it under the `data_dir`.
 fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
     let bin_name = settings.binary_name();
-    let desktop_file_name = format!("{}.desktop", bin_name);
+    let desktop_file_name = format!("{bin_name}.desktop");
     let desktop_file_path = data_dir
         .join("usr/share/applications")
         .join(desktop_file_name);
@@ -103,32 +102,31 @@ fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Result<
     let mime_types = settings
         .linux_mime_types()
         .iter()
-        .fold("".to_owned(), |acc, s| format!("{}{};", acc, s));
+        .fold("".to_owned(), |acc, s| format!("{acc}{s};"));
     // For more information about the format of this file, see
     // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
-    write!(file, "[Desktop Entry]\n")?;
-    write!(file, "Encoding=UTF-8\n")?;
+    writeln!(file, "[Desktop Entry]")?;
+    writeln!(file, "Encoding=UTF-8")?;
     if let Some(category) = settings.app_category() {
-        write!(file, "Categories={}\n", category.gnome_desktop_categories())?;
+        writeln!(file, "Categories={}", category.gnome_desktop_categories())?;
     }
     if !settings.short_description().is_empty() {
-        write!(file, "Comment={}\n", settings.short_description())?;
+        writeln!(file, "Comment={}", settings.short_description())?;
     }
-    let exec;
-    match settings.linux_exec_args() {
-        Some(args) => exec = format!("{} {}", bin_name, args),
-        None => exec = bin_name.to_owned(),
-    }
-    write!(file, "Exec={}\n", exec)?;
-    write!(file, "Icon={}\n", bin_name)?;
-    write!(file, "Name={}\n", settings.bundle_name())?;
-    write!(
+    let exec = match settings.linux_exec_args() {
+        Some(args) => format!("{bin_name} {args}"),
+        None => bin_name.to_owned(),
+    };
+    writeln!(file, "Exec={exec}")?;
+    writeln!(file, "Icon={bin_name}")?;
+    writeln!(file, "Name={}", settings.bundle_name())?;
+    writeln!(
         file,
-        "Terminal={}\n",
+        "Terminal={}",
         settings.linux_use_terminal().unwrap_or(false)
     )?;
-    write!(file, "Type=Application\n")?;
-    write!(file, "MimeType={}\n", mime_types)?;
+    writeln!(file, "Type=Application")?;
+    writeln!(file, "MimeType={mime_types}")?;
     // The `Version` field is omitted on pupose. See `generate_control_file` for specifying
     // the application version.
     Ok(())
@@ -150,10 +148,10 @@ fn generate_control_file(
         str::replace(settings.bundle_name(), " ", "-").to_ascii_lowercase()
     )?;
     writeln!(&mut file, "Version: {}", settings.version_string())?;
-    writeln!(&mut file, "Architecture: {}", arch)?;
+    writeln!(&mut file, "Architecture: {arch}")?;
     writeln!(&mut file, "Installed-Size: {}", total_dir_size(data_dir)?)?;
-    let authors = settings.authors_comma_separated().unwrap_or(String::new());
-    writeln!(&mut file, "Maintainer: {}", authors)?;
+    let authors = settings.authors_comma_separated().unwrap_or_default();
+    writeln!(&mut file, "Maintainer: {authors}")?;
     if !settings.homepage_url().is_empty() {
         writeln!(&mut file, "Homepage: {}", settings.homepage_url())?;
     }
@@ -169,13 +167,13 @@ fn generate_control_file(
     if long_description.is_empty() {
         long_description = "(none)";
     }
-    writeln!(&mut file, "Description: {}", short_description)?;
+    writeln!(&mut file, "Description: {short_description}")?;
     for line in long_description.lines() {
         let line = line.trim();
         if line.is_empty() {
             writeln!(&mut file, " .")?;
         } else {
-            writeln!(&mut file, " {}", line)?;
+            writeln!(&mut file, " {line}")?;
         }
     }
     file.flush()?;
@@ -197,14 +195,14 @@ fn generate_md5sums(control_dir: &Path, data_dir: &Path) -> crate::Result<()> {
         let mut hash = md5::Context::new();
         io::copy(&mut file, &mut hash)?;
         for byte in hash.compute().iter() {
-            write!(md5sums_file, "{:02x}", byte)?;
+            write!(md5sums_file, "{byte:02x}")?;
         }
         let rel_path = path.strip_prefix(data_dir).unwrap();
         let path_str = rel_path.to_str().ok_or_else(|| {
-            let msg = format!("Non-UTF-8 path: {:?}", rel_path);
+            let msg = format!("Non-UTF-8 path: {rel_path:?}");
             io::Error::new(io::ErrorKind::InvalidData, msg)
         })?;
-        write!(md5sums_file, "  {}\n", path_str)?;
+        writeln!(md5sums_file, "  {path_str}")?;
     }
     Ok(())
 }
@@ -217,13 +215,13 @@ fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> crate::Resul
         let src = src?;
         let dest = resource_dir.join(common::resource_relpath(&src));
         common::copy_file(&src, &dest)
-            .chain_err(|| format!("Failed to copy resource file {:?}", src))?;
+            .chain_err(|| format!("Failed to copy resource file {src:?}"))?;
     }
     Ok(())
 }
 
 /// Generate the icon files and store them under the `data_dir`.
-fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> crate::Result<()> {
+fn generate_icon_files(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
     let base_dir = data_dir.join("usr/share/icons/hicolor");
     let get_dest_path = |width: u32, height: u32, is_high_density: bool| {
         base_dir.join(format!(
@@ -296,7 +294,7 @@ fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> crate::Result<(
 /// contents.
 fn total_dir_size(dir: &Path) -> crate::Result<u64> {
     let mut total: u64 = 0;
-    for entry in WalkDir::new(&dir) {
+    for entry in WalkDir::new(dir) {
         total += entry?.metadata()?.len();
     }
     Ok(total)
@@ -306,13 +304,13 @@ fn total_dir_size(dir: &Path) -> crate::Result<u64> {
 fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> crate::Result<W> {
     let src_dir = src_dir.as_ref();
     let mut tar_builder = tar::Builder::new(dest_file);
-    for entry in WalkDir::new(&src_dir) {
+    for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         let src_path = entry.path();
         if src_path == src_dir {
             continue;
         }
-        let dest_path = src_path.strip_prefix(&src_dir).unwrap();
+        let dest_path = src_path.strip_prefix(src_dir).unwrap();
         if entry.file_type().is_dir() {
             tar_builder.append_dir(dest_path, src_path)?;
         } else {
@@ -341,7 +339,7 @@ fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> crate::Result<PathBuf> {
 /// Creates an `ar` archive from the given source files and writes it to the
 /// given destination path.
 fn create_archive(srcs: Vec<PathBuf>, dest: &Path) -> crate::Result<()> {
-    let mut builder = ar::Builder::new(common::create_file(&dest)?);
+    let mut builder = ar::Builder::new(common::create_file(dest)?);
     for path in &srcs {
         builder.append_path(path)?;
     }

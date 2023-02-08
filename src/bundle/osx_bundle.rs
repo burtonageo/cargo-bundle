@@ -19,9 +19,7 @@
 
 use super::common;
 use crate::{ResultExt, Settings};
-use chrono;
-use dirs;
-use icns;
+
 use image::{self, GenericImage};
 use std::cmp::min;
 use std::ffi::OsStr;
@@ -39,15 +37,11 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .join(&app_bundle_name);
     if app_bundle_path.exists() {
         fs::remove_dir_all(&app_bundle_path)
-            .chain_err(|| format!("Failed to remove old {}", app_bundle_name))?;
+            .chain_err(|| format!("Failed to remove old {app_bundle_name}"))?;
     }
     let bundle_directory = app_bundle_path.join("Contents");
-    fs::create_dir_all(&bundle_directory).chain_err(|| {
-        format!(
-            "Failed to create bundle directory at {:?}",
-            bundle_directory
-        )
-    })?;
+    fs::create_dir_all(&bundle_directory)
+        .chain_err(|| format!("Failed to create bundle directory at {bundle_directory:?}"))?;
 
     let resources_dir = bundle_directory.join("Resources");
 
@@ -64,7 +58,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         let src = src?;
         let dest = resources_dir.join(common::resource_relpath(&src));
         common::copy_file(&src, &dest)
-            .chain_err(|| format!("Failed to copy resource file {:?}", src))?;
+            .chain_err(|| format!("Failed to copy resource file {src:?}"))?;
     }
 
     copy_binary_to_bundle(&bundle_directory, settings)
@@ -157,7 +151,7 @@ fn create_info_plist(
             settings.bundle_name()
         )?;
         for scheme in settings.osx_url_schemes() {
-            write!(file, "        <string>{}</string>\n", scheme)?;
+            writeln!(file, "        <string>{scheme}</string>")?;
         }
         write!(
             file,
@@ -168,8 +162,7 @@ fn create_info_plist(
     }
     write!(
         file,
-        "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
-        build_number
+        "  <key>CFBundleVersion</key>\n  <string>{build_number}</string>\n"
     )?;
     write!(file, "  <key>CSResourcesFileMapped</key>\n  <true/>\n")?;
     if let Some(category) = settings.app_category() {
@@ -184,8 +177,7 @@ fn create_info_plist(
         write!(
             file,
             "  <key>LSMinimumSystemVersion</key>\n  \
-                <string>{}</string>\n",
-            version
+                <string>{version}</string>\n"
         )?;
     }
     write!(file, "  <key>LSRequiresCarbon</key>\n  <true/>\n")?;
@@ -194,8 +186,7 @@ fn create_info_plist(
         write!(
             file,
             "  <key>NSHumanReadableCopyright</key>\n  \
-                <string>{}</string>\n",
-            copyright
+                <string>{copyright}</string>\n"
         )?;
     }
     write!(file, "</dict>\n</plist>\n")?;
@@ -204,7 +195,7 @@ fn create_info_plist(
 }
 
 fn copy_framework_from(dest_dir: &Path, framework: &str, src_dir: &Path) -> crate::Result<bool> {
-    let src_name = format!("{}.framework", framework);
+    let src_name = format!("{framework}.framework");
     let src_path = src_dir.join(&src_name);
     if src_path.exists() {
         common::copy_dir(&src_path, &dest_dir.join(&src_name))?;
@@ -220,15 +211,15 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
         return Ok(());
     }
     let dest_dir = bundle_directory.join("Frameworks");
-    fs::create_dir_all(&bundle_directory)
-        .chain_err(|| format!("Failed to create Frameworks directory at {:?}", dest_dir))?;
+    fs::create_dir_all(bundle_directory)
+        .chain_err(|| format!("Failed to create Frameworks directory at {dest_dir:?}"))?;
     for framework in frameworks.iter() {
         if framework.ends_with(".framework") {
             let src_path = PathBuf::from(framework);
             let src_name = src_path.file_name().unwrap();
-            common::copy_dir(&src_path, &dest_dir.join(&src_name))?;
+            common::copy_dir(&src_path, &dest_dir.join(src_name))?;
             continue;
-        } else if framework.contains("/") {
+        } else if framework.contains('/') {
             bail!(
                 "Framework path should have .framework extension: {}",
                 framework

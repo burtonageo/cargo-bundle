@@ -10,7 +10,7 @@
 
 use super::common;
 use crate::{ResultExt, Settings};
-use icns;
+
 use image::png::{PNGDecoder, PNGEncoder};
 use image::{self, GenericImage, ImageDecoder};
 use std::collections::BTreeSet;
@@ -30,23 +30,23 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .join(&app_bundle_name);
     if bundle_dir.exists() {
         fs::remove_dir_all(&bundle_dir)
-            .chain_err(|| format!("Failed to remove old {}", app_bundle_name))?;
+            .chain_err(|| format!("Failed to remove old {app_bundle_name}"))?;
     }
     fs::create_dir_all(&bundle_dir)
-        .chain_err(|| format!("Failed to create bundle directory at {:?}", bundle_dir))?;
+        .chain_err(|| format!("Failed to create bundle directory at {bundle_dir:?}"))?;
 
     for src in settings.resource_files() {
         let src = src?;
         let dest = bundle_dir.join(common::resource_relpath(&src));
         common::copy_file(&src, &dest)
-            .chain_err(|| format!("Failed to copy resource file {:?}", src))?;
+            .chain_err(|| format!("Failed to copy resource file {src:?}"))?;
     }
 
     let icon_filenames =
         generate_icon_files(&bundle_dir, settings).chain_err(|| "Failed to create app icons")?;
     generate_info_plist(&bundle_dir, settings, &icon_filenames)
         .chain_err(|| "Failed to create Info.plist")?;
-    let bin_path = bundle_dir.join(&settings.binary_name());
+    let bin_path = bundle_dir.join(settings.binary_name());
     common::copy_file(settings.binary_path(), &bin_path)
         .chain_err(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
     Ok(vec![bundle_dir])
@@ -174,9 +174,9 @@ fn generate_info_plist(
     if !icon_filenames.is_empty() {
         write!(file, "  <key>CFBundleIconFiles</key>\n  <array>\n")?;
         for filename in icon_filenames {
-            write!(file, "    <string>{}</string>\n", filename)?;
+            writeln!(file, "    <string>{filename}</string>")?;
         }
-        write!(file, "  </array>\n")?;
+        writeln!(file, "  </array>")?;
     }
     write!(file, "  <key>LSRequiresIPhoneOS</key>\n  <true/>\n")?;
     write!(file, "</dict>\n</plist>\n")?;
