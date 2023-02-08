@@ -1,9 +1,9 @@
 use super::category::AppCategory;
 use clap::ArgMatches;
 
+use cargo_metadata::{Metadata, MetadataCommand};
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use target_build_utils::TargetInfo;
 
@@ -84,29 +84,9 @@ struct BundleSettings {
     example: Option<HashMap<String, BundleSettings>>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-struct MetadataSettings {
-    bundle: Option<BundleSettings>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct PackageSettings {
-    name: String,
-    version: String,
-    description: String,
-    homepage: Option<String>,
-    authors: Option<Vec<String>>,
-    metadata: Option<MetadataSettings>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct CargoSettings {
-    package: Option<PackageSettings>, // "Ancestor" workspace Cargo.toml files may not have package info
-}
-
 #[derive(Clone, Debug)]
 pub struct Settings {
-    package: PackageSettings,
+    package: cargo_metadata::Package,
     package_type: Option<PackageType>, // If `None`, use the default package type for this os
     target: Option<(String, TargetInfo)>,
     features: Option<String>,
@@ -120,17 +100,12 @@ pub struct Settings {
     bundle_settings: BundleSettings,
 }
 
-impl CargoSettings {
-    /*
-        Try to load a set of CargoSettings from a "Cargo.toml" file in the specified directory
-    */
-    fn load(dir: &Path) -> crate::Result<Self> {
-        let toml_path = dir.join("Cargo.toml");
-        let mut toml_str = String::new();
-        let mut toml_file = File::open(toml_path)?;
-        toml_file.read_to_string(&mut toml_str)?;
-        toml::from_str(&toml_str).map_err(|e| e.into())
-    }
+/// Try to load `Cargo.toml` file in the specified directory
+fn load_metadata(dir: &Path) -> crate::Result<Metadata> {
+    let cargo_file_path = dir.join("Cargo.toml");
+    Ok(MetadataCommand::new()
+        .manifest_path(cargo_file_path)
+        .exec()?)
 }
 
 impl Settings {
@@ -166,24 +141,22 @@ impl Settings {
             None => None,
         };
         let features = matches.value_of("features").map(|features| features.into());
-        let cargo_settings = CargoSettings::load(&current_dir)?;
-        let package = match cargo_settings.package {
+        let cargo_settings = load_metadata(&current_dir)?;
+        // TODO: support multiple packages?
+        let package = match cargo_settings.packages.get(0) {
             Some(package_info) => package_info,
             None => bail!("No 'package' info found in 'Cargo.toml'"),
         };
         let workspace_dir = Settings::get_workspace_dir(current_dir);
         let target_dir =
             Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
-        let bundle_settings = if let Some(bundle_settings) = package
-            .metadata
-            .as_ref()
-            .and_then(|metadata| metadata.bundle.as_ref())
-        {
-            bundle_settings.clone()
+        let bundle_settings = if let Some(bundle_settings) = package.metadata.get("bundle") {
+            serde_json::from_value::<BundleSettings>(bundle_settings.clone())?
         } else {
             bail!("No [package.metadata.bundle] section in Cargo.toml");
         };
         let (bundle_settings, binary_name) = match build_artifact {
+            // TODO: this is wrong. Package can have multiple binaries and none of them has to be named the same way as package itself
             BuildArtifact::Main => (bundle_settings, package.name.clone()),
             BuildArtifact::Bin(ref name) => (
                 bundle_settings_from_table(&bundle_settings.bin, "bin", name)?,
@@ -196,7 +169,7 @@ impl Settings {
         };
         let binary_path = target_dir.join(&binary_name);
         Ok(Settings {
-            package,
+            package: package.clone(),
             package_type,
             target,
             features,
@@ -250,7 +223,7 @@ impl Settings {
     fn get_workspace_dir(current_dir: PathBuf) -> PathBuf {
         let mut dir = current_dir.clone();
         while dir.pop() {
-            let set = CargoSettings::load(&dir);
+            let set = load_metadata(&dir);
             if set.is_ok() {
                 return dir;
             }
@@ -373,11 +346,11 @@ impl Settings {
         }
     }
 
-    pub fn version_string(&self) -> &str {
-        self.bundle_settings
-            .version
-            .as_ref()
-            .unwrap_or(&self.package.version)
+    pub fn version_string(&self) -> &dyn Display {
+        match self.bundle_settings.version.as_ref() {
+            Some(v) => v,
+            None => &self.package.version,
+        }
     }
 
     pub fn copyright_string(&self) -> Option<&str> {
@@ -385,10 +358,7 @@ impl Settings {
     }
 
     pub fn author_names(&self) -> &[String] {
-        match self.package.authors {
-            Some(ref names) => names.as_slice(),
-            None => &[],
-        }
+        &self.package.authors
     }
 
     pub fn authors_comma_separated(&self) -> Option<String> {
@@ -411,8 +381,8 @@ impl Settings {
     pub fn short_description(&self) -> &str {
         self.bundle_settings
             .short_description
-            .as_ref()
-            .unwrap_or(&self.package.description)
+            .as_deref()
+            .unwrap_or_else(|| self.package.description.as_deref().unwrap_or(""))
     }
 
     pub fn long_description(&self) -> Option<&str> {
@@ -548,20 +518,11 @@ impl<'a> Iterator for ResourcePaths<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppCategory, BundleSettings, CargoSettings};
+    use super::{AppCategory, BundleSettings};
 
     #[test]
     fn parse_cargo_toml() {
         let toml_str = "\
-            [package]\n\
-            name = \"example\"\n\
-            version = \"0.1.0\"\n\
-            authors = [\"Jane Doe\"]\n\
-            license = \"MIT\"\n\
-            description = \"An example application.\"\n\
-            build = \"build.rs\"\n\
-            \n\
-            [package.metadata.bundle]\n\
             name = \"Example Application\"\n\
             identifier = \"com.example.app\"\n\
             resources = [\"data\", \"foo/bar\"]\n\
@@ -569,21 +530,8 @@ mod tests {
             long_description = \"\"\"\n\
             This is an example of a\n\
             simple application.\n\
-            \"\"\"\n\
-            \n\
-            [dependencies]\n\
-            rand = \"0.4\"\n";
-        let cargo_settings: CargoSettings = toml::from_str(toml_str).unwrap();
-        let package = cargo_settings.package.unwrap();
-        assert_eq!(package.name, "example");
-        assert_eq!(package.version, "0.1.0");
-        assert_eq!(package.description, "An example application.");
-        assert_eq!(package.homepage, None);
-        assert_eq!(package.authors, Some(vec!["Jane Doe".to_string()]));
-        assert!(package.metadata.is_some());
-        let metadata = package.metadata.as_ref().unwrap();
-        assert!(metadata.bundle.is_some());
-        let bundle = metadata.bundle.as_ref().unwrap();
+            \"\"\"\n";
+        let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
         assert_eq!(bundle.name, Some("Example Application".to_string()));
         assert_eq!(bundle.identifier, Some("com.example.app".to_string()));
         assert_eq!(bundle.icon, None);
@@ -606,35 +554,15 @@ mod tests {
     #[test]
     fn parse_bin_and_example_bundles() {
         let toml_str = "\
-            [package]\n\
-            name = \"example\"\n\
-            version = \"0.1.0\"\n\
-            description = \"An example application.\"\n\
-            \n\
-            [package.metadata.bundle.bin.foo]\n\
+            [bin.foo]\n\
             name = \"Foo App\"\n\
             \n\
-            [package.metadata.bundle.bin.bar]\n\
+            [bin.bar]\n\
             name = \"Bar App\"\n\
             \n\
-            [package.metadata.bundle.example.baz]\n\
-            name = \"Baz Example\"\n\
-            \n\
-            [[bin]]\n\
-            name = \"foo\"\n
-            \n\
-            [[bin]]\n\
-            name = \"bar\"\n
-            \n\
-            [[example]]\n\
-            name = \"baz\"\n";
-        let cargo_settings: CargoSettings = toml::from_str(toml_str).unwrap();
-        assert!(cargo_settings.package.is_some());
-        let package = cargo_settings.package.as_ref().unwrap();
-        assert!(package.metadata.is_some());
-        let metadata = package.metadata.as_ref().unwrap();
-        assert!(metadata.bundle.is_some());
-        let bundle = metadata.bundle.as_ref().unwrap();
+            [example.baz]\n\
+            name = \"Baz Example\"\n";
+        let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
         assert!(bundle.example.is_some());
 
         let bins = bundle.bin.as_ref().unwrap();

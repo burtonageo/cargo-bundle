@@ -194,7 +194,7 @@ fn create_property_table(
             ])
             .row(vec![
                 msi::Value::from("ProductVersion"),
-                msi::Value::from(settings.version_string()),
+                msi::Value::from(settings.version_string().to_string()),
             ]),
     )?;
     Ok(())
