@@ -39,6 +39,8 @@ error_chain! {
         GlobPattern(::glob::PatternError);
         Io(::std::io::Error);
         Image(::image::ImageError);
+        Json(serde_json::Error);
+        Metadata(cargo_metadata::Error);
         Target(::target_build_utils::Error);
         Term(::term::Error);
         Toml(::toml::de::Error);
