@@ -164,15 +164,13 @@ pub fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<
 
     let mut sizes: BTreeSet<(u32, u32, bool)> = BTreeSet::new();
 
-    // Prefer PNG files.
     for icon_path in settings.icon_files() {
         let icon_path = icon_path?;
         if icon_path.extension() == Some(OsStr::new("png")) {
             let new_sizes = generate_icon_files_png(&icon_path, &base_dir, settings.binary_name(), sizes.clone()).unwrap();
             sizes.append(&mut new_sizes.to_owned())
         }
-        {
-            // Fall back to non-PNG files for any missing sizes.
+        else {
             let new_sizes = generate_icon_files_non_png(&icon_path, &base_dir, settings.binary_name(), sizes.clone()).unwrap();
             sizes.append(&mut new_sizes.to_owned())
         }
