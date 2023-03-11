@@ -9,7 +9,7 @@ use image::png::{PNGDecoder, PNGEncoder};
 use libflate::gzip;
 use md5::Digest;
 use walkdir::WalkDir;
-use bundle::{common, Settings};
+use crate::bundle::{common, Settings};
 
 /// Generate the application desktop file and store it under the `data_dir`.
 pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
