@@ -22,7 +22,6 @@ use ar;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use bundle::common;
 use crate::{ResultExt, bundle::{
     linux::common::{create_file_with_data, generate_desktop_file, generate_icon_files, generate_md5sum, tar_and_gzip_dir, total_dir_size},
     common, Settings}};
