@@ -4,7 +4,6 @@ use clap::ArgMatches;
 use cargo_metadata::{Metadata, MetadataCommand};
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use target_build_utils::TargetInfo;
 
