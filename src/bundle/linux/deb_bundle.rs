@@ -18,14 +18,14 @@
 // metadata, as well as generating the md5sums file.  Currently we do not
 // generate postinst or prerm files.
 
-use {ResultExt, Settings};
 use ar;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use bundle::common;
-use bundle::linux::common::{create_file_with_data, generate_desktop_file,
-                            generate_icon_files, generate_md5sum, tar_and_gzip_dir, total_dir_size};
+use crate::{ResultExt, bundle::{
+    linux::common::{create_file_with_data, generate_desktop_file, generate_icon_files, generate_md5sum, tar_and_gzip_dir, total_dir_size},
+    common, Settings}};
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let arch = match settings.binary_arch() {
