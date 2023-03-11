@@ -12,7 +12,7 @@ use walkdir::WalkDir;
 use crate::bundle::{common, Settings};
 
 /// Generate the application desktop file and store it under the `data_dir`.
-pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<()> {
+pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
     let bin_name = settings.binary_name();
     let desktop_file_name = format!("{}.desktop", bin_name);
     let desktop_file_path = data_dir.join("usr/share/applications").join(desktop_file_name);
@@ -50,7 +50,7 @@ pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> ::Result<(
 /// Creates a `.tar.gz` file from the given directory (placing the new file
 /// within the given directory's parent directory), then deletes the original
 /// directory and returns the path to the new file.
-pub fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> ::Result<PathBuf> {
+pub fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> crate::Result<PathBuf> {
     let src_dir = src_dir.as_ref();
     let dest_path = src_dir.with_extension("tar.gz");
     let dest_file = common::create_file(&dest_path)?;
@@ -62,7 +62,7 @@ pub fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> ::Result<PathBuf> {
 }
 
 /// Writes a tar file to the given writer containing the given directory.
-pub fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> ::Result<W> {
+pub fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> crate::Result<W> {
     let src_dir = src_dir.as_ref();
     let mut tar_builder = tar::Builder::new(dest_file);
     for entry in WalkDir::new(&src_dir) {
@@ -85,7 +85,7 @@ pub fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -
 
 /// Create an empty file at the given path, creating any parent directories as
 /// needed, then write `data` into the file.
-pub fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> ::Result<()> {
+pub fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> crate::Result<()> {
     let mut file = common::create_file(path.as_ref())?;
     file.write_all(data.as_bytes())?;
     file.flush()?;
@@ -94,7 +94,7 @@ pub fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> ::Result<()
 
 /// Computes the total size, in bytes, of the given directory and all of its
 /// contents.
-pub fn total_dir_size(dir: &Path) -> ::Result<u64> {
+pub fn total_dir_size(dir: &Path) -> crate::Result<u64> {
     let mut total: u64 = 0;
     for entry in WalkDir::new(&dir) {
         total += entry?
@@ -112,7 +112,7 @@ fn get_dest_path<'a>(width: u32, height: u32, is_high_density: bool, base_dir: &
                           binary_name));
 }
 
-fn generate_icon_files_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name: &str, mut sizes: BTreeSet<(u32, u32, bool)>) -> ::Result<BTreeSet<(u32, u32, bool)>> {
+fn generate_icon_files_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name: &str, mut sizes: BTreeSet<(u32, u32, bool)>) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
     let mut decoder = PNGDecoder::new(File::open(&icon_path)?);
     let (width, height) = decoder.dimensions()?;
     let is_high_density = common::is_retina(&icon_path);
@@ -126,7 +126,7 @@ fn generate_icon_files_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name:
     Ok(sizes.to_owned())
 }
 
-fn generate_icon_files_non_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name: &str, mut sizes: BTreeSet<(u32, u32, bool)>) -> ::Result<BTreeSet<(u32, u32, bool)>> {
+fn generate_icon_files_non_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name: &str, mut sizes: BTreeSet<(u32, u32, bool)>) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
 
     if icon_path.extension() == Some(OsStr::new("icns")) {
         let icon_family = icns::IconFamily::read(File::open(&icon_path)?)?;
@@ -159,7 +159,7 @@ fn generate_icon_files_non_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_n
 }
 
 /// Generate the icon files and store them under the `data_dir`.
-pub fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> {
+pub fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> crate::Result<()> {
     let base_dir = data_dir.join("usr/share/icons/hicolor");
 
     let mut sizes: BTreeSet<(u32, u32, bool)> = BTreeSet::new();
@@ -180,7 +180,7 @@ pub fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<
 }
 
 /// Compute the md5 hash of the given file.
-pub fn generate_md5sum(file_path: &Path) -> ::Result<Digest> {
+pub fn generate_md5sum(file_path: &Path) -> crate::Result<Digest> {
     let mut file = File::open(file_path)?;
     let mut hash = md5::Context::new();
     io::copy(&mut file, &mut hash)?;
