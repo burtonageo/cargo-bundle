@@ -9,7 +9,7 @@ mod linux;
 pub use self::common::{print_error, print_finished};
 pub use self::settings::{BuildArtifact, PackageType, Settings};
 use std::path::PathBuf;
-use bundle::linux::{deb_bundle, rpm_bundle};
+use crate::bundle::linux::{deb_bundle, rpm_bundle};
 
 pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
