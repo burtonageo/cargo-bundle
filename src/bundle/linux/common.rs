@@ -104,62 +104,78 @@ pub fn total_dir_size(dir: &Path) -> ::Result<u64> {
     Ok(total)
 }
 
+fn get_dest_path<'a>(width: u32, height: u32, is_high_density: bool, base_dir: &'a PathBuf, binary_name: &'a str) -> PathBuf {
+    return Path::join(&base_dir, format!("{}x{}{}/apps/{}.png",
+                          width,
+                          height,
+                          if is_high_density { "@2x" } else { "" },
+                          binary_name));
+}
+
+fn generate_icon_files_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name: &str, mut sizes: BTreeSet<(u32, u32, bool)>) -> ::Result<BTreeSet<(u32, u32, bool)>> {
+    let mut decoder = PNGDecoder::new(File::open(&icon_path)?);
+    let (width, height) = decoder.dimensions()?;
+    let is_high_density = common::is_retina(&icon_path);
+
+    if !sizes.contains(&(width, height, is_high_density)) {
+        sizes.insert((width, height, is_high_density));
+        let dest_path = get_dest_path(width, height, is_high_density, base_dir, binary_name);
+        common::copy_file(&icon_path, &dest_path)?;
+    }
+
+    Ok(sizes.to_owned())
+}
+
+fn generate_icon_files_non_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name: &str, mut sizes: BTreeSet<(u32, u32, bool)>) -> ::Result<BTreeSet<(u32, u32, bool)>> {
+
+    if icon_path.extension() == Some(OsStr::new("icns")) {
+        let icon_family = icns::IconFamily::read(File::open(&icon_path)?)?;
+        for icon_type in icon_family.available_icons() {
+            let width = icon_type.screen_width();
+            let height = icon_type.screen_height();
+            let is_high_density = icon_type.pixel_density() > 1;
+
+            if !sizes.contains(&(width, height, is_high_density)) {
+                sizes.insert((width, height, is_high_density));
+                let icon = icon_family.get_icon_with_type(icon_type)?;
+                let dest_path = get_dest_path(width, height, is_high_density, base_dir, binary_name);
+                icon.write_png(common::create_file(&dest_path)?)?;
+            }
+        }
+    } else {
+        let icon = image::open(&icon_path)?;
+        let (width, height) = icon.dimensions();
+        let is_high_density = common::is_retina(&icon_path);
+
+        if !sizes.contains(&(width, height, is_high_density)) {
+            sizes.insert((width, height, is_high_density));
+            let dest_path = get_dest_path(width, height, is_high_density, base_dir, binary_name);
+            let encoder = PNGEncoder::new(common::create_file(&dest_path)?);
+            encoder.encode(&icon.raw_pixels(), width, height, icon.color())?;
+        }
+    }
+
+    Ok(sizes.to_owned())
+}
+
 /// Generate the icon files and store them under the `data_dir`.
 pub fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> ::Result<()> {
     let base_dir = data_dir.join("usr/share/icons/hicolor");
-    let get_dest_path = |width: u32, height: u32, is_high_density: bool| {
-        base_dir.join(format!("{}x{}{}/apps/{}.png",
-                              width,
-                              height,
-                              if is_high_density { "@2x" } else { "" },
-                              settings.binary_name()))
-    };
-    let mut sizes = BTreeSet::new();
-    // Prefer PNG files.
-    for icon_path in settings.icon_files() {
-        let icon_path = icon_path?;
-        if icon_path.extension() != Some(OsStr::new("png")) {
-            continue;
-        }
-        let mut decoder = PNGDecoder::new(File::open(&icon_path)?);
-        let (width, height) = decoder.dimensions()?;
-        let is_high_density = common::is_retina(&icon_path);
-        if !sizes.contains(&(width, height, is_high_density)) {
-            sizes.insert((width, height, is_high_density));
-            let dest_path = get_dest_path(width, height, is_high_density);
-            common::copy_file(&icon_path, &dest_path)?;
-        }
-    }
-    // Fall back to non-PNG files for any missing sizes.
+
+    let mut sizes: BTreeSet<(u32, u32, bool)> = BTreeSet::new();
+
     for icon_path in settings.icon_files() {
         let icon_path = icon_path?;
         if icon_path.extension() == Some(OsStr::new("png")) {
-            continue;
-        } else if icon_path.extension() == Some(OsStr::new("icns")) {
-            let icon_family = icns::IconFamily::read(File::open(&icon_path)?)?;
-            for icon_type in icon_family.available_icons() {
-                let width = icon_type.screen_width();
-                let height = icon_type.screen_height();
-                let is_high_density = icon_type.pixel_density() > 1;
-                if !sizes.contains(&(width, height, is_high_density)) {
-                    sizes.insert((width, height, is_high_density));
-                    let dest_path = get_dest_path(width, height, is_high_density);
-                    let icon = icon_family.get_icon_with_type(icon_type)?;
-                    icon.write_png(common::create_file(&dest_path)?)?;
-                }
-            }
-        } else {
-            let icon = image::open(&icon_path)?;
-            let (width, height) = icon.dimensions();
-            let is_high_density = common::is_retina(&icon_path);
-            if !sizes.contains(&(width, height, is_high_density)) {
-                sizes.insert((width, height, is_high_density));
-                let dest_path = get_dest_path(width, height, is_high_density);
-                let encoder = PNGEncoder::new(common::create_file(&dest_path)?);
-                encoder.encode(&icon.raw_pixels(), width, height, icon.color())?;
-            }
+            let new_sizes = generate_icon_files_png(&icon_path, &base_dir, settings.binary_name(), sizes.clone()).unwrap();
+            sizes.append(&mut new_sizes.to_owned())
+        }
+        else {
+            let new_sizes = generate_icon_files_non_png(&icon_path, &base_dir, settings.binary_name(), sizes.clone()).unwrap();
+            sizes.append(&mut new_sizes.to_owned())
         }
     }
+
     Ok(())
 }
 
