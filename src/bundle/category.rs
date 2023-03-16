@@ -1,6 +1,4 @@
-use serde;
 use std::fmt;
-use strsim;
 
 const CONFIDENCE_THRESHOLD: f64 = 0.8;
 
@@ -62,8 +60,8 @@ impl AppCategory {
         if input.starts_with(OSX_APP_CATEGORY_PREFIX) {
             input = input.split_at(OSX_APP_CATEGORY_PREFIX.len()).1.to_string();
         }
-        input = input.replace(" ", "");
-        input = input.replace("-", "");
+        input = input.replace(' ', "");
+        input = input.replace('-', "");
 
         // Find best match:
         let mut best_confidence = 0.0;
@@ -224,8 +222,7 @@ impl AppCategory {
 }
 
 impl<'d> serde::Deserialize<'d> for AppCategory {
-    fn deserialize<D: serde::Deserializer<'d>>(deserializer: D)
-                                               -> Result<AppCategory, D::Error> {
+    fn deserialize<D: serde::Deserializer<'d>>(deserializer: D) -> Result<AppCategory, D::Error> {
         deserializer.deserialize_str(AppCategoryVisitor { did_you_mean: None })
     }
 }
@@ -240,9 +237,12 @@ impl<'d> serde::de::Visitor<'d> for AppCategoryVisitor {
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self.did_you_mean {
             Some(string) => {
-                write!(formatter, "a valid app category string (did you mean \"{}\"?)", string)
+                write!(
+                    formatter,
+                    "a valid app category string (did you mean \"{string}\"?)"
+                )
             }
-            None => write!(formatter, "a valid app category string")
+            None => write!(formatter, "a valid app category string"),
         }
     }
 
@@ -341,36 +341,56 @@ mod tests {
     #[test]
     fn category_from_string_ok() {
         // Canonical name of category works:
-        assert_eq!(AppCategory::from_str("Education"),
-                   Ok(AppCategory::Education));
-        assert_eq!(AppCategory::from_str("Developer Tool"),
-                   Ok(AppCategory::DeveloperTool));
+        assert_eq!(
+            AppCategory::from_str("Education"),
+            Ok(AppCategory::Education)
+        );
+        assert_eq!(
+            AppCategory::from_str("Developer Tool"),
+            Ok(AppCategory::DeveloperTool)
+        );
         // Lowercase, spaces, and hyphens are fine:
-        assert_eq!(AppCategory::from_str(" puzzle  game "),
-                   Ok(AppCategory::PuzzleGame));
-        assert_eq!(AppCategory::from_str("Role-playing game"),
-                   Ok(AppCategory::RolePlayingGame));
+        assert_eq!(
+            AppCategory::from_str(" puzzle  game "),
+            Ok(AppCategory::PuzzleGame)
+        );
+        assert_eq!(
+            AppCategory::from_str("Role-playing game"),
+            Ok(AppCategory::RolePlayingGame)
+        );
         // Using macOS LSApplicationCategoryType value is fine:
-        assert_eq!(AppCategory::from_str("public.app-category.developer-tools"),
-                   Ok(AppCategory::DeveloperTool));
-        assert_eq!(AppCategory::from_str("public.app-category.role-playing-games"),
-                   Ok(AppCategory::RolePlayingGame));
+        assert_eq!(
+            AppCategory::from_str("public.app-category.developer-tools"),
+            Ok(AppCategory::DeveloperTool)
+        );
+        assert_eq!(
+            AppCategory::from_str("public.app-category.role-playing-games"),
+            Ok(AppCategory::RolePlayingGame)
+        );
         // Using GNOME category name is fine:
-        assert_eq!(AppCategory::from_str("Development"),
-                   Ok(AppCategory::DeveloperTool));
-        assert_eq!(AppCategory::from_str("LogicGame"),
-                   Ok(AppCategory::PuzzleGame));
+        assert_eq!(
+            AppCategory::from_str("Development"),
+            Ok(AppCategory::DeveloperTool)
+        );
+        assert_eq!(
+            AppCategory::from_str("LogicGame"),
+            Ok(AppCategory::PuzzleGame)
+        );
         // Using common abbreviations is fine:
-        assert_eq!(AppCategory::from_str("RPG"),
-                   Ok(AppCategory::RolePlayingGame));
+        assert_eq!(
+            AppCategory::from_str("RPG"),
+            Ok(AppCategory::RolePlayingGame)
+        );
     }
 
     #[test]
     fn category_from_string_did_you_mean() {
         assert_eq!(AppCategory::from_str("gaming"), Err(Some("Game")));
         assert_eq!(AppCategory::from_str("photos"), Err(Some("Photography")));
-        assert_eq!(AppCategory::from_str("strategery"),
-                   Err(Some("Strategy Game")));
+        assert_eq!(
+            AppCategory::from_str("strategery"),
+            Err(Some("Strategy Game"))
+        );
     }
 
     #[test]

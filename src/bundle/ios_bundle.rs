@@ -9,61 +9,60 @@
 // explanation.
 
 use super::common;
-use {ResultExt, Settings};
-use icns;
-use image::{self, GenericImage, ImageDecoder};
+use crate::{ResultExt, Settings};
+
 use image::png::{PNGDecoder, PNGEncoder};
+use image::{self, GenericImage, ImageDecoder};
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
+pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     common::print_warning("iOS bundle support is still experimental.")?;
 
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
-    let bundle_dir = settings.project_out_directory().join("bundle/ios").join(&app_bundle_name);
+    let bundle_dir = settings
+        .project_out_directory()
+        .join("bundle/ios")
+        .join(&app_bundle_name);
     if bundle_dir.exists() {
-        fs::remove_dir_all(&bundle_dir).chain_err(|| {
-            format!("Failed to remove old {}", app_bundle_name)
-        })?;
+        fs::remove_dir_all(&bundle_dir)
+            .chain_err(|| format!("Failed to remove old {app_bundle_name}"))?;
     }
-    fs::create_dir_all(&bundle_dir).chain_err(|| {
-        format!("Failed to create bundle directory at {:?}", bundle_dir)
-    })?;
+    fs::create_dir_all(&bundle_dir)
+        .chain_err(|| format!("Failed to create bundle directory at {bundle_dir:?}"))?;
 
     for src in settings.resource_files() {
         let src = src?;
         let dest = bundle_dir.join(common::resource_relpath(&src));
-        common::copy_file(&src, &dest).chain_err(|| {
-            format!("Failed to copy resource file {:?}", src)
-        })?;
+        common::copy_file(&src, &dest)
+            .chain_err(|| format!("Failed to copy resource file {src:?}"))?;
     }
 
-    let icon_filenames = generate_icon_files(&bundle_dir, settings).chain_err(|| {
-        "Failed to create app icons"
-    })?;
-    generate_info_plist(&bundle_dir, settings, &icon_filenames).chain_err(|| {
-        "Failed to create Info.plist"
-    })?;
-    let bin_path = bundle_dir.join(&settings.binary_name());
-    common::copy_file(settings.binary_path(), &bin_path).chain_err(|| {
-        format!("Failed to copy binary from {:?}", settings.binary_path())
-    })?;
+    let icon_filenames =
+        generate_icon_files(&bundle_dir, settings).chain_err(|| "Failed to create app icons")?;
+    generate_info_plist(&bundle_dir, settings, &icon_filenames)
+        .chain_err(|| "Failed to create Info.plist")?;
+    let bin_path = bundle_dir.join(settings.binary_name());
+    common::copy_file(settings.binary_path(), &bin_path)
+        .chain_err(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
     Ok(vec![bundle_dir])
 }
 
 /// Generate the icon files and store them under the `bundle_dir`.
-fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> ::Result<Vec<String>> {
+fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<Vec<String>> {
     let mut filenames = Vec::new();
     {
         let mut get_dest_path = |width: u32, height: u32, is_retina: bool| {
-            let filename = format!("icon_{}x{}{}.png",
-                                   width,
-                                   height,
-                                   if is_retina { "@2x" } else { "" });
+            let filename = format!(
+                "icon_{}x{}{}.png",
+                width,
+                height,
+                if is_retina { "@2x" } else { "" }
+            );
             let path = bundle_dir.join(&filename);
             filenames.push(filename);
             path
@@ -118,31 +117,66 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> ::Result<Vec<S
     Ok(filenames)
 }
 
-fn generate_info_plist(bundle_dir: &Path, settings: &Settings, icon_filenames: &Vec<String>) -> ::Result<()> {
+fn generate_info_plist(
+    bundle_dir: &Path,
+    settings: &Settings,
+    icon_filenames: &Vec<String>,
+) -> crate::Result<()> {
     let file = &mut common::create_file(&bundle_dir.join("Info.plist"))?;
-    write!(file,
-           "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+    write!(
+        file,
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
             <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
             \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
             <plist version=\"1.0\">\n\
-            <dict>\n")?;
+            <dict>\n"
+    )?;
 
-    write!(file, "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n", settings.bundle_identifier())?;
-    write!(file, "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n", settings.bundle_name())?;
-    write!(file, "  <key>CFBundleName</key>\n  <string>{}</string>\n", settings.bundle_name())?;
-    write!(file, "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n", settings.binary_name())?;
-    write!(file, "  <key>CFBundleVersion</key>\n  <string>{}</string>\n", settings.version_string())?;
-    write!(file, "  <key>CFBundleShortVersionString</key>\n  <string>{}</string>\n", settings.version_string())?;
-    write!(file, "  <key>CFBundleDevelopmentRegion</key>\n  <string>en_US</string>\n")?;
-    write!(file, "  <key>UILaunchStoryboardName</key>\n  <string></string>\n")?;
-
+    write!(
+        file,
+        "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
+        settings.bundle_identifier()
+    )?;
+    write!(
+        file,
+        "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n",
+        settings.bundle_name()
+    )?;
+    write!(
+        file,
+        "  <key>CFBundleName</key>\n  <string>{}</string>\n",
+        settings.bundle_name()
+    )?;
+    write!(
+        file,
+        "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n",
+        settings.binary_name()
+    )?;
+    write!(
+        file,
+        "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
+        settings.version_string()
+    )?;
+    write!(
+        file,
+        "  <key>CFBundleShortVersionString</key>\n  <string>{}</string>\n",
+        settings.version_string()
+    )?;
+    write!(
+        file,
+        "  <key>CFBundleDevelopmentRegion</key>\n  <string>en_US</string>\n"
+    )?;
+    write!(
+        file,
+        "  <key>UILaunchStoryboardName</key>\n  <string></string>\n"
+    )?;
 
     if !icon_filenames.is_empty() {
         write!(file, "  <key>CFBundleIconFiles</key>\n  <array>\n")?;
         for filename in icon_filenames {
-            write!(file, "    <string>{}</string>\n", filename)?;
+            writeln!(file, "    <string>{filename}</string>")?;
         }
-        write!(file, "  </array>\n")?;
+        writeln!(file, "  </array>")?;
     }
     write!(file, "  <key>LSRequiresIPhoneOS</key>\n  <true/>\n")?;
     write!(file, "</dict>\n</plist>\n")?;
