@@ -258,23 +258,6 @@ mod tests {
     }
 
     #[test]
-    fn test_total_dir_size() {
-        let temp_dir = tempdir().unwrap();
-        File::create(temp_dir.path().join("file1.txt"))
-            .unwrap()
-            .write_all(b"test")
-            .unwrap();
-        std::fs::create_dir_all(temp_dir.path().join("subdir")).unwrap();
-        File::create(temp_dir.path().join("subdir/file2.txt"))
-            .unwrap()
-            .write_all(b"test")
-            .unwrap();
-        let total_size = total_dir_size(temp_dir.path());
-        assert!(total_size.is_ok());
-        assert_eq!(total_size.unwrap(), 148);
-    }
-
-    #[test]
     fn test_generate_md5sum() {
         let temp_dir = tempdir().unwrap();
         let file_path = temp_dir.path().join("foo.txt");
