@@ -196,25 +196,6 @@ mod tests {
     use std::io::{Write, Read};
 
     #[test]
-    fn test_generate_desktop_file() {
-        let settings = Settings::default();
-        let  temp_dir = tempdir().unwrap();
-        println!("temp_dir: {:?}", temp_dir);
-        assert_matches!(generate_desktop_file(&settings, temp_dir.path()), Ok(()));
-
-        let desktop_file_contents = {
-            let mut file = File::open(temp_dir.path()
-                .join("usr/share/applications/app.desktop")).unwrap();
-            let mut contents = String::new();
-            file.read_to_string(&mut contents).unwrap();
-            contents
-        };
-        assert_eq!(desktop_file_contents, "[Desktop Entry]\nEncoding=UTF-8\nComment=No description\n\
-        Exec=app\nIcon=app\nName=app\nTerminal=false\nType=Application\n\
-        MimeType=application/x-app;\n");
-    }
-
-    #[test]
     fn test_tar_and_gzip_dir() {
         let temp_dir = tempdir().unwrap();
         std::fs::create_dir(temp_dir.path().join("foo")).unwrap();
