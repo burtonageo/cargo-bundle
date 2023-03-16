@@ -1,26 +1,28 @@
+use crate::bundle::{common, Settings};
+use image::png::{PNGDecoder, PNGEncoder};
+use image::{GenericImage, ImageDecoder};
+use libflate::gzip;
+use md5::Digest;
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use image::{GenericImage, ImageDecoder};
-use image::png::{PNGDecoder, PNGEncoder};
-use libflate::gzip;
-use md5::Digest;
 use walkdir::WalkDir;
-use crate::bundle::{common, Settings};
 
 /// Generate the application desktop file and store it under the `data_dir`.
 pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
     let bin_name = settings.binary_name();
     let desktop_file_name = format!("{}.desktop", bin_name);
-    let desktop_file_path = data_dir.join("usr/share/applications").join(desktop_file_name);
+    let desktop_file_path = data_dir
+        .join("usr/share/applications")
+        .join(desktop_file_name);
     let file = &mut common::create_file(&desktop_file_path)?;
-    let mime_types = settings.linux_mime_types().iter().fold(
-        "".to_owned(),
-        |acc, s| format!("{}{};", acc, s),
-    );
+    let mime_types = settings
+        .linux_mime_types()
+        .iter()
+        .fold("".to_owned(), |acc, s| format!("{}{};", acc, s));
     // For more information about the format of this file, see
     // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
     write!(file, "[Desktop Entry]\n")?;
@@ -39,7 +41,11 @@ pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Res
     write!(file, "Exec={}\n", exec)?;
     write!(file, "Icon={}\n", bin_name)?;
     write!(file, "Name={}\n", settings.bundle_name())?;
-    write!(file, "Terminal={}\n", settings.linux_use_terminal().unwrap_or(false))?;
+    write!(
+        file,
+        "Terminal={}\n",
+        settings.linux_use_terminal().unwrap_or(false)
+    )?;
     write!(file, "Type=Application\n")?;
     write!(file, "MimeType={}\n", mime_types)?;
     // The `Version` field is omitted on pupose. See `generate_control_file` for specifying
@@ -97,22 +103,36 @@ pub fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> crate::Resu
 pub fn total_dir_size(dir: &Path) -> crate::Result<u64> {
     let mut total: u64 = 0;
     for entry in WalkDir::new(&dir) {
-        total += entry?
-            .metadata()?
-            .len();
+        total += entry?.metadata()?.len();
     }
     Ok(total)
 }
 
-fn get_dest_path<'a>(width: u32, height: u32, is_high_density: bool, base_dir: &'a PathBuf, binary_name: &'a str) -> PathBuf {
-    return Path::join(&base_dir, format!("{}x{}{}/apps/{}.png",
-                          width,
-                          height,
-                          if is_high_density { "@2x" } else { "" },
-                          binary_name));
+fn get_dest_path<'a>(
+    width: u32,
+    height: u32,
+    is_high_density: bool,
+    base_dir: &'a PathBuf,
+    binary_name: &'a str,
+) -> PathBuf {
+    return Path::join(
+        &base_dir,
+        format!(
+            "{}x{}{}/apps/{}.png",
+            width,
+            height,
+            if is_high_density { "@2x" } else { "" },
+            binary_name
+        ),
+    );
 }
 
-fn generate_icon_files_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name: &str, mut sizes: BTreeSet<(u32, u32, bool)>) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
+fn generate_icon_files_png(
+    icon_path: &PathBuf,
+    base_dir: &PathBuf,
+    binary_name: &str,
+    mut sizes: BTreeSet<(u32, u32, bool)>,
+) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
     let mut decoder = PNGDecoder::new(File::open(&icon_path)?);
     let (width, height) = decoder.dimensions()?;
     let is_high_density = common::is_retina(&icon_path);
@@ -126,8 +146,12 @@ fn generate_icon_files_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name:
     Ok(sizes.to_owned())
 }
 
-fn generate_icon_files_non_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_name: &str, mut sizes: BTreeSet<(u32, u32, bool)>) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
-
+fn generate_icon_files_non_png(
+    icon_path: &PathBuf,
+    base_dir: &PathBuf,
+    binary_name: &str,
+    mut sizes: BTreeSet<(u32, u32, bool)>,
+) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
     if icon_path.extension() == Some(OsStr::new("icns")) {
         let icon_family = icns::IconFamily::read(File::open(&icon_path)?)?;
         for icon_type in icon_family.available_icons() {
@@ -138,7 +162,8 @@ fn generate_icon_files_non_png(icon_path: &PathBuf, base_dir: &PathBuf, binary_n
             if !sizes.contains(&(width, height, is_high_density)) {
                 sizes.insert((width, height, is_high_density));
                 let icon = icon_family.get_icon_with_type(icon_type)?;
-                let dest_path = get_dest_path(width, height, is_high_density, base_dir, binary_name);
+                let dest_path =
+                    get_dest_path(width, height, is_high_density, base_dir, binary_name);
                 icon.write_png(common::create_file(&dest_path)?)?;
             }
         }
@@ -167,11 +192,22 @@ pub fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> crate::Re
     for icon_path in settings.icon_files() {
         let icon_path = icon_path?;
         if icon_path.extension() == Some(OsStr::new("png")) {
-            let new_sizes = generate_icon_files_png(&icon_path, &base_dir, settings.binary_name(), sizes.clone()).unwrap();
+            let new_sizes = generate_icon_files_png(
+                &icon_path,
+                &base_dir,
+                settings.binary_name(),
+                sizes.clone(),
+            )
+            .unwrap();
             sizes.append(&mut new_sizes.to_owned())
-        }
-        else {
-            let new_sizes = generate_icon_files_non_png(&icon_path, &base_dir, settings.binary_name(), sizes.clone()).unwrap();
+        } else {
+            let new_sizes = generate_icon_files_non_png(
+                &icon_path,
+                &base_dir,
+                settings.binary_name(),
+                sizes.clone(),
+            )
+            .unwrap();
             sizes.append(&mut new_sizes.to_owned())
         }
     }
@@ -190,10 +226,10 @@ pub fn generate_md5sum(file_path: &Path) -> crate::Result<Digest> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use  tempfile::tempdir;
     use std::assert_matches::assert_matches;
     use std::fs::File;
-    use std::io::{Write, Read};
+    use std::io::{Read, Write};
+    use tempfile::tempdir;
 
     #[test]
     fn test_tar_and_gzip_dir() {
@@ -201,9 +237,11 @@ mod tests {
         std::fs::create_dir(temp_dir.path().join("foo")).unwrap();
         File::create(temp_dir.path().join("foo/file1.txt")).unwrap();
         std::fs::create_dir_all(temp_dir.path().join("foo/subdir")).unwrap();
-        File::create(temp_dir.path().join("foo/subdir/file2.txt")).unwrap()
-            .write_all(b"test").unwrap();
-        let  tar_gz_file = tar_and_gzip_dir(&temp_dir.path().join("foo"));
+        File::create(temp_dir.path().join("foo/subdir/file2.txt"))
+            .unwrap()
+            .write_all(b"test")
+            .unwrap();
+        let tar_gz_file = tar_and_gzip_dir(&temp_dir.path().join("foo"));
         assert_matches!(tar_gz_file, Ok(_));
         let tar_gz_file = tar_gz_file.unwrap();
 
@@ -223,11 +261,15 @@ mod tests {
     #[test]
     fn test_total_dir_size() {
         let temp_dir = tempdir().unwrap();
-        File::create(temp_dir.path().join("file1.txt")).unwrap()
-            .write_all(b"test").unwrap();
+        File::create(temp_dir.path().join("file1.txt"))
+            .unwrap()
+            .write_all(b"test")
+            .unwrap();
         std::fs::create_dir_all(temp_dir.path().join("subdir")).unwrap();
-        File::create(temp_dir.path().join("subdir/file2.txt")).unwrap()
-            .write_all(b"test").unwrap();
+        File::create(temp_dir.path().join("subdir/file2.txt"))
+            .unwrap()
+            .write_all(b"test")
+            .unwrap();
         assert_matches!(total_dir_size(temp_dir.path()), Ok(148));
     }
 
@@ -235,8 +277,11 @@ mod tests {
     fn test_generate_md5sum() {
         let temp_dir = tempdir().unwrap();
         let file_path = temp_dir.path().join("foo.txt");
-        File::create(&file_path).unwrap().write_all(b"test").unwrap();
-        let  md5_sums = generate_md5sum(file_path.as_path());
+        File::create(&file_path)
+            .unwrap()
+            .write_all(b"test")
+            .unwrap();
+        let md5_sums = generate_md5sum(file_path.as_path());
         assert_matches!(md5_sums, Ok(_));
         let mut md5_str = String::new();
 

@@ -18,13 +18,21 @@
 // metadata, as well as generating the md5sums file.  Currently we do not
 // generate postinst or prerm files.
 
+use crate::{
+    bundle::{
+        common,
+        linux::common::{
+            create_file_with_data, generate_desktop_file, generate_icon_files, generate_md5sum,
+            tar_and_gzip_dir, total_dir_size,
+        },
+        Settings,
+    },
+    ResultExt,
+};
 use ar;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use crate::{ResultExt, bundle::{
-    linux::common::{create_file_with_data, generate_desktop_file, generate_icon_files, generate_md5sum, tar_and_gzip_dir, total_dir_size},
-    common, Settings}};
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let arch = match settings.binary_arch() {
@@ -45,9 +53,8 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let base_dir = settings.project_out_directory().join("bundle/deb");
     let package_dir = base_dir.join(&package_base_name);
     if package_dir.exists() {
-        std::fs::remove_dir_all(&package_dir).chain_err(|| {
-            format!("Failed to remove old {package_base_name}")
-        })?;
+        std::fs::remove_dir_all(&package_dir)
+            .chain_err(|| format!("Failed to remove old {package_base_name}"))?;
     }
     let package_path = base_dir.join(package_name);
 
