@@ -25,29 +25,29 @@ pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Res
         .fold("".to_owned(), |acc, s| format!("{}{};", acc, s));
     // For more information about the format of this file, see
     // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
-    write!(file, "[Desktop Entry]\n")?;
-    write!(file, "Encoding=UTF-8\n")?;
+    writeln!(file, "[Desktop Entry]")?;
+    writeln!(file, "Encoding=UTF-8")?;
     if let Some(category) = settings.app_category() {
-        write!(file, "Categories={}\n", category.gnome_desktop_categories())?;
+        writeln!(file, "Categories={}", category.gnome_desktop_categories())?;
     }
     if !settings.short_description().is_empty() {
-        write!(file, "Comment={}\n", settings.short_description())?;
+        writeln!(file, "Comment={}", settings.short_description())?;
     }
     let exec;
     match settings.linux_exec_args() {
         Some(args) => exec = format!("{} {}", bin_name, args),
         None => exec = bin_name.to_owned(),
     }
-    write!(file, "Exec={}\n", exec)?;
-    write!(file, "Icon={}\n", bin_name)?;
-    write!(file, "Name={}\n", settings.bundle_name())?;
-    write!(
+    writeln!(file, "Exec={}", exec)?;
+    writeln!(file, "Icon={}", bin_name)?;
+    writeln!(file, "Name={}", settings.bundle_name())?;
+    writeln!(
         file,
-        "Terminal={}\n",
+        "Terminal={}",
         settings.linux_use_terminal().unwrap_or(false)
     )?;
-    write!(file, "Type=Application\n")?;
-    write!(file, "MimeType={}\n", mime_types)?;
+    writeln!(file, "Type=Application")?;
+    writeln!(file, "MimeType={}", mime_types)?;
     // The `Version` field is omitted on pupose. See `generate_control_file` for specifying
     // the application version.
     Ok(())
@@ -71,13 +71,13 @@ pub fn tar_and_gzip_dir<P: AsRef<Path>>(src_dir: P) -> crate::Result<PathBuf> {
 pub fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -> crate::Result<W> {
     let src_dir = src_dir.as_ref();
     let mut tar_builder = tar::Builder::new(dest_file);
-    for entry in WalkDir::new(&src_dir) {
+    for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         let src_path = entry.path();
         if src_path == src_dir {
             continue;
         }
-        let dest_path = src_path.strip_prefix(&src_dir).unwrap();
+        let dest_path = src_path.strip_prefix(src_dir).unwrap();
         if entry.file_type().is_dir() {
             tar_builder.append_dir(dest_path, src_path)?;
         } else {
@@ -102,7 +102,7 @@ pub fn create_file_with_data<P: AsRef<Path>>(path: P, data: &str) -> crate::Resu
 /// contents.
 pub fn total_dir_size(dir: &Path) -> crate::Result<u64> {
     let mut total: u64 = 0;
-    for entry in WalkDir::new(&dir) {
+    for entry in WalkDir::new(dir) {
         total += entry?.metadata()?.len();
     }
     Ok(total)
@@ -115,8 +115,8 @@ fn get_dest_path<'a>(
     base_dir: &'a PathBuf,
     binary_name: &'a str,
 ) -> PathBuf {
-    return Path::join(
-        &base_dir,
+    Path::join(
+        base_dir,
         format!(
             "{}x{}{}/apps/{}.png",
             width,
@@ -124,7 +124,7 @@ fn get_dest_path<'a>(
             if is_high_density { "@2x" } else { "" },
             binary_name
         ),
-    );
+    )
 }
 
 fn generate_icon_files_png(
@@ -133,14 +133,14 @@ fn generate_icon_files_png(
     binary_name: &str,
     mut sizes: BTreeSet<(u32, u32, bool)>,
 ) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
-    let mut decoder = PNGDecoder::new(File::open(&icon_path)?);
+    let mut decoder = PNGDecoder::new(File::open(icon_path)?);
     let (width, height) = decoder.dimensions()?;
-    let is_high_density = common::is_retina(&icon_path);
+    let is_high_density = common::is_retina(icon_path);
 
     if !sizes.contains(&(width, height, is_high_density)) {
         sizes.insert((width, height, is_high_density));
         let dest_path = get_dest_path(width, height, is_high_density, base_dir, binary_name);
-        common::copy_file(&icon_path, &dest_path)?;
+        common::copy_file(icon_path, &dest_path)?;
     }
 
     Ok(sizes.to_owned())
@@ -153,7 +153,7 @@ fn generate_icon_files_non_png(
     mut sizes: BTreeSet<(u32, u32, bool)>,
 ) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
     if icon_path.extension() == Some(OsStr::new("icns")) {
-        let icon_family = icns::IconFamily::read(File::open(&icon_path)?)?;
+        let icon_family = icns::IconFamily::read(File::open(icon_path)?)?;
         for icon_type in icon_family.available_icons() {
             let width = icon_type.screen_width();
             let height = icon_type.screen_height();
@@ -168,9 +168,9 @@ fn generate_icon_files_non_png(
             }
         }
     } else {
-        let icon = image::open(&icon_path)?;
+        let icon = image::open(icon_path)?;
         let (width, height) = icon.dimensions();
-        let is_high_density = common::is_retina(&icon_path);
+        let is_high_density = common::is_retina(icon_path);
 
         if !sizes.contains(&(width, height, is_high_density)) {
             sizes.insert((width, height, is_high_density));
@@ -240,7 +240,7 @@ mod tests {
             .unwrap()
             .write_all(b"test")
             .unwrap();
-        let tar_gz_file = tar_and_gzip_dir(&temp_dir.path().join("foo"));
+        let tar_gz_file = tar_and_gzip_dir(temp_dir.path().join("foo"));
         assert!(tar_gz_file.is_ok());
         let tar_gz_file = tar_gz_file.unwrap();
 

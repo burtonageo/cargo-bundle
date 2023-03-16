@@ -29,7 +29,7 @@ use crate::{
     },
     ResultExt,
 };
-use ar;
+
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
