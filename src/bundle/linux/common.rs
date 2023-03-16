@@ -227,7 +227,7 @@ pub fn generate_md5sum(file_path: &Path) -> crate::Result<Digest> {
 mod tests {
     use super::*;
     use std::fs::File;
-    use std::io::{Read, Write};
+    use std::io::{Write};
     use tempfile::tempdir;
 
     #[test]
