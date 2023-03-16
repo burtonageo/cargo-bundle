@@ -1,4 +1,3 @@
-#![feature(assert_matches)]
 extern crate ar;
 extern crate cab;
 extern crate chrono;

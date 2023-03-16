@@ -226,7 +226,6 @@ pub fn generate_md5sum(file_path: &Path) -> crate::Result<Digest> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::assert_matches::assert_matches;
     use std::fs::File;
     use std::io::{Read, Write};
     use tempfile::tempdir;
@@ -242,7 +241,7 @@ mod tests {
             .write_all(b"test")
             .unwrap();
         let tar_gz_file = tar_and_gzip_dir(&temp_dir.path().join("foo"));
-        assert_matches!(tar_gz_file, Ok(_));
+        assert!(tar_gz_file.is_ok());
         let tar_gz_file = tar_gz_file.unwrap();
 
         assert!(tar_gz_file.exists());
@@ -253,7 +252,7 @@ mod tests {
     fn test_create_file_with_data() {
         let temp_dir = tempdir().unwrap();
         let file_path = temp_dir.path().join("foo.txt");
-        assert_matches!(create_file_with_data(&file_path, "test"), Ok(()));
+        assert!(create_file_with_data(&file_path, "test").is_ok());
         assert!(file_path.exists());
         assert_eq!(file_path.metadata().unwrap().len(), 4);
     }
@@ -270,7 +269,9 @@ mod tests {
             .unwrap()
             .write_all(b"test")
             .unwrap();
-        assert_matches!(total_dir_size(temp_dir.path()), Ok(148));
+        let total_size = total_dir_size(temp_dir.path());
+        assert!(total_size.is_ok());
+        assert_eq!(total_size.unwrap(), 148);
     }
 
     #[test]
@@ -282,7 +283,7 @@ mod tests {
             .write_all(b"test")
             .unwrap();
         let md5_sums = generate_md5sum(file_path.as_path());
-        assert_matches!(md5_sums, Ok(_));
+        assert!(md5_sums.is_ok());
         let mut md5_str = String::new();
 
         for b in md5_sums.unwrap().iter() {
