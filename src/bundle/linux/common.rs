@@ -33,11 +33,10 @@ pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Res
     if !settings.short_description().is_empty() {
         writeln!(file, "Comment={}", settings.short_description())?;
     }
-    let exec;
-    match settings.linux_exec_args() {
-        Some(args) => exec = format!("{} {}", bin_name, args),
-        None => exec = bin_name.to_owned(),
-    }
+    let exec = match settings.linux_exec_args() {
+        Some(args) => format!("{} {}", bin_name, args),
+        None => bin_name.to_owned(),
+    };
     writeln!(file, "Exec={}", exec)?;
     writeln!(file, "Icon={}", bin_name)?;
     writeln!(file, "Name={}", settings.bundle_name())?;
@@ -81,7 +80,7 @@ pub fn create_tar_from_dir<P: AsRef<Path>, W: Write>(src_dir: P, dest_file: W) -
         if entry.file_type().is_dir() {
             tar_builder.append_dir(dest_path, src_path)?;
         } else {
-            let mut src_file = std::fs::File::open(src_path)?;
+            let mut src_file = File::open(src_path)?;
             tar_builder.append_file(dest_path, &mut src_file)?;
         }
     }
@@ -112,7 +111,7 @@ fn get_dest_path<'a>(
     width: u32,
     height: u32,
     is_high_density: bool,
-    base_dir: &'a PathBuf,
+    base_dir: &'a Path,
     binary_name: &'a str,
 ) -> PathBuf {
     Path::join(
@@ -129,7 +128,7 @@ fn get_dest_path<'a>(
 
 fn generate_icon_files_png(
     icon_path: &PathBuf,
-    base_dir: &PathBuf,
+    base_dir: &Path,
     binary_name: &str,
     mut sizes: BTreeSet<(u32, u32, bool)>,
 ) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
@@ -148,7 +147,7 @@ fn generate_icon_files_png(
 
 fn generate_icon_files_non_png(
     icon_path: &PathBuf,
-    base_dir: &PathBuf,
+    base_dir: &Path,
     binary_name: &str,
     mut sizes: BTreeSet<(u32, u32, bool)>,
 ) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
@@ -184,7 +183,7 @@ fn generate_icon_files_non_png(
 }
 
 /// Generate the icon files and store them under the `data_dir`.
-pub fn generate_icon_files(settings: &Settings, data_dir: &PathBuf) -> crate::Result<()> {
+pub fn generate_icon_files(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
     let base_dir = data_dir.join("usr/share/icons/hicolor");
 
     let mut sizes: BTreeSet<(u32, u32, bool)> = BTreeSet::new();
