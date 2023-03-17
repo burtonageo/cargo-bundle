@@ -143,10 +143,11 @@ impl Settings {
         let features = matches.value_of("features").map(|features| features.into());
         let cargo_settings = load_metadata(&current_dir)?;
         // TODO: support multiple packages?
-        let package = match cargo_settings.packages.get(0) {
+        let package_id = match cargo_settings.workspace_members.get(0) {
             Some(package_info) => package_info,
-            None => bail!("No 'package' info found in 'Cargo.toml'"),
+            None => bail!("Cargo workspace is empty"),
         };
+        let package = cargo_settings[package_id].clone();
         let workspace_dir = Settings::get_workspace_dir(current_dir);
         let target_dir =
             Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
@@ -169,7 +170,7 @@ impl Settings {
         };
         let binary_path = target_dir.join(&binary_name);
         Ok(Settings {
-            package: package.clone(),
+            package,
             package_type,
             target,
             features,
