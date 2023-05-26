@@ -213,6 +213,26 @@ fn create_property_table(
             .row(vec![
                 msi::Value::from("DefaultUIFont"),
                 msi::Value::from("DefaultFont"),
+            ])
+            .row(vec![
+                msi::Value::from("Mode"),
+                msi::Value::from("Install"),
+            ])
+            .row(vec![
+                msi::Value::from("Text_action"),
+                msi::Value::from("installation"),
+            ])
+            .row(vec![
+                msi::Value::from("Text_agent"),
+                msi::Value::from("installer"),
+            ])
+            .row(vec![
+                msi::Value::from("Text_Doing"),
+                msi::Value::from("installing"),
+            ])
+            .row(vec![
+                msi::Value::from("Text_done"),
+                msi::Value::from("installed"),
             ]),
     )?;
     Ok(())
@@ -743,7 +763,7 @@ fn create_install_ui_sequence_table(
         ],
     )?;
     let mut rows = Vec::new();
-    let actions: [(&str, &str, i32); 8] = [
+    let actions: [(&str, &str, i32); 9] = [
         ("FatalErrorDialog", "", -3),
         ("ExitDialog", "", -1),
         //("LaunchConditions", "", 100), // Requires a LaunchCondition table
@@ -755,7 +775,8 @@ fn create_install_ui_sequence_table(
         ("FileCost", "", 900),
         ("CostFinalize", "", 1000),
         //("MigrateFeatureStates", "", 1200),
-        ("WelcomeDialog", "", 1230),
+        ("WelcomeDialog", "NOT Installed", 1230),
+        ("RemoveDialog", "Installed", 1240),
         ("ProgressDialog", "", 1280),
         ("ExecuteAction", "", 1300),
     ];
@@ -806,8 +827,9 @@ fn create_dialog_table(package: &mut Package, _cabinets: &[CabinetInfo]) -> crat
     )?;
     let mut rows = Vec::new();
     #[rustfmt::skip]
-    let actions: [(&str, i32, i32, i32, i32, i32, &str, &str, &str, &str); 5] = [
+    let actions: [(&str, i32, i32, i32, i32, i32, &str, &str, &str, &str); 6] = [
         ("WelcomeDialog", 50, 50, 370, 270, 3, "[ProductName] Setup", "WelcomeInstall", "WelcomeInstall", "WelcomeInstall"),
+        ("RemoveDialog", 50, 50, 370, 270, 3, "[ProductName] Setup", "RemoveRemove", "RemoveRemove", "RemoveRemove"),
         ("CancelDialog", 50, 10, 260, 85, 3, "[ProductName] Setup", "CancelNo", "CancelNo", "CancelNo"),
         ("ProgressDialog", 50, 50, 370, 270, 1, "[ProductName] Setup", "ProgressCancel", "ProgressCancel", "ProgressCancel"),
         ("ExitDialog", 50, 50, 370, 270, 3, "[ProductName] Setup", "ExitFinish", "ExitFinish", "ExitFinish"),
@@ -878,22 +900,29 @@ fn create_control_table(package: &mut Package, _cabinets: &[CabinetInfo]) -> cra
         ],
     )?;
     let mut rows = Vec::new();
-    let actions: [(&str, &str, &str, i32, i32, i32, i32, i32, &str, &str, &str, &str); 32] = [
-        ("WelcomeDialog", "WelcomeDescription", "Text", 135, 70, 220, 50, 196611, "", "{\\DefaultFont}This will install [ProductName] on your computer. Click Next to continue or Cancel to exit the installer.", "", ""),
+    let actions: [(&str, &str, &str, i32, i32, i32, i32, i32, &str, &str, &str, &str); 38] = [
+        ("WelcomeDialog", "WelcomeDescription", "Text", 135, 70, 220, 50, 196611, "", "{\\DefaultFont}This will install [ProductName] on your computer. Click Install to continue or Cancel to exit the installer.", "", ""),
         ("WelcomeDialog", "WelcomeTitle", "Text", 135, 20, 220, 60, 196611, "", "{\\TitleFont}Welcome to the [ProductName] setup wizard", "", ""),
         ("WelcomeDialog", "WelcomeCancel", "PushButton", 304, 243, 56, 17, 3, "", "Cancel", "", ""),
         //("WelcomeDialog", "WelcomeBitmap", "Bitmap", 0, 0, 370, 234, 1, "", "[DialogBitmap]", "WelcomeBack", ""),
         ("WelcomeDialog", "WelcomeBack", "PushButton", 180, 243, 56, 17, 1, "", "Back", "WelcomeInstall", ""),
         ("WelcomeDialog", "WelcomeBottomLine", "Line", 0, 234, 374, 0, 1, "", "", "", ""),
         ("WelcomeDialog", "WelcomeInstall", "PushButton", 236, 243, 56, 17, 3, "", "Install", "WelcomeCancel", ""),
+        ("RemoveDialog", "RemoveDescription", "Text", 135, 70, 220, 50, 196611, "", "This will remove [ProductName] from your computer. Click Remove to continue or Cancel to exit the uninstaller.", "", ""),
+        ("RemoveDialog", "RemoveTitle", "Text", 135, 20, 220, 60, 196611, "", "{\\TitleFont}Uninstall [ProductName]", "", ""),
+        ("RemoveDialog", "RemoveCancel", "PushButton", 304, 243, 56, 17, 3, "", "Cancel", "", ""),
+        //("RemoveDialog", "RemoveBitmap", "Bitmap", 0, 0, 370, 234, 1, "", "[DialogBitmap]", "RemoveBack", ""),
+        ("RemoveDialog", "RemoveBack", "PushButton", 180, 243, 56, 17, 1, "", "Back", "RemoveRemove", ""),
+        ("RemoveDialog", "RemoveBottomLine", "Line", 0, 234, 374, 0, 1, "", "", "", ""),
+        ("RemoveDialog", "RemoveRemove", "PushButton", 236, 243, 56, 17, 3, "", "Remove", "RemoveCancel", ""),
         //("CancelDialog", "CancelIcon", "Icon", 15, 15, 24, 24, 5242881, "", "[InfoIcon]", "", "Information icon|"),
         ("CancelDialog", "CancelNo", "PushButton", 132, 57, 56, 17, 3, "", "Continue", "CancelYes", ""),
-        ("CancelDialog", "CancelText", "Text", 48, 15, 194, 30, 3, "", "Do you want to abort [ProductName] installation?", "", "Information icon|"),
+        ("CancelDialog", "CancelText", "Text", 48, 15, 194, 30, 3, "", "Do you want to abort [ProductName] [Text_action]?", "", "Information icon|"),
         ("CancelDialog", "CancelYes", "PushButton", 72, 57, 56, 17, 3, "", "Abort", "CancelNo", ""),
-        ("ProgressDialog", "ProgressTitle", "Text", 20, 15, 200, 15, 196611, "", "{\\BoldFont}Installing [ProductName]", "", ""),
+        ("ProgressDialog", "ProgressTitle", "Text", 20, 15, 200, 15, 196611, "", "{\\BoldFont}[Text_Doing] [ProductName]", "", ""),
         //("ProgressDialog", "ProgressBannerBitmap", "Bitmap", 0, 0, 374, 44, 1, "", "[BannerBitmap]", "ProgressBack", ""),
         ("ProgressDialog", "ProgressCancel", "PushButton", 304, 243, 56, 17, 3, "", "Cancel", "", ""),
-        ("ProgressDialog", "ProgressText", "Text", 35, 65, 300, 20, 3, "", "Please wait while [ProductName] is installed. This may take several minutes.", "", ""),
+        ("ProgressDialog", "ProgressText", "Text", 35, 65, 300, 20, 3, "", "Please wait while [ProductName] is [Text_done]. This may take several minutes.", "", ""),
         ("ProgressDialog", "ProgressActionText", "Text", 70, 100, 265, 10, 3, "", "", "", ""),
         ("ProgressDialog", "ProgressBack", "PushButton", 180, 243, 56, 17, 1, "", "Back", "ProgressNext", ""),
         ("ProgressDialog", "ProgressBottomLine", "Line", 0, 234, 374, 0, 1, "", "", "ProgressNext", ""),
@@ -901,21 +930,21 @@ fn create_control_table(package: &mut Package, _cabinets: &[CabinetInfo]) -> cra
         ("ProgressDialog", "ProgressBannerLine", "Line", 0, 44, 374, 0, 1, "", "", "", ""),
         ("ProgressDialog", "ProgressProgressBar", "ProgressBar", 35, 115, 300, 10, 65537, "", "Progress done", "", ""),
         ("ProgressDialog", "ProgressStatusLabel", "Text", 35, 100, 35, 10, 3, "", "Status:", "", ""),
-        ("ExitDialog", "ExitDescription", "Text", 135, 70, 220, 20, 196611, "", "Click the Finish button to exit the installer.", "", ""),
-        ("ExitDialog", "ExitTitle", "Text", 135, 20, 220, 60, 196611, "", "{\\TitleFont}[ProductName] installation complete", "", ""),
+        ("ExitDialog", "ExitDescription", "Text", 135, 70, 220, 20, 196611, "", "Click the Finish button to exit the [Text_agent].", "", ""),
+        ("ExitDialog", "ExitTitle", "Text", 135, 20, 220, 60, 196611, "", "{\\TitleFont}[ProductName] [Text_action] complete", "", ""),
         ("ExitDialog", "ExitCancel", "PushButton", 304, 243, 56, 17, 1, "", "Cancel", "", ""),
         //("ExitDialog", "ExitBitmap", "Bitmap", 0, 0, 370, 234, 1, "", "[DialogBitmap]", "ExitBack", ""),
         ("ExitDialog", "ExitBack", "PushButton", 180, 243, 56, 17, 1, "", "Back", "ExitFinish", ""),
         ("ExitDialog", "ExitBottomLine", "Line", 0, 234, 374, 0, 1, "", "", "", ""),
         ("ExitDialog", "ExitFinish", "PushButton", 236, 243, 56, 17, 3, "", "Finish", "ExitCancel", ""),
-        ("FatalErrorDialog", "FatalTitle", "Text", 135, 20, 220, 60, 196611, "", "{\\TitleFont}[ProductName] installer ended prematurely", "", ""),
+        ("FatalErrorDialog", "FatalTitle", "Text", 135, 20, 220, 60, 196611, "", "{\\TitleFont}[ProductName] [Text_agent] ended prematurely", "", ""),
         ("FatalErrorDialog", "FatalCancel", "PushButton", 304, 243, 56, 17, 1, "", "Cancel", "", ""),
         //("FatalErrorDialog", "FatalBitmap", "Bitmap", 0, 0, 370, 234, 1, "", "[DialogBitmap]", "FatalBack", ""),
         ("FatalErrorDialog", "FatalBack", "PushButton", 180, 243, 56, 17, 1, "", "Back", "FatalFinish", ""),
         ("FatalErrorDialog", "FatalBottomLine", "Line", 0, 234, 374, 0, 1, "", "", "", ""),
         ("FatalErrorDialog", "FatalFinish", "PushButton", 236, 243, 56, 17, 3, "", "Finish", "FatalCancel", ""),
-        ("FatalErrorDialog", "FatalDescription1", "Text", 135, 70, 220, 40, 196611, "", "[ProductName] setup ended because of an error. The program has not been installed. This installer can be run again at a later time.", "", ""),
-        ("FatalErrorDialog", "FatalDescription2", "Text", 135, 115, 220, 20, 196611, "", "Click the Finish button to exit the installer.", "", ""),
+        ("FatalErrorDialog", "FatalDescription1", "Text", 135, 70, 220, 40, 196611, "", "[ProductName] [Text_action] ended because of an error. The program has not been installed. This installer can be run again at a later time.", "", ""),
+        ("FatalErrorDialog", "FatalDescription2", "Text", 135, 115, 220, 20, 196611, "", "Click the Finish button to exit the [Text_agent].", "", ""),
     ];
     for action in actions {
         rows.push(vec![
@@ -962,7 +991,6 @@ fn create_control_event_table(
         vec![
             msi::Column::build("Dialog_").id_string(72),
             msi::Column::build("Control_")
-                .primary_key()
                 .category(msi::Category::Identifier)
                 .string(50),
             msi::Column::build("Event")
@@ -975,7 +1003,7 @@ fn create_control_event_table(
                 .nullable()
                 .category(msi::Category::Condition)
                 .string(255),
-            msi::Column::build("Ordering")
+            msi::Column::build("Ordering").primary_key()
                 .nullable()
                 .range(0, 0x7fffffff)
                 .int16(),
@@ -983,14 +1011,27 @@ fn create_control_event_table(
     )?;
     let mut rows = Vec::new();
     #[rustfmt::skip]
-    let actions: [(&str, &str, &str, &str, &str, i32); 7] = [
+    let actions: [(&str, &str, &str, &str, &str, i32); 20] = [
         ("WelcomeDialog", "WelcomeCancel", "SpawnDialog", "CancelDialog", "1", 0),
-        ("WelcomeDialog", "WelcomeInstall", "EndDialog", "Return", "1", 0),
-        ("CancelDialog", "CancelNo", "EndDialog", "Return", "1", 0),
-        ("CancelDialog", "CancelYes", "EndDialog", "Exit", "1", 0),
-        ("ProgressDialog", "ProgressCancel", "SpawnDialog", "CancelDialog", "1", 0),
-        ("ExitDialog", "ExitFinish", "EndDialog", "Return", "1", 0),
-        ("FatalErrorDialog", "FatalFinish", "EndDialog", "Exit", "1", 0),
+        ("WelcomeDialog", "WelcomeInstall", "[Mode]", "Install", "1", 1),
+        ("WelcomeDialog", "WelcomeInstall", "[Text_action]", "installation", "1", 2),
+        ("WelcomeDialog", "WelcomeInstall", "[Text_agent]", "installer", "1", 3),
+        ("WelcomeDialog", "WelcomeInstall", "[Text_Doing]", "Installing", "1", 4),
+        ("WelcomeDialog", "WelcomeInstall", "[Text_done]", "installed", "1", 5),
+        ("WelcomeDialog", "WelcomeInstall", "EndDialog", "Return", "1", 6),
+        ("RemoveDialog", "RemoveCancel", "[Text_action]", "removal", "1", 7),
+        ("RemoveDialog", "RemoveCancel", "SpawnDialog", "CancelDialog", "1", 8),
+        ("RemoveDialog", "RemoveRemove", "[Mode]", "Remove", "1", 9),
+        ("RemoveDialog", "RemoveRemove", "[Text_action]", "removal", "1", 10),
+        ("RemoveDialog", "RemoveRemove", "[Text_agent]", "uninstaller", "1", 11),
+        ("RemoveDialog", "RemoveRemove", "[Text_Doing]", "Removing", "1", 12),
+        ("RemoveDialog", "RemoveRemove", "[Text_done]", "uninstalled", "1", 13),
+        ("RemoveDialog", "RemoveRemove", "EndDialog", "Return", "1", 14),
+        ("CancelDialog", "CancelNo", "EndDialog", "Return", "1", 15),
+        ("CancelDialog", "CancelYes", "EndDialog", "Exit", "1", 16),
+        ("ProgressDialog", "ProgressCancel", "SpawnDialog", "CancelDialog", "1", 17),
+        ("ExitDialog", "ExitFinish", "EndDialog", "Return", "1", 18),
+        ("FatalErrorDialog", "FatalFinish", "EndDialog", "Exit", "1", 19),
     ];
     for action in actions {
         rows.push(vec![
