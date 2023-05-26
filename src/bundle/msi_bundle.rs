@@ -214,10 +214,7 @@ fn create_property_table(
                 msi::Value::from("DefaultUIFont"),
                 msi::Value::from("DefaultFont"),
             ])
-            .row(vec![
-                msi::Value::from("Mode"),
-                msi::Value::from("Install"),
-            ])
+            .row(vec![msi::Value::from("Mode"), msi::Value::from("Install")])
             .row(vec![
                 msi::Value::from("Text_action"),
                 msi::Value::from("installation"),
@@ -917,19 +914,19 @@ fn create_control_table(package: &mut Package, _cabinets: &[CabinetInfo]) -> cra
         ("RemoveDialog", "RemoveRemove", "PushButton", 236, 243, 56, 17, 3, "", "Remove", "RemoveCancel", ""),
         //("CancelDialog", "CancelIcon", "Icon", 15, 15, 24, 24, 5242881, "", "[InfoIcon]", "", "Information icon|"),
         ("CancelDialog", "CancelNo", "PushButton", 132, 57, 56, 17, 3, "", "Continue", "CancelYes", ""),
-        ("CancelDialog", "CancelText", "Text", 48, 15, 194, 30, 3, "", "Do you want to abort [ProductName] [Text_action]?", "", "Information icon|"),
+        ("CancelDialog", "CancelText", "Text", 48, 15, 194, 30, 3, "", "Do you want to abort [ProductName] [Text_action]?", "", ""),
         ("CancelDialog", "CancelYes", "PushButton", 72, 57, 56, 17, 3, "", "Abort", "CancelNo", ""),
         ("ProgressDialog", "ProgressTitle", "Text", 20, 15, 200, 15, 196611, "", "{\\BoldFont}[Text_Doing] [ProductName]", "", ""),
         //("ProgressDialog", "ProgressBannerBitmap", "Bitmap", 0, 0, 374, 44, 1, "", "[BannerBitmap]", "ProgressBack", ""),
         ("ProgressDialog", "ProgressCancel", "PushButton", 304, 243, 56, 17, 3, "", "Cancel", "", ""),
-        ("ProgressDialog", "ProgressText", "Text", 35, 65, 300, 20, 3, "", "Please wait while [ProductName] is [Text_done]. This may take several minutes.", "", ""),
-        ("ProgressDialog", "ProgressActionText", "Text", 70, 100, 265, 10, 3, "", "", "", ""),
+        ("ProgressDialog", "ProgressText", "Text", 35, 65, 300, 25, 3, "", "Please wait while [ProductName] is [Text_done]. This may take several minutes.", "", ""),
+        ("ProgressDialog", "ProgressActionText", "Text", 70, 105, 265, 15, 3, "", "", "", ""),
         ("ProgressDialog", "ProgressBack", "PushButton", 180, 243, 56, 17, 1, "", "Back", "ProgressNext", ""),
         ("ProgressDialog", "ProgressBottomLine", "Line", 0, 234, 374, 0, 1, "", "", "ProgressNext", ""),
         ("ProgressDialog", "ProgressNext", "PushButton", 236, 243, 56, 17, 1, "", "Next", "ProgressCancel", ""),
         ("ProgressDialog", "ProgressBannerLine", "Line", 0, 44, 374, 0, 1, "", "", "", ""),
-        ("ProgressDialog", "ProgressProgressBar", "ProgressBar", 35, 115, 300, 10, 65537, "", "Progress done", "", ""),
-        ("ProgressDialog", "ProgressStatusLabel", "Text", 35, 100, 35, 10, 3, "", "Status:", "", ""),
+        ("ProgressDialog", "ProgressProgressBar", "ProgressBar", 35, 125, 300, 10, 65537, "", "Progress done", "", ""),
+        ("ProgressDialog", "ProgressStatusLabel", "Text", 35, 105, 35, 10, 3, "", "Status:", "", ""),
         ("ExitDialog", "ExitDescription", "Text", 135, 70, 220, 20, 196611, "", "Click the Finish button to exit the [Text_agent].", "", ""),
         ("ExitDialog", "ExitTitle", "Text", 135, 20, 220, 60, 196611, "", "{\\TitleFont}[ProductName] [Text_action] complete", "", ""),
         ("ExitDialog", "ExitCancel", "PushButton", 304, 243, 56, 17, 1, "", "Cancel", "", ""),
@@ -1003,7 +1000,8 @@ fn create_control_event_table(
                 .nullable()
                 .category(msi::Category::Condition)
                 .string(255),
-            msi::Column::build("Ordering").primary_key()
+            msi::Column::build("Ordering")
+                .primary_key()
                 .nullable()
                 .range(0, 0x7fffffff)
                 .int16(),
