@@ -729,7 +729,7 @@ fn create_install_execute_sequence_table(
     for action in actions {
         rows.push(vec![
             msi::Value::Str(action.0.to_string()),
-            if action.1 != "" {
+            if !action.1.is_empty() {
                 msi::Value::Str(action.1.to_string())
             } else {
                 msi::Value::Null
@@ -780,7 +780,7 @@ fn create_install_ui_sequence_table(
     for action in actions {
         rows.push(vec![
             msi::Value::Str(action.0.to_string()),
-            if action.1 != "" {
+            if !action.1.is_empty() {
                 msi::Value::Str(action.1.to_string())
             } else {
                 msi::Value::Null
@@ -823,8 +823,20 @@ fn create_dialog_table(package: &mut Package, _cabinets: &[CabinetInfo]) -> crat
         ],
     )?;
     let mut rows = Vec::new();
+    type DialogTableEntry<'a> = (
+        &'a str,
+        i32,
+        i32,
+        i32,
+        i32,
+        i32,
+        &'a str,
+        &'a str,
+        &'a str,
+        &'a str,
+    );
     #[rustfmt::skip]
-    let actions: [(&str, i32, i32, i32, i32, i32, &str, &str, &str, &str); 6] = [
+    let actions: [DialogTableEntry; 6] = [
         ("WelcomeDialog", 50, 50, 370, 270, 3, "[ProductName] Setup", "WelcomeInstall", "WelcomeInstall", "WelcomeInstall"),
         ("RemoveDialog", 50, 50, 370, 270, 3, "[ProductName] Setup", "RemoveRemove", "RemoveRemove", "RemoveRemove"),
         ("CancelDialog", 50, 10, 260, 85, 3, "[ProductName] Setup", "CancelNo", "CancelNo", "CancelNo"),
@@ -842,12 +854,12 @@ fn create_dialog_table(package: &mut Package, _cabinets: &[CabinetInfo]) -> crat
             msi::Value::Int(action.5),
             msi::Value::Str(action.6.to_string()),
             msi::Value::Str(action.7.to_string()),
-            if action.8 != "" {
+            if !action.8.is_empty() {
                 msi::Value::Str(action.8.to_string())
             } else {
                 msi::Value::Null
             },
-            if action.9 != "" {
+            if !action.9.is_empty() {
                 msi::Value::Str(action.9.to_string())
             } else {
                 msi::Value::Null
@@ -897,7 +909,21 @@ fn create_control_table(package: &mut Package, _cabinets: &[CabinetInfo]) -> cra
         ],
     )?;
     let mut rows = Vec::new();
-    let actions: [(&str, &str, &str, i32, i32, i32, i32, i32, &str, &str, &str, &str); 38] = [
+    type ControlTableEntry<'a> = (
+        &'a str,
+        &'a str,
+        &'a str,
+        i32,
+        i32,
+        i32,
+        i32,
+        i32,
+        &'a str,
+        &'a str,
+        &'a str,
+        &'a str,
+    );
+    let actions: [ControlTableEntry; 38] = [
         ("WelcomeDialog", "WelcomeDescription", "Text", 135, 70, 220, 50, 196611, "", "{\\DefaultFont}This will install [ProductName] on your computer. Click Install to continue or Cancel to exit the installer.", "", ""),
         ("WelcomeDialog", "WelcomeTitle", "Text", 135, 20, 220, 60, 196611, "", "{\\TitleFont}Welcome to the [ProductName] setup wizard", "", ""),
         ("WelcomeDialog", "WelcomeCancel", "PushButton", 304, 243, 56, 17, 3, "", "Cancel", "", ""),
@@ -953,22 +979,22 @@ fn create_control_table(package: &mut Package, _cabinets: &[CabinetInfo]) -> cra
             msi::Value::Int(action.5),
             msi::Value::Int(action.6),
             msi::Value::Int(action.7),
-            if action.8 != "" {
+            if !action.8.is_empty() {
                 msi::Value::Str(action.8.to_string())
             } else {
                 msi::Value::Null
             },
-            if action.9 != "" {
+            if !action.9.is_empty() {
                 msi::Value::Str(action.9.to_string())
             } else {
                 msi::Value::Null
             },
-            if action.10 != "" {
+            if !action.10.is_empty() {
                 msi::Value::Str(action.10.to_string())
             } else {
                 msi::Value::Null
             },
-            if action.11 != "" {
+            if !action.11.is_empty() {
                 msi::Value::Str(action.11.to_string())
             } else {
                 msi::Value::Null
