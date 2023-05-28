@@ -156,7 +156,7 @@ impl Settings {
         } else {
             bail!("No [package.metadata.bundle] section in Cargo.toml");
         };
-        let (bundle_settings, binary_name) = match build_artifact {
+        let (bundle_settings, mut binary_name) = match build_artifact {
             // TODO: this is wrong. Package can have multiple binaries and none of them has to be named the same way as package itself
             BuildArtifact::Main => (bundle_settings, package.name.clone()),
             BuildArtifact::Bin(ref name) => (
@@ -168,6 +168,17 @@ impl Settings {
                 name.clone(),
             ),
         };
+        let binary_extension = match package_type {
+            Some(x) => match x {
+                PackageType::OsxBundle
+                | PackageType::IosBundle
+                | PackageType::Deb
+                | PackageType::Rpm => "",
+                PackageType::WindowsMsi => ".exe",
+            },
+            None => "",
+        };
+        binary_name += binary_extension;
         let binary_path = target_dir.join(&binary_name);
         Ok(Settings {
             package,
