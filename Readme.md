@@ -58,7 +58,7 @@ These settings apply to bundles for all (or most) OSes.
  * `copyright`: [OPTIONAL] This contains a copyright string associated with your application.
  * `category`: [OPTIONAL] What kind of application this is.  This can
    be a human-readable string (e.g. `"Puzzle game"`), or a Mac OS X
-   LSApplicationCategoryType value
+   [LSApplicationCategoryType](https://developer.apple.com/documentation/bundleresources/information_property_list/lsapplicationcategorytype#possibleValues) value
    (e.g. `"public.app-category.puzzle-games"`), or a GNOME desktop
    file category name (e.g. `"LogicGame"`), and `cargo-bundle` will
    automatically convert as needed for different platforms.
