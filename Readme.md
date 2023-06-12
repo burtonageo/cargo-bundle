@@ -47,7 +47,7 @@ These settings apply to bundles for all (or most) OSes.
  * `icon`: [OPTIONAL] The icons used for your application.  This should be an array of file paths or globs (with images
            in various sizes/formats); `cargo-bundle` will automatically convert between image formats as necessary for
            different platforms.  Supported formats include ICNS, ICO, PNG, and anything else that can be decoded by the
-           [`image`](https://crates.io/crates/image) crate.  Icons intended for high-resolution (e.g. Retina) displays
+           [`image`](https://crates.io/crates/image) crate.  Icons intended for high-resolution (e.g. [Retina](https://developer.apple.com/design/human-interface-guidelines/app-icons#macOS-app-icon-sizes)) displays
            should have a filename with `@2x` just before the extension (see example below).
  * `version`: [OPTIONAL] The version of the application. If this is not present, then it will use the `version`
               value from your `Cargo.toml` file.
