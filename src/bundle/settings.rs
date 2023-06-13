@@ -79,6 +79,7 @@ struct BundleSettings {
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
     osx_url_schemes: Option<Vec<String>>,
+    osx_info_plist_exts: Option<Vec<String>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -438,6 +439,14 @@ impl Settings {
         match self.bundle_settings.osx_url_schemes {
             Some(ref urlosx_url_schemes) => urlosx_url_schemes.as_slice(),
             None => &[],
+        }
+    }
+
+    /// Returns an iterator over the plist files for this bundle
+    pub fn osx_info_plist_exts(&self) -> ResourcePaths<'_> {
+        match self.bundle_settings.osx_info_plist_exts {
+            Some(ref paths) => ResourcePaths::new(paths.as_slice(), false),
+            None => ResourcePaths::new(&[], false),
         }
     }
 }
