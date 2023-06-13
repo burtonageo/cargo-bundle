@@ -166,6 +166,11 @@ fn run() -> crate::Result<()> {
                     Arg::with_name("no-default-features")
                         .long("no-default-features")
                         .help("Build a bundle without the default crate features."),
+                )
+                .arg(
+                    Arg::with_name("select-workspace-root")
+                        .long("select-workspace-root")
+                        .help("Selects the root package for parsing cargo.toml, according to the workspace's `cargo metadata`."),
                 ),
         )
         .get_matches();
