@@ -79,6 +79,7 @@ struct BundleSettings {
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
     osx_url_schemes: Option<Vec<String>>,
+    osx_info_plist_exts: Option<Vec<String>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -142,12 +143,23 @@ impl Settings {
         };
         let features = matches.value_of("features").map(|features| features.into());
         let cargo_settings = load_metadata(&current_dir)?;
-        // TODO: support multiple packages?
-        let package_id = match cargo_settings.workspace_members.get(0) {
-            Some(package_info) => package_info,
-            None => bail!("Cargo workspace is empty"),
+        let package = if matches.is_present("select-workspace-root") {
+           if let Some(root_package) = cargo_settings.root_package() {
+               root_package.clone()
+           } else {
+               bail!("No root package found by `cargo metadata`")
+           }
+        } else {
+            // TODO: support multiple packages?
+            let package_id = match cargo_settings.workspace_members.get(0) {
+                Some(package_info) => package_info,
+                None => bail!("Cargo workspace is empty"),
+            };
+
+            cargo_settings[package_id].clone()
         };
-        let package = cargo_settings[package_id].clone();
+
+
         let workspace_dir = Settings::get_workspace_dir(current_dir);
         let target_dir =
             Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
@@ -438,6 +450,14 @@ impl Settings {
         match self.bundle_settings.osx_url_schemes {
             Some(ref urlosx_url_schemes) => urlosx_url_schemes.as_slice(),
             None => &[],
+        }
+    }
+
+    /// Returns an iterator over the plist files for this bundle
+    pub fn osx_info_plist_exts(&self) -> ResourcePaths<'_> {
+        match self.bundle_settings.osx_info_plist_exts {
+            Some(ref paths) => ResourcePaths::new(paths.as_slice(), false),
+            None => ResourcePaths::new(&[], false),
         }
     }
 }
