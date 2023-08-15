@@ -141,21 +141,12 @@ impl Settings {
             None => None,
         };
         let features = matches.value_of("features").map(|features| features.into());
-        let cargo_settings = load_metadata(&current_dir)?;
         // TODO: support multiple packages?
-        let package_id = match cargo_settings.workspace_members.get(0) {
-            Some(package_info) => package_info,
-            None => bail!("Cargo workspace is empty"),
-        };
-        let package = cargo_settings[package_id].clone();
+        let (bundle_settings, package) =
+            Settings::find_bundle_package(load_metadata(&current_dir)?)?;
         let workspace_dir = Settings::get_workspace_dir(current_dir);
         let target_dir =
             Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
-        let bundle_settings = if let Some(bundle_settings) = package.metadata.get("bundle") {
-            serde_json::from_value::<BundleSettings>(bundle_settings.clone())?
-        } else {
-            bail!("No [package.metadata.bundle] section in Cargo.toml");
-        };
         let (bundle_settings, mut binary_name) = match build_artifact {
             // TODO: this is wrong. Package can have multiple binaries and none of them has to be named the same way as package itself
             BuildArtifact::Main => (bundle_settings, package.name.clone()),
@@ -243,6 +234,19 @@ impl Settings {
 
         // Nothing found walking up the file system, return the starting directory
         current_dir
+    }
+
+    fn find_bundle_package(
+        metadata: Metadata,
+    ) -> crate::Result<(BundleSettings, cargo_metadata::Package)> {
+        for package_id in metadata.workspace_members.iter() {
+            let package = &metadata[package_id];
+            if let Some(bundle) = package.metadata.get("bundle") {
+                let settings = serde_json::from_value::<BundleSettings>(bundle.clone())?;
+                return Ok((settings, package.clone()));
+            }
+        }
+        bail!("No package in workspace has [package.metadata.bundle] section")
     }
 
     /// Returns the directory where the bundle should be placed.
