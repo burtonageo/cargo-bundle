@@ -157,8 +157,17 @@ impl Settings {
             bail!("No [package.metadata.bundle] section in Cargo.toml");
         };
         let (bundle_settings, mut binary_name) = match build_artifact {
-            // TODO: this is wrong. Package can have multiple binaries and none of them has to be named the same way as package itself
-            BuildArtifact::Main => (bundle_settings, package.name.clone()),
+            BuildArtifact::Main => {
+                if let Some(target) = package
+                    .targets
+                    .iter()
+                    .find(|target| target.kind.iter().any(|k| k == "bin"))
+                {
+                    (bundle_settings, target.name.clone())
+                } else {
+                    bail!("No `bin` target is found in package '{}'", package.name)
+                }
+            }
             BuildArtifact::Bin(ref name) => (
                 bundle_settings_from_table(&bundle_settings.bin, "bin", name)?,
                 name.clone(),

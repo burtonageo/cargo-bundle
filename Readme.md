@@ -37,8 +37,8 @@ There are several fields in the `[package.metadata.bundle]` section.
 
 These settings apply to bundles for all (or most) OSes.
 
- * `name`: The name of the built application. If this is not present, then it will use the `name` value from
-           your `Cargo.toml` file.
+ * `name`: The name of the built application. If this is not present, then it will use the `name` value from `bin`
+           target in your `Cargo.toml` file.
  * `identifier`: [REQUIRED] A string that uniquely identifies your application,
    in reverse-DNS form (for example, `"com.example.appname"` or
    `"io.github.username.project"`).  For OS X and iOS, this is used as the
