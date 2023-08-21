@@ -56,7 +56,12 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
 
     for src in settings.resource_files() {
         let src = src?;
-        let dest = resources_dir.join(common::resource_relpath(&src));
+        let dest_dir = if settings.colocate() {
+            bundle_directory.join("MacOS")
+        } else {
+            resources_dir.clone()
+        };
+        let dest = dest_dir.join(common::resource_relpath(&src));
         common::copy_file(&src, &dest)
             .chain_err(|| format!("Failed to copy resource file {src:?}"))?;
     }
