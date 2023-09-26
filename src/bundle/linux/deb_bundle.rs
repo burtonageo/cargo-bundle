@@ -110,10 +110,11 @@ fn generate_control_file(
     writeln!(&mut file, "Version: {}", settings.version_string())?;
     writeln!(&mut file, "Architecture: {arch}")?;
     // deb Installed-Size is size in bytes / 1024
+    // https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-installed-size
     writeln!(
         &mut file,
         "Installed-Size: {}",
-        total_dir_size(data_dir)? / 1024
+        (total_dir_size(data_dir)? 1023) / 1024
     )?;
     let authors = settings.authors_comma_separated().unwrap_or_default();
     writeln!(&mut file, "Maintainer: {authors}")?;
