@@ -114,7 +114,7 @@ fn generate_control_file(
     writeln!(
         &mut file,
         "Installed-Size: {}",
-        (total_dir_size(data_dir)? 1023) / 1024
+        (total_dir_size(data_dir)? + 1023) / 1024
     )?;
     let authors = settings.authors_comma_separated().unwrap_or_default();
     writeln!(&mut file, "Maintainer: {authors}")?;
