@@ -86,7 +86,7 @@ struct BundleSettings {
 
 #[derive(Clone, Debug)]
 pub struct Settings {
-    package: cargo_metadata::Package,
+    pub package: cargo_metadata::Package,
     package_type: Option<PackageType>, // If `None`, use the default package type for this os
     target: Option<(String, TargetInfo)>,
     features: Option<String>,
