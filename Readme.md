@@ -42,7 +42,7 @@ cross-compile and bundle an application for another OS, add an appropriate
     i686-pc-windows-gnu	32-bit MinGW (Windows 7+) 2 3
     i686-pc-windows-msvc	32-bit MSVC (Windows 7+) 2 3
     i686-unknown-linux-gnu	32-bit Linux (kernel 3.2+, glibc 2.17+) 3
-    x86_64-apple-darwin	64-bit macOS (10.12+, Sierra+)
+    x86_64-apple-darwin	(Requires XCode) 64-bit macOS (10.12+, Sierra+)
     x86_64-pc-windows-gnu	64-bit MinGW (Windows 7+) 2
     x86_64-pc-windows-msvc	64-bit MSVC (Windows 7+) 2
     x86_64-unknown-linux-gnu	64-bit Linux (kernel 3.2+, glibc 2.17+)
@@ -132,6 +132,8 @@ These settings are used only when bundling `osx` packages.
   you want) to ensure that the compiled binary has the same minimum version.
 * `osx_url_schemes`: A list of strings indicating the URL schemes that the app
   handles.
+
+* note: Github Actions and Bitbucket Pipelines both have Apple MacOS build runners/containers available to use for free 
 
 ### Example `Cargo.toml`:
 
