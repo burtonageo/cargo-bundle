@@ -26,12 +26,31 @@ cross-compile and bundle an application for another OS, add an appropriate
 `--target` flag, just as you would for `cargo build`.
 
 ## Flags
+    --all-features           Build a bundle with all crate features.
+    --bin <NAME>             Bundle the specified binary
+    --example <NAME>         Bundle the specified example
+    --features <FEATURES>    Set crate features for the bundle. Eg: `--features "f1 f2"`
+    --format <FORMAT>        Which bundle format to produce [possible values: deb, ios, msi, osx, rpm]
+    -h, --help                   Prints help information
+    --no-default-features    Build a bundle without the default crate features.
+    --profile <NAME>         Build a bundle from a target build using the given profile
+    --release                Build a bundle from a target built in release mode
+    --target <TRIPLE>        Build a bundle for the target triple
 
- TODO(burtonageo): Write this
+## Targets
+    aarch64-unknown-linux-gnu	ARM64 Linux (kernel 4.1, glibc 2.17+) 1
+    i686-pc-windows-gnu	32-bit MinGW (Windows 7+) 2 3
+    i686-pc-windows-msvc	32-bit MSVC (Windows 7+) 2 3
+    i686-unknown-linux-gnu	32-bit Linux (kernel 3.2+, glibc 2.17+) 3
+    x86_64-apple-darwin	64-bit macOS (10.12+, Sierra+)
+    x86_64-pc-windows-gnu	64-bit MinGW (Windows 7+) 2
+    x86_64-pc-windows-msvc	64-bit MSVC (Windows 7+) 2
+    x86_64-unknown-linux-gnu	64-bit Linux (kernel 3.2+, glibc 2.17+)
 
 ## Bundle manifest format
 
 There are several fields in the `[package.metadata.bundle]` section.
+
 
 ### General settings
 
@@ -39,7 +58,7 @@ These settings apply to bundles for all (or most) OSes.
 
  * `name`: The name of the built application. If this is not present, then it will use the `name` value from `bin`
            target in your `Cargo.toml` file.
- * `identifier`: [REQUIRED] A string that uniquely identifies your application,
+ * `identifier`: [**REQUIRED**] A string that uniquely identifies your application,
    in reverse-DNS form (for example, `"com.example.appname"` or
    `"io.github.username.project"`).  For OS X and iOS, this is used as the
    bundle's `CFBundleIdentifier` value; for Windows, this is hashed to create
@@ -65,6 +84,8 @@ These settings apply to bundles for all (or most) OSes.
  * `short_description`: [OPTIONAL] A short, one-line description of the application. If this is not present, then it
                         will use the `description` value from your `Cargo.toml` file.
  * `long_description`: [OPTIONAL] A longer, multi-line description of the application.
+
+note: `description` is also **required** in the `[package]` section.
 
 ### Linux-specific settings
 
