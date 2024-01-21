@@ -167,6 +167,8 @@ osx_url_schemes = ["com.doe.exampleapplication"]
 `cargo-bundle` has ambitions to be inclusive project and welcome contributions from anyone.  Please abide by the Rust
 code of conduct.
 
+To install a local crate, run `cargo install --path .`
+
 ## Status
 
 Very early alpha. Expect the format of the `[package.metadata.bundle]` section to change, and there is no guarantee of
