@@ -31,6 +31,7 @@ mod bundle;
 use crate::bundle::{bundle_project, BuildArtifact, PackageType, Settings};
 use clap::{App, AppSettings, Arg, SubCommand};
 use std::env;
+use std::ffi::OsString;
 use std::process;
 
 error_chain! {
@@ -55,39 +56,41 @@ fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
         return Ok(());
     }
 
-    let mut args = vec!["build".to_string()];
+    let mut cargo =
+        process::Command::new(env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo")));
+    cargo.arg("build");
     if let Some(triple) = settings.target_triple() {
-        args.push(format!("--target={triple}"));
+        cargo.arg(format!("--target={triple}"));
     }
     if let Some(features) = settings.features() {
-        args.push(format!("--features={features}"));
+        cargo.arg(format!("--features={features}"));
     }
     match settings.build_artifact() {
         BuildArtifact::Main => {}
         BuildArtifact::Bin(name) => {
-            args.push(format!("--bin={name}"));
+            cargo.arg(format!("--bin={name}"));
         }
         BuildArtifact::Example(name) => {
-            args.push(format!("--example={name}"));
+            cargo.arg(format!("--example={name}"));
         }
     }
     match settings.build_profile() {
         "dev" => {}
         "release" => {
-            args.push("--release".to_string());
+            cargo.arg("--release");
         }
         custom => {
-            args.push("--profile".to_string());
-            args.push(custom.to_string());
+            cargo.arg("--profile");
+            cargo.arg(custom);
         }
     }
     if settings.all_features() {
-        args.push("--all-features".to_string());
+        cargo.arg("--all-features");
     }
     if settings.no_default_features() {
-        args.push("--no-default-features".to_string());
+        cargo.arg("--no-default-features");
     }
-    let status = process::Command::new("cargo").args(args).status()?;
+    let status = cargo.status()?;
     if !status.success() {
         bail!(
             "Result of `cargo build` operation was unsuccessful: {}",
