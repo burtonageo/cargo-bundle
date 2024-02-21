@@ -1,5 +1,6 @@
 # Cargo bundle
-[![Build Status](https://travis-ci.org/burtonageo/cargo-bundle.svg?branch=master)](https://travis-ci.org/burtonageo/cargo-bundle)
+
+[![Build Status](https://github.com/burtonageo/cargo-bundle/workflows/CI/badge.svg?branch=master)](https://github.com/burtonageo/cargo-bundle/actions?query=branch%3Amaster)
 
 Wrap Rust executables in OS-specific app bundles
 
@@ -25,20 +26,39 @@ cross-compile and bundle an application for another OS, add an appropriate
 `--target` flag, just as you would for `cargo build`.
 
 ## Flags
+    --all-features           Build a bundle with all crate features.
+    --bin <NAME>             Bundle the specified binary
+    --example <NAME>         Bundle the specified example
+    --features <FEATURES>    Set crate features for the bundle. Eg: `--features "f1 f2"`
+    --format <FORMAT>        Which bundle format to produce [possible values: deb, ios, msi, osx, rpm]
+    -h, --help                   Prints help information
+    --no-default-features    Build a bundle without the default crate features.
+    --profile <NAME>         Build a bundle from a target build using the given profile
+    --release                Build a bundle from a target built in release mode
+    --target <TRIPLE>        Build a bundle for the target triple
 
- TODO(burtonageo): Write this
+## Targets
+    aarch64-unknown-linux-gnu	ARM64 Linux (kernel 4.1, glibc 2.17+) 1
+    i686-pc-windows-gnu	        32-bit MinGW (Windows 7+) 2 3
+    i686-pc-windows-msvc	    32-bit MSVC (Windows 7+) 2 3
+    i686-unknown-linux-gnu	    32-bit Linux (kernel 3.2+, glibc 2.17+) 3
+    x86_64-apple-darwin	        64-bit macOS (10.12+, Sierra+)
+    x86_64-pc-windows-gnu	    64-bit MinGW (Windows 7+) 2
+    x86_64-pc-windows-msvc	    64-bit MSVC (Windows 7+) 2
+    x86_64-unknown-linux-gnu	64-bit Linux (kernel 3.2+, glibc 2.17+)
 
 ## Bundle manifest format
 
 There are several fields in the `[package.metadata.bundle]` section.
 
+
 ### General settings
 
 These settings apply to bundles for all (or most) OSes.
 
- * `name`: The name of the built application. If this is not present, then it will use the `name` value from
-           your `Cargo.toml` file.
- * `identifier`: [REQUIRED] A string that uniquely identifies your application,
+ * `name`: The name of the built application. If this is not present, then it will use the `name` value from `bin`
+           target in your `Cargo.toml` file.
+ * `identifier`: [**REQUIRED**] A string that uniquely identifies your application,
    in reverse-DNS form (for example, `"com.example.appname"` or
    `"io.github.username.project"`).  For OS X and iOS, this is used as the
    bundle's `CFBundleIdentifier` value; for Windows, this is hashed to create
@@ -46,7 +66,7 @@ These settings apply to bundles for all (or most) OSes.
  * `icon`: [OPTIONAL] The icons used for your application.  This should be an array of file paths or globs (with images
            in various sizes/formats); `cargo-bundle` will automatically convert between image formats as necessary for
            different platforms.  Supported formats include ICNS, ICO, PNG, and anything else that can be decoded by the
-           [`image`](https://crates.io/crates/image) crate.  Icons intended for high-resolution (e.g. Retina) displays
+           [`image`](https://crates.io/crates/image) crate.  Icons intended for high-resolution (e.g. [Retina](https://developer.apple.com/design/human-interface-guidelines/app-icons#macOS-app-icon-sizes)) displays
            should have a filename with `@2x` just before the extension (see example below).
  * `version`: [OPTIONAL] The version of the application. If this is not present, then it will use the `version`
               value from your `Cargo.toml` file.
@@ -57,13 +77,15 @@ These settings apply to bundles for all (or most) OSes.
  * `copyright`: [OPTIONAL] This contains a copyright string associated with your application.
  * `category`: [OPTIONAL] What kind of application this is.  This can
    be a human-readable string (e.g. `"Puzzle game"`), or a Mac OS X
-   LSApplicationCategoryType value
+   [LSApplicationCategoryType](https://developer.apple.com/documentation/bundleresources/information_property_list/lsapplicationcategorytype#possibleValues) value
    (e.g. `"public.app-category.puzzle-games"`), or a GNOME desktop
    file category name (e.g. `"LogicGame"`), and `cargo-bundle` will
    automatically convert as needed for different platforms.
  * `short_description`: [OPTIONAL] A short, one-line description of the application. If this is not present, then it
                         will use the `description` value from your `Cargo.toml` file.
  * `long_description`: [OPTIONAL] A longer, multi-line description of the application.
+
+note: `description` is also **required** in the `[package]` section.
 
 ### Linux-specific settings
 
@@ -75,6 +97,7 @@ These settings are used only when bundling Linux compatible packages (currently 
   field in the `.desktop` file. For example if the binary is called `my_program` and
   `linux_exec_args = "%f"` then the Exec filed will be `Exec=my_program %f`. Find out more from the
   [specification](https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#exec-variables)
+* `linux_use_terminal`: A boolean variable indicating the app is a console app or a gui app, default it's set to false.
 
 ### Debian-specific settings
 
@@ -107,6 +130,10 @@ These settings are used only when bundling `osx` packages.
   this config field, you may also want have your `build.rs` script emit
   `cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=10.11` (or whatever version number
   you want) to ensure that the compiled binary has the same minimum version.
+* `osx_url_schemes`: A list of strings indicating the URL schemes that the app
+  handles.
+
+* note: Github Actions and Bitbucket Pipelines both have Apple MacOS build runners/containers available to use for free 
 
 ### Example `Cargo.toml`:
 
@@ -132,6 +159,7 @@ nisi ut aliquip ex ea commodo consequat.
 """
 deb_depends = ["libgl1-mesa-glx", "libsdl2-2.0-0 (>= 2.0.5)"]
 osx_frameworks = ["SDL2"]
+osx_url_schemes = ["com.doe.exampleapplication"]
 ```
 
 ## Contributing

@@ -1,17 +1,17 @@
 mod category;
 mod common;
-mod deb_bundle;
 mod ios_bundle;
+mod linux;
 mod msi_bundle;
 mod osx_bundle;
-mod rpm_bundle;
 mod settings;
 
 pub use self::common::{print_error, print_finished};
 pub use self::settings::{BuildArtifact, PackageType, Settings};
+use crate::bundle::linux::{deb_bundle, rpm_bundle};
 use std::path::PathBuf;
 
-pub fn bundle_project(settings: Settings) -> ::Result<Vec<PathBuf>> {
+pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for package_type in settings.package_types()? {
         paths.append(&mut match package_type {
