@@ -8,6 +8,9 @@ repository = "https://github.com/burtonageo/cargo-bundle"
 description = "Wrap rust executables in OS-specific app bundles"
 edition = "2021"
 
+[package.metadata.bundle]
+identifier = "io.github.burtonageo.cargo-bundle"
+
 [package.metadata.bundle.example.hello]
 name = "hello"
 identifier = "io.github.burtonageo.cargo-bundle.hello"

@@ -8,7 +8,7 @@ mod settings;
 
 pub use self::common::{print_error, print_finished};
 pub use self::settings::{BuildArtifact, PackageType, Settings};
-use crate::bundle::linux::{deb_bundle, rpm_bundle};
+use crate::bundle::linux::{deb_bundle, flatpak_bundle, rpm_bundle};
 use std::path::PathBuf;
 
 pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
@@ -20,6 +20,7 @@ pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
             PackageType::WindowsMsi => msi_bundle::bundle_project(&settings)?,
             PackageType::Deb => deb_bundle::bundle_project(&settings)?,
             PackageType::Rpm => rpm_bundle::bundle_project(&settings)?,
+            PackageType::Flatpak => flatpak_bundle::bundle_project(&settings)?,
         });
     }
     Ok(paths)

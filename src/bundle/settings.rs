@@ -13,6 +13,7 @@ pub enum PackageType {
     IosBundle,
     WindowsMsi,
     Deb,
+    Flatpak,
     Rpm,
 }
 
@@ -20,6 +21,7 @@ impl PackageType {
     pub fn from_short_name(name: &str) -> Option<PackageType> {
         // Other types we may eventually want to support: apk
         match name {
+            "flatpak" => Some(PackageType::Flatpak),
             "deb" => Some(PackageType::Deb),
             "ios" => Some(PackageType::IosBundle),
             "msi" => Some(PackageType::WindowsMsi),
@@ -31,6 +33,7 @@ impl PackageType {
 
     pub fn short_name(&self) -> &'static str {
         match *self {
+            PackageType::Flatpak => "flatpak",
             PackageType::Deb => "deb",
             PackageType::IosBundle => "ios",
             PackageType::WindowsMsi => "msi",
@@ -45,6 +48,7 @@ impl PackageType {
 }
 
 const ALL_PACKAGE_TYPES: &[PackageType] = &[
+    PackageType::Flatpak,
     PackageType::Deb,
     PackageType::IosBundle,
     PackageType::WindowsMsi,
@@ -79,6 +83,10 @@ struct BundleSettings {
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
     osx_url_schemes: Option<Vec<String>>,
+    // Flatpak-specific options
+    runtime: Option<String>,
+    permissions: Option<Vec<String>>,
+    modules: Option<Vec<String>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -173,6 +181,7 @@ impl Settings {
                 PackageType::OsxBundle
                 | PackageType::IosBundle
                 | PackageType::Deb
+                | PackageType::Flatpak
                 | PackageType::Rpm => "",
                 PackageType::WindowsMsi => ".exe",
             },
@@ -452,6 +461,20 @@ impl Settings {
             Some(ref urlosx_url_schemes) => urlosx_url_schemes.as_slice(),
             None => &[],
         }
+    }
+    pub fn runtime(&self) -> Option<&str> {
+        self.bundle_settings.runtime.as_deref()
+    }
+
+    pub fn permissions(&self) -> &[String] {
+        match self.bundle_settings.permissions {
+            Some(ref permissions) => permissions.as_slice(),
+            None => &[],
+        }
+    }
+
+    pub fn modules(&self) -> Option<&Vec<String>> {
+        self.bundle_settings.modules.as_ref()
     }
 }
 
