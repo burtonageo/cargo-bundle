@@ -1,10 +1,13 @@
 extern crate winit;
 
 use winit::{
+    event_loop::{ControlFlow, EventLoop}, event::{
+        Event, WindowEvent
+    },
+    window::{
+        Window,
+    },
     dpi::PhysicalSize,
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::Window,
 };
 
 fn main() {
@@ -13,11 +16,14 @@ fn main() {
     window.set_title("Hello, World!");
     window.set_inner_size(PhysicalSize::new(640, 480));
 
-    events_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => *control_flow = ControlFlow::Exit,
-        _ => *control_flow = ControlFlow::Wait,
+    events_loop.run(move |event, _, control_flow| {
+        match event {
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                *control_flow = ControlFlow::Exit
+            },
+            _ => {
+                *control_flow = ControlFlow::Wait
+            }
+        }
     });
 }

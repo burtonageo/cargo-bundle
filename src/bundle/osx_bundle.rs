@@ -18,6 +18,7 @@
 // files into the `Contents` directory of the bundle.
 
 use super::common;
+use {ResultExt, Settings};
 use chrono;
 use dirs;
 use icns;
@@ -25,143 +26,130 @@ use image::{self, GenericImage};
 use std::cmp::min;
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::prelude::*;
 use std::io::{self, BufWriter};
+use std::io::prelude::*;
 use std::path::{Path, PathBuf};
-use {ResultExt, Settings};
 
 pub fn bundle_project(settings: &Settings) -> ::Result<Vec<PathBuf>> {
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
-    let app_bundle_path = settings
-        .project_out_directory()
-        .join("bundle/osx")
-        .join(&app_bundle_name);
+    let app_bundle_path = settings.project_out_directory().join("bundle/osx").join(&app_bundle_name);
     if app_bundle_path.exists() {
-        fs::remove_dir_all(&app_bundle_path).chain_err(|| format!("Failed to remove old {}", app_bundle_name))?;
+        fs::remove_dir_all(&app_bundle_path).chain_err(|| {
+            format!("Failed to remove old {}", app_bundle_name)
+        })?;
     }
     let bundle_directory = app_bundle_path.join("Contents");
-    fs::create_dir_all(&bundle_directory)
-        .chain_err(|| format!("Failed to create bundle directory at {:?}", bundle_directory))?;
+    fs::create_dir_all(&bundle_directory).chain_err(|| {
+        format!("Failed to create bundle directory at {:?}", bundle_directory)
+    })?;
 
     let resources_dir = bundle_directory.join("Resources");
 
-    let bundle_icon_file: Option<PathBuf> =
-        { create_icns_file(&resources_dir, settings).chain_err(|| "Failed to create app icon")? };
+    let bundle_icon_file: Option<PathBuf> = {
+        create_icns_file(&resources_dir, settings).chain_err(|| {
+            "Failed to create app icon"
+        })?
+    };
 
-    create_info_plist(&bundle_directory, bundle_icon_file, settings).chain_err(|| "Failed to create Info.plist")?;
+    create_info_plist(&bundle_directory, bundle_icon_file, settings).chain_err(|| {
+        "Failed to create Info.plist"
+    })?;
 
-    copy_frameworks_to_bundle(&bundle_directory, settings).chain_err(|| "Failed to bundle frameworks")?;
+    copy_frameworks_to_bundle(&bundle_directory, settings).chain_err(|| {
+        "Failed to bundle frameworks"
+    })?;
 
     for src in settings.resource_files() {
         let src = src?;
         let dest = resources_dir.join(common::resource_relpath(&src));
-        common::copy_file(&src, &dest).chain_err(|| format!("Failed to copy resource file {:?}", src))?;
+        common::copy_file(&src, &dest).chain_err(|| {
+            format!("Failed to copy resource file {:?}", src)
+        })?;
     }
 
-    copy_binary_to_bundle(&bundle_directory, settings)
-        .chain_err(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
+    copy_binary_to_bundle(&bundle_directory, settings).chain_err(|| {
+        format!("Failed to copy binary from {:?}", settings.binary_path())
+    })?;
 
     Ok(vec![app_bundle_path])
 }
 
 fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::Result<()> {
     let dest_dir = bundle_directory.join("MacOS");
-    common::copy_file(settings.binary_path(), &dest_dir.join(settings.binary_name()))
+    common::copy_file(settings.binary_path(),
+                      &dest_dir.join(settings.binary_name()))
 }
 
-fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>, settings: &Settings) -> ::Result<()> {
+fn create_info_plist(bundle_dir: &Path, bundle_icon_file: Option<PathBuf>,
+                     settings: &Settings) -> ::Result<()> {
     let build_number = chrono::Utc::now().format("%Y%m%d.%H%M%S");
     let file = &mut common::create_file(&bundle_dir.join("Info.plist"))?;
-    write!(
-        file,
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+    write!(file,
+           "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
             <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
             \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
             <plist version=\"1.0\">\n\
-            <dict>\n"
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleDevelopmentRegion</key>\n  \
-            <string>English</string>\n"
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n",
-        settings.bundle_name()
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n",
-        settings.binary_name()
-    )?;
+            <dict>\n")?;
+    write!(file,
+           "  <key>CFBundleDevelopmentRegion</key>\n  \
+            <string>English</string>\n")?;
+    write!(file,
+           "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n",
+           settings.bundle_name())?;
+    write!(file,
+           "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n",
+           settings.binary_name())?;
     if let Some(path) = bundle_icon_file {
-        write!(
-            file,
-            "  <key>CFBundleIconFile</key>\n  <string>{}</string>\n",
-            path.file_name().unwrap().to_string_lossy()
-        )?;
+        write!(file,
+               "  <key>CFBundleIconFile</key>\n  <string>{}</string>\n",
+               path.file_name().unwrap().to_string_lossy())?;
     }
-    write!(
-        file,
-        "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
-        settings.bundle_identifier()
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleInfoDictionaryVersion</key>\n  \
-            <string>6.0</string>\n"
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleName</key>\n  <string>{}</string>\n",
-        settings.bundle_name()
-    )?;
-    write!(file, "  <key>CFBundlePackageType</key>\n  <string>APPL</string>\n")?;
-    write!(
-        file,
-        "  <key>CFBundleShortVersionString</key>\n  <string>{}</string>\n",
-        settings.version_string()
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
-        build_number
-    )?;
+    write!(file,
+           "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
+           settings.bundle_identifier())?;
+    write!(file,
+           "  <key>CFBundleInfoDictionaryVersion</key>\n  \
+            <string>6.0</string>\n")?;
+    write!(file,
+           "  <key>CFBundleName</key>\n  <string>{}</string>\n",
+           settings.bundle_name())?;
+    write!(file,
+           "  <key>CFBundlePackageType</key>\n  <string>APPL</string>\n")?;
+    write!(file,
+           "  <key>CFBundleShortVersionString</key>\n  <string>{}</string>\n",
+           settings.version_string())?;
+    write!(file,
+           "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
+           build_number)?;
     write!(file, "  <key>CSResourcesFileMapped</key>\n  <true/>\n")?;
     if let Some(category) = settings.app_category() {
-        write!(
-            file,
-            "  <key>LSApplicationCategoryType</key>\n  \
+        write!(file,
+               "  <key>LSApplicationCategoryType</key>\n  \
                 <string>{}</string>\n",
-            category.osx_application_category_type()
-        )?;
+               category.osx_application_category_type())?;
     }
     if let Some(version) = settings.osx_minimum_system_version() {
-        write!(
-            file,
-            "  <key>LSMinimumSystemVersion</key>\n  \
+        write!(file,
+               "  <key>LSMinimumSystemVersion</key>\n  \
                 <string>{}</string>\n",
-            version
-        )?;
+               version)?;
     }
     write!(file, "  <key>LSRequiresCarbon</key>\n  <true/>\n")?;
     write!(file, "  <key>NSHighResolutionCapable</key>\n  <true/>\n")?;
     if let Some(copyright) = settings.copyright_string() {
-        write!(
-            file,
-            "  <key>NSHumanReadableCopyright</key>\n  \
+        write!(file,
+               "  <key>NSHumanReadableCopyright</key>\n  \
                 <string>{}</string>\n",
-            copyright
-        )?;
+               copyright)?;
     }
     write!(file, "</dict>\n</plist>\n")?;
     file.flush()?;
     Ok(())
 }
 
-fn copy_framework_from(dest_dir: &Path, framework: &str, src_dir: &Path) -> ::Result<bool> {
+fn copy_framework_from(dest_dir: &Path, framework: &str, src_dir: &Path)
+                       -> ::Result<bool> {
     let src_name = format!("{}.framework", framework);
     let src_path = src_dir.join(&src_name);
     if src_path.exists() {
@@ -172,14 +160,16 @@ fn copy_framework_from(dest_dir: &Path, framework: &str, src_dir: &Path) -> ::Re
     }
 }
 
-fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::Result<()> {
+fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings)
+                             -> ::Result<()> {
     let frameworks = settings.osx_frameworks();
     if frameworks.is_empty() {
         return Ok(());
     }
     let dest_dir = bundle_directory.join("Frameworks");
-    fs::create_dir_all(&bundle_directory)
-        .chain_err(|| format!("Failed to create Frameworks directory at {:?}", dest_dir))?;
+    fs::create_dir_all(&bundle_directory).chain_err(|| {
+        format!("Failed to create Frameworks directory at {:?}", dest_dir)
+    })?;
     for framework in frameworks.iter() {
         if framework.ends_with(".framework") {
             let src_path = PathBuf::from(framework);
@@ -187,16 +177,22 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::
             common::copy_dir(&src_path, &dest_dir.join(&src_name))?;
             continue;
         } else if framework.contains("/") {
-            bail!("Framework path should have .framework extension: {}", framework);
+            bail!("Framework path should have .framework extension: {}",
+                  framework);
         }
         if let Some(home_dir) = dirs::home_dir() {
-            if copy_framework_from(&dest_dir, framework, &home_dir.join("Library/Frameworks/"))? {
+            if copy_framework_from(&dest_dir, framework,
+                                   &home_dir.join("Library/Frameworks/"))?
+            {
                 continue;
             }
         }
-        if copy_framework_from(&dest_dir, framework, &PathBuf::from("/Library/Frameworks/"))?
-            || copy_framework_from(&dest_dir, framework, &PathBuf::from("/Network/Library/Frameworks/"))?
-            || copy_framework_from(&dest_dir, framework, &PathBuf::from("/System/Library/Frameworks/"))?
+        if copy_framework_from(&dest_dir, framework,
+                               &PathBuf::from("/Library/Frameworks/"))? ||
+           copy_framework_from(&dest_dir, framework,
+                               &PathBuf::from("/Network/Library/Frameworks/"))? ||
+            copy_framework_from(&dest_dir, framework,
+                                &PathBuf::from("/System/Library/Frameworks/"))?
         {
             continue;
         }
@@ -208,7 +204,8 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> ::
 /// Given a list of icon files, try to produce an ICNS file in the resources
 /// directory and return the path to it.  Returns `Ok(None)` if no usable icons
 /// were provided.
-fn create_icns_file(resources_dir: &PathBuf, settings: &Settings) -> ::Result<Option<PathBuf>> {
+fn create_icns_file(resources_dir: &PathBuf, settings: &Settings)
+                    -> ::Result<Option<PathBuf>> {
     if settings.icon_files().count() == 0 {
         return Ok(None);
     }
