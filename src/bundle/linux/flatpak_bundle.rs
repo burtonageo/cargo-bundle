@@ -13,11 +13,11 @@ use tar::Builder;
 
 // The YAML to make a development build
 // Might eventually just use YML with a .replace() to add --release
-const YML_DEV: &str = "
-app-id: {id}
-runtime: org.freedesktop.Platform
-runtime-version: {runtime}
-sdk: org.freedesktop.Sdk
+const YML_DEV: &str = "app-id: {id}
+runtime: {runtime}.Platform
+runtime-version: {runtime_version}
+sdk: {runtime}.Sdk
+appstream-compose: false
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
 command: {id}
@@ -29,7 +29,6 @@ build-options:
       RUSTFLAGS: --remap-path-prefix =../
       RUST_BACKTRACE: \"1\"
 modules:
-{modules}
   - name: {name}
     buildsystem: simple
     build-commands:
@@ -44,12 +43,12 @@ cleanup:
 ";
 
 // YAML for release
-const YML: &str = "
-app-id: {id}
+const YML: &str = "app-id: {id}
 command: {id}
-runtime: org.freedesktop.Platform
-runtime-version: {runtime}
-sdk: org.freedesktop.Sdk
+runtime: {runtime}.Platform
+runtime-version: {runtime_version}
+sdk: {runtime}.Sdk
+appstream-compose: false
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
 {permissions}
@@ -60,7 +59,6 @@ build-options:
       RUSTFLAGS: --remap-path-prefix =../
       RUST_BACKTRACE: \"1\"
 modules:
-{modules}
   - name: {name}
     buildsystem: simple
     build-commands:
@@ -73,8 +71,7 @@ modules:
 
 // The Makefile to install everything into the Flatpak
 // Just would be used if it came with an extension or runtime
-const MAKE: &str = "
-.RECIPEPREFIX = *
+const MAKE: &str = ".RECIPEPREFIX = *
 BASE_DIR=$(realpath .)
 
 RELEASE={RELEASE}
@@ -107,8 +104,7 @@ install:
 ";
 
 // Some metadata for the generated Flatpak
-const XML: &str = "
-<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+const XML: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <component type=\"desktop\">
     <id>{id}</id>
     <name>{name}</name>
@@ -129,7 +125,7 @@ const XML: &str = "
 </component>";
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
-    common::print_warning("Flatpak bundle support is still expiremental.\nMake sure flatpak and flatpak-builder is installed")?;
+    common::print_warning("Make sure flatpak and flatpak-builder is installed")?;
     match settings.binary_arch() {
         "x86" => common::print_warning("Not all runtimes on Flathub support i386")?,
         "x86_64" => (),
@@ -238,17 +234,18 @@ fn create_makefile(settings: &Settings) -> crate::Result<()> {
 fn create_src_archive(settings: &Settings) -> crate::Result<()> {
     Command::new("cargo").args(["vendor"]).output().ok();
 
-    if !Path::new(".cargo/config.toml").exists() {
-        let cargo = &mut common::create_file(Path::new(".cargo/config.toml"))
-            .chain_err(|| "Failed to make tmp file")?;
-        write!(cargo, "[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"deps\"")?;
-    } else if !config_check()?.0 {
-        let mut cargo_config = File::options().append(true).open(".cargo/config.toml")?;
-        cargo_config.write_all("\n[sources.crates-io]\nreplace-with = \"vendored-sources\"\n\n[sources.vendored-sources]\ndirectory = \"deps\"".as_bytes())?;
+    let cargo_config = &mut common::create_file(Path::new("/tmp/config.toml"))
+        .chain_err(|| "Failed to make tmp file")?;
+
+    if !config_check()?.0 {
+        let old_config = fs::read_to_string(".cargo/config.toml")?;
+        cargo_config.write_all(format!("{old_config}\n[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"vendor\"").as_bytes())?;
     } else if !config_check()?.1 {
         common::print_warning(
             "Some vendoring options in .cargo/config.toml can mess with the bundling process",
         )?;
+    } else {
+        write!(cargo_config, "[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"vendor\"")?;
     }
 
     let file = File::create("/tmp/placeholder.tar").chain_err(|| "Failed to create archive")?;
@@ -256,7 +253,7 @@ fn create_src_archive(settings: &Settings) -> crate::Result<()> {
     tarfile
         .append_dir_all("vendor/src", "src")
         .chain_err(|| "src directory couldn't be put in archive")?;
-    tarfile.append_dir_all("vendor/deps", "vendor").ok();
+    tarfile.append_dir_all("vendor/vendor", "vendor").ok();
     tarfile
         .append_path_with_name("Cargo.toml", "vendor/Cargo.toml")
         .chain_err(|| "Cargo.toml couldn't be put in archive")?;
@@ -418,15 +415,15 @@ fn create_flatpak_yml(
                     .runtime()
                     .as_ref()
                     .map(|s| format!("\"{}\"", s))
-                    .unwrap_or_else(|| "'23.08'".to_string()),
+                    .unwrap_or_else(|| "org.freedesktop".to_string()),
             )
             .replace(
-                "{modules}",
+                "{runtime_version}",
                 &settings
-                    .modules()
+                    .runtime_version()
                     .as_ref()
-                    .map(|modules| modules.join("\n"))
-                    .unwrap_or_default(),
+                    .map(|s| format!("\"{}\"", s))
+                    .unwrap_or_else(|| "'23.08'".to_string()),
             )
             .replace(
                 "{archive_path}",
@@ -489,7 +486,7 @@ fn create_app_xml(settings: &Settings) -> crate::Result<()> {
 }
 
 fn flatpak(dev: bool, settings: &Settings) -> crate::Result<()> {
-    let flatpak_build_rel = settings.project_out_directory().join("bundle/flatpak/");
+    let flatpak_build_rel = settings.project_out_directory().join("bundle/flatpak");
 
     let mut manifest = format!("data/{}.yml", settings.bundle_identifier());
     if dev {
@@ -499,11 +496,11 @@ fn flatpak(dev: bool, settings: &Settings) -> crate::Result<()> {
     let mut flatpak_builder = Command::new("flatpak-builder");
     flatpak_builder.current_dir(&flatpak_build_rel);
     flatpak_builder.arg("--install-deps-from=flathub");
-    flatpak_builder.arg(format!("--repo={}repo", flatpak_build_rel.display()));
+    flatpak_builder.arg(format!("--repo={}/repo", flatpak_build_rel.display()));
     flatpak_builder.arg("--force-clean");
     flatpak_builder.arg(format!("--state-dir={}/state", flatpak_build_rel.display()));
     flatpak_builder.arg(format!(
-        "{}{}",
+        "{}/{}",
         flatpak_build_rel.display(),
         settings.binary_arch()
     ));
@@ -517,7 +514,7 @@ fn flatpak(dev: bool, settings: &Settings) -> crate::Result<()> {
     let mut flatpak_bundler = Command::new("flatpak")
         .current_dir(&flatpak_build_rel)
         .arg("build-bundle")
-        .arg(format!("{}repo", flatpak_build_rel.display()))
+        .arg(format!("{}/repo", flatpak_build_rel.display()))
         .arg(&flatpak_file_name)
         .arg(settings.bundle_identifier())
         .spawn()?;
@@ -529,15 +526,15 @@ fn config_check() -> crate::Result<(bool, bool)> {
     let mut config = File::open(".cargo/config.toml")?;
     let mut contents = String::new();
 
-    let check = r#"[sources.crates-io]
+    let check = r#"[source.crates-io]
 replace-with = "vendored-sources"
 
-[sources.vendored-sources]
-directory = "deps""#;
+[source.vendored-sources]
+directory = "vendor""#;
 
     config.read_to_string(&mut contents)?;
     Ok((
-        contents.contains("[sources.crates-io]"),
+        contents.contains("[source.crates-io]"),
         contents.contains(check),
     ))
 }

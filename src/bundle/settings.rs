@@ -85,8 +85,8 @@ struct BundleSettings {
     osx_url_schemes: Option<Vec<String>>,
     // Flatpak-specific options
     runtime: Option<String>,
+    runtime_version: Option<String>,
     permissions: Option<Vec<String>>,
-    modules: Option<Vec<String>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -473,8 +473,8 @@ impl Settings {
         }
     }
 
-    pub fn modules(&self) -> Option<&Vec<String>> {
-        self.bundle_settings.modules.as_ref()
+    pub fn runtime_version(&self) -> Option<&str> {
+        self.bundle_settings.runtime_version.as_deref()
     }
 }
 
