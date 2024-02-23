@@ -103,6 +103,7 @@ pub struct Settings {
     profile: String,
     all_features: bool,
     no_default_features: bool,
+    generate_only: bool,
     binary_path: PathBuf,
     binary_name: String,
     bundle_settings: BundleSettings,
@@ -144,6 +145,7 @@ impl Settings {
         };
         let all_features = matches.is_present("all-features");
         let no_default_features = matches.is_present("no-default-features");
+        let generate_only = matches.is_present("generate-only");
         let target = match matches.value_of("target") {
             Some(triple) => Some((triple.to_string(), TargetInfo::from_str(triple)?)),
             None => None,
@@ -198,6 +200,7 @@ impl Settings {
             profile,
             all_features,
             no_default_features,
+            generate_only,
             project_out_directory: target_dir,
             binary_path,
             binary_name,
@@ -350,6 +353,10 @@ impl Settings {
 
     pub fn no_default_features(&self) -> bool {
         self.no_default_features
+    }
+
+    pub fn generate_only(&self) -> bool {
+        self.generate_only
     }
 
     pub fn bundle_name(&self) -> &str {

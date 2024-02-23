@@ -13,7 +13,7 @@ use tar::Builder;
 
 // The YAML to make a development build
 // Might eventually just use YML with a .replace() to add --release
-const YML_DEV: &str = "app-id: {id}
+const YML: &str = "app-id: {id}
 runtime: {runtime}.Platform
 runtime-version: {runtime_version}
 sdk: {runtime}.Sdk
@@ -32,7 +32,7 @@ modules:
   - name: {name}
     buildsystem: simple
     build-commands:
-      - cargo build --offline
+      - {cargo_build} 
       - make install
     sources:
       - type: archive
@@ -40,33 +40,6 @@ modules:
 
 cleanup:
 - '/target'
-";
-
-// YAML for release
-const YML: &str = "app-id: {id}
-command: {id}
-runtime: {runtime}.Platform
-runtime-version: {runtime_version}
-sdk: {runtime}.Sdk
-appstream-compose: false
-sdk-extensions:
-  - org.freedesktop.Sdk.Extension.rust-stable
-{permissions}
-build-options:
-  append-path: /usr/lib/sdk/rust-stable/bin
-  env:
-      CARGO_HOME: /run/build/{name}/cargo
-      RUSTFLAGS: --remap-path-prefix =../
-      RUST_BACKTRACE: \"1\"
-modules:
-  - name: {name}
-    buildsystem: simple
-    build-commands:
-      - cargo build --release --offline
-      - make install
-    sources:
-        - type: archive
-          path: {archive_path}
 ";
 
 // The Makefile to install everything into the Flatpak
@@ -134,40 +107,24 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         _ => common::print_warning("Flathub may not support your architecture")?,
     };
 
-    let mut dev = true;
-    if settings.build_profile() != "dev" {
-        dev = false;
-    }
-
-    // Having an option to only generate the necassary files might be useful
-    // It could easily be removed if it isn't needed
-    let generate_only = false;
-
     // Most of the formats name the bundle like this
     // deb_bundle.rs is the exception
     let bundling = format!("{}.flatpak", settings.bundle_name());
 
-    if generate_only {
+    if settings.generate_only() {
         common::print_bundling("Flatpak data")?;
     } else {
         common::print_bundling(&bundling)?;
     }
 
-    if generate_only {
+    if settings.generate_only() {
         generate(settings)?;
         Ok(vec![settings
             .project_out_directory()
             .join("bundle/flatpak/data")])
-    } else if dev {
-        generate(settings)?;
-        flatpak(true, settings)?;
-        Ok(vec![settings
-            .project_out_directory()
-            .join("bundle/flatpak")
-            .join(&bundling)])
     } else {
         generate(settings)?;
-        flatpak(false, settings)?;
+        flatpak(settings)?;
         Ok(vec![settings
             .project_out_directory()
             .join("bundle/flatpak")
@@ -191,10 +148,7 @@ fn generate(settings: &Settings) -> crate::Result<()> {
     create_app_xml(settings).chain_err(|| "Unable to create XML")?;
     create_icons(settings).chain_err(|| "Unable to create icons")?;
     create_src_archive(settings)?;
-    create_flatpak_yml(&data_dir, YML_DEV, Some(".dev"), settings)
-        .chain_err(|| "Unable to create flatpak yml")?;
-    create_flatpak_yml(&data_dir, YML, None, settings)
-        .chain_err(|| "Unable to create flatpak yml")?;
+    create_flatpak_yml(&data_dir, settings).chain_err(|| "Unable to create flatpak yml")?;
 
     Ok(())
 }
@@ -228,6 +182,8 @@ fn create_makefile(settings: &Settings) -> crate::Result<()> {
             .as_bytes(),
     )?;
 
+    file.flush()?;
+
     Ok(())
 }
 
@@ -237,16 +193,21 @@ fn create_src_archive(settings: &Settings) -> crate::Result<()> {
     let cargo_config = &mut common::create_file(Path::new("/tmp/config.toml"))
         .chain_err(|| "Failed to make tmp file")?;
 
-    if !config_check()?.0 {
+    if config_check()?.1 {
         let old_config = fs::read_to_string(".cargo/config.toml")?;
-        cargo_config.write_all(format!("{old_config}\n[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"vendor\"").as_bytes())?;
-    } else if !config_check()?.1 {
+        cargo_config.write_all(old_config.as_bytes())?;
+    } else if config_check()?.0 {
         common::print_warning(
             "Some vendoring options in .cargo/config.toml can mess with the bundling process",
         )?;
+    } else if Path::new(".cargo/config.toml").exists() {
+        let old_config = fs::read_to_string(".cargo/config.toml")?;
+        cargo_config.write_all(format!("{old_config}\n[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"vendor\"").as_bytes())?;
     } else {
-        write!(cargo_config, "[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"vendor\"")?;
+        cargo_config.write_all("[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"vendor\"".as_bytes())?;
     }
+
+    cargo_config.flush()?;
 
     let file = File::create("/tmp/placeholder.tar").chain_err(|| "Failed to create archive")?;
     let mut tarfile = Builder::new(file);
@@ -261,7 +222,7 @@ fn create_src_archive(settings: &Settings) -> crate::Result<()> {
         .append_path_with_name("Cargo.lock", "vendor/Cargo.lock")
         .chain_err(|| "Cargo.lock couldn't be put in archive")?;
     tarfile
-        .append_dir_all("vendor/.cargo", ".cargo")
+        .append_path_with_name("/tmp/config.toml", "vendor/.cargo/config.toml")
         .chain_err(|| "Couldn't add file to archive")?;
 
     let mut state = 0;
@@ -376,18 +337,10 @@ fn create_desktop_file(settings: &Settings, path: &Path) -> crate::Result<()> {
     Ok(())
 }
 
-fn create_flatpak_yml(
-    path: &Path,
-    template: &str,
-    infix: Option<&str>,
-    settings: &Settings,
-) -> crate::Result<()> {
+fn create_flatpak_yml(path: &Path, settings: &Settings) -> crate::Result<()> {
+    let template = YML;
     let mut path = PathBuf::from(path);
-    path.push(format!(
-        "{}{}.yml",
-        settings.bundle_identifier(),
-        infix.unwrap_or("")
-    ));
+    path.push(format!("{}.yml", settings.bundle_identifier()));
 
     let mut file = File::create(path)?;
 
@@ -404,8 +357,30 @@ fn create_flatpak_yml(
         permission_list.push_str(&permissions);
     }
 
+    let mut cargo_build = "cargo build --offline".to_string();
+    match settings.build_profile() {
+        "dev" => {}
+        "release" => {
+            cargo_build.push_str("--release");
+        }
+        custom => {
+            cargo_build.push_str("--profile");
+            cargo_build.push_str(custom);
+        }
+    }
+    if let Some(triple) = settings.target_triple() {
+        cargo_build.push_str(&format!("--target={triple}"));
+    }
+    if let Some(features) = settings.features() {
+        cargo_build.push_str(&format!("--features={features}"));
+    }
+    if settings.all_features() {
+        cargo_build.push_str("--all-features");
+    }
+
     file.write_all(
         template
+            .replace("{cargo_build}", &cargo_build)
             .replace("{name}", settings.bundle_name())
             .replace("{id}", settings.bundle_identifier())
             .replace("{permissions}", &permission_list)
@@ -485,13 +460,10 @@ fn create_app_xml(settings: &Settings) -> crate::Result<()> {
     Ok(())
 }
 
-fn flatpak(dev: bool, settings: &Settings) -> crate::Result<()> {
+fn flatpak(settings: &Settings) -> crate::Result<()> {
     let flatpak_build_rel = settings.project_out_directory().join("bundle/flatpak");
 
-    let mut manifest = format!("data/{}.yml", settings.bundle_identifier());
-    if dev {
-        manifest = format!("data/{}.dev.yml", settings.bundle_identifier());
-    }
+    let manifest = format!("data/{}.yml", settings.bundle_identifier());
 
     let mut flatpak_builder = Command::new("flatpak-builder");
     flatpak_builder.current_dir(&flatpak_build_rel);
@@ -523,7 +495,11 @@ fn flatpak(dev: bool, settings: &Settings) -> crate::Result<()> {
 }
 
 fn config_check() -> crate::Result<(bool, bool)> {
-    let mut config = File::open(".cargo/config.toml")?;
+    let config_path = Path::new(".cargo/config.toml");
+    if !config_path.exists() {
+        return Ok((false, false));
+    }
+    let mut config = File::open(config_path)?;
     let mut contents = String::new();
 
     let check = r#"[source.crates-io]
