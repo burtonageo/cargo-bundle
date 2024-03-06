@@ -1,8 +1,14 @@
 use crate::{
-    bundle::{common, Settings},
+    bundle::{
+        common,
+        linux::common::{generate_icon_files_non_png, generate_icon_files_png},
+        Settings,
+    },
     ResultExt,
 };
 use libflate::gzip;
+use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::fs::create_dir_all;
 use std::fs::{self, File};
 use std::io;
@@ -62,6 +68,9 @@ install:
 * @install \"$(TARGET_DIR)/$(RELEASE)/$(BIN_NAME)\" \"$(BIN_DIR)/{APP_ID}\"
 
 * @echo Installing icons into $(SHARE_DIR)/icons/hicolor
+* @ls icons
+* @ls icons/hicolor
+* @install -D icons/hicolor/* -t $(SHARE_DIR)/icons/hicolor
 * @# Force cache of icons to refresh
 * @mkdir -p $(SHARE_DIR)/applications/
 * @mkdir -p $(SHARE_DIR)/metainfo/
@@ -94,7 +103,7 @@ const XML: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
     <provides>
         <binary>{id}</binary>
     </provides>
-    <translation type=\"gettext\">{name}</translation>
+   <translation type=\"gettext\">{name}</translation>
 </component>";
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
@@ -154,10 +163,42 @@ fn generate(settings: &Settings) -> crate::Result<()> {
 }
 
 fn create_icons(settings: &Settings) -> crate::Result<Option<()>> {
+    let base_dir = settings
+        .project_out_directory()
+        .join("bundle/flatpak/data/icons/hicolor");
     if settings.icon_files().count() == 0 {
+        if !base_dir.exists() {
+            std::fs::create_dir_all(base_dir.clone())?;
+            let mut ignore = std::fs::File::create(base_dir.join("ignoreme"))?;
+            ignore.write_all(b"ignore me")?;
+        };
         return Ok(None);
     }
 
+    let mut sizes: BTreeSet<(u32, u32, bool)> = BTreeSet::new();
+
+    for icon_path in settings.icon_files() {
+        let icon_path = icon_path?;
+        if icon_path.extension() == Some(OsStr::new("png")) {
+            let new_sizes = generate_icon_files_png(
+                &icon_path,
+                &base_dir,
+                settings.binary_name(),
+                sizes.clone(),
+            )
+            .unwrap();
+            sizes.append(&mut new_sizes.to_owned())
+        } else {
+            let new_sizes = generate_icon_files_non_png(
+                &icon_path,
+                &base_dir,
+                settings.binary_name(),
+                sizes.clone(),
+            )
+            .unwrap();
+            sizes.append(&mut new_sizes.to_owned())
+        }
+    }
     Ok(Some(()))
 }
 
@@ -254,6 +295,7 @@ fn create_src_archive(settings: &Settings) -> crate::Result<()> {
     let desktop_current = format!("{}/{}", out_dir.to_str().unwrap(), desktop);
     let xml_current = format!("{}/{}", out_dir.to_str().unwrap(), xml);
     let makefile_current = format!("{}/Makefile", out_dir.to_str().unwrap());
+    let icons_current = format!("{}/icons", out_dir.to_str().unwrap());
 
     tarfile
         .append_path_with_name(xml_current, xml_path)
@@ -264,6 +306,9 @@ fn create_src_archive(settings: &Settings) -> crate::Result<()> {
     tarfile
         .append_path_with_name(makefile_current, "vendor/Makefile")
         .chain_err(|| "Makefile coud not be put in archive")?;
+    tarfile
+        .append_dir_all("vendor/icons", icons_current)
+        .chain_err(|| "failed to include icons")?;
     for src in settings.resource_files() {
         let src = src?;
         tarfile
