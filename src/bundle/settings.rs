@@ -234,6 +234,10 @@ impl Settings {
     */
     fn get_workspace_dir(current_dir: PathBuf) -> PathBuf {
         let mut dir = current_dir.clone();
+        let set = load_metadata(&dir);
+        if set.is_ok() {
+            return dir;
+        }
         while dir.pop() {
             let set = load_metadata(&dir);
             if set.is_ok() {
