@@ -212,7 +212,9 @@ impl Settings {
         profile: &str,
         build_artifact: &BuildArtifact,
     ) -> PathBuf {
-        let mut path = project_root_dir.join("target");
+        let target_dir_env = std::env::var("CARGO_TARGET_DIR").map(PathBuf::from);
+        let mut path = target_dir_env.unwrap_or(project_root_dir.join("target"));
+
         if let &Some((ref triple, _)) = target {
             path.push(triple);
         }
