@@ -110,7 +110,7 @@ const XML: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     common::print_warning("Make sure flatpak and flatpak-builder is installed")?;
-    if settings.bundle_identifier().contains("-") {
+    if settings.bundle_identifier().contains('-') {
         common::print_warning("Only last name segment can contain -")?;
     }
     match settings.binary_arch() {
