@@ -13,7 +13,7 @@ identifier = "io.github.burtonageo.cargo-bundle"
 
 [package.metadata.bundle.example.hello]
 name = "hello"
-identifier = "io.github.burtonageo.cargo-bundle.hello"
+identifier = "io.github.burtonageo.cargo_bundle.hello"
 icon = ["examples/hello/icon*.png"]
 category = "Utility"
 short_description = "An example of a bundled application"

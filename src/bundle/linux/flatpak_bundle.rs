@@ -1,3 +1,4 @@
+use crate::BuildArtifact;
 use crate::{
     bundle::{
         common,
@@ -9,8 +10,7 @@ use crate::{
 use libflate::gzip;
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
-use std::fs::create_dir_all;
-use std::fs::{self, File};
+use std::fs::{self, create_dir_all, remove_file, File};
 use std::io;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
@@ -55,7 +55,7 @@ BASE_DIR=$(realpath .)
 
 RELEASE={RELEASE}
 
-BIN_NAME={BIN_NAME}
+BIN_PATH={BIN_PATH}
 ROOT=/app
 BIN_DIR=$(ROOT)/bin
 SHARE_DIR=$(ROOT)/share
@@ -63,14 +63,16 @@ TARGET_DIR=$(BASE_DIR)/target
 
 install:
 * @echo \"Installing binary into $(BIN_DIR)/{APP_ID}\"
-* @strip \"$(TARGET_DIR)/$(RELEASE)/$(BIN_NAME)\"
+* @ls /run/build/hello/target/debug/examples
+* @strip \"$(TARGET_DIR)/$(RELEASE)/$(BIN_PATH)\" 
 * @mkdir -p $(BIN_DIR)
-* @install \"$(TARGET_DIR)/$(RELEASE)/$(BIN_NAME)\" \"$(BIN_DIR)/{APP_ID}\"
+* @install \"$(TARGET_DIR)/$(RELEASE)/$(BIN_PATH)\" \"$(BIN_DIR)/{APP_ID}\"
 
 * @echo Installing icons into $(SHARE_DIR)/icons/hicolor
-* @ls icons
-* @ls icons/hicolor
-* @install -D icons/hicolor/* -t $(SHARE_DIR)/icons/hicolor
+* @ls icons/hicolor/32x32/apps
+* @ls icons/hicolor/128x128/apps
+* @mkdir $(SHARE_DIR)/icons/
+* @cp -r icons/ -t $(SHARE_DIR)/icons/
 * @# Force cache of icons to refresh
 * @mkdir -p $(SHARE_DIR)/applications/
 * @mkdir -p $(SHARE_DIR)/metainfo/
@@ -82,7 +84,7 @@ install:
 * @echo Installing resource files
 * @mkdir -p ~/.var/app/{APP_ID}/data
 * @ls ~/.var/app
-* @install -m 644 resources/$(BIN_NAME)/* ~/.var/app/{APP_ID}/data/
+* @install -m 644 bundle_resources/$(BIN_NAME)/* ~/.var/app/{APP_ID}/data/
 ";
 
 // Some metadata for the generated Flatpak
@@ -108,6 +110,9 @@ const XML: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     common::print_warning("Make sure flatpak and flatpak-builder is installed")?;
+    if settings.bundle_identifier().contains("-") {
+        common::print_warning("Only last name segment can contain -")?;
+    }
     match settings.binary_arch() {
         "x86" => common::print_warning("Not all runtimes on Flathub support i386")?,
         "x86_64" => (),
@@ -168,8 +173,8 @@ fn create_icons(settings: &Settings) -> crate::Result<Option<()>> {
         .join("bundle/flatpak/data/icons/hicolor");
     if settings.icon_files().count() == 0 {
         if !base_dir.exists() {
-            std::fs::create_dir_all(base_dir.clone())?;
-            let mut ignore = std::fs::File::create(base_dir.join("ignoreme"))?;
+            create_dir_all(base_dir.clone())?;
+            let mut ignore = File::create(base_dir.join("ignoreme"))?;
             ignore.write_all(b"ignore me")?;
         };
         return Ok(None);
@@ -215,9 +220,15 @@ fn create_makefile(settings: &Settings) -> crate::Result<()> {
     }
 
     let template = MAKE;
+
+    let mut binary_path = settings.binary_name().to_string();
+
+    binary_path = format!("examples/{}", binary_path);
+
     file.write_all(
         template
             .replace("{APP_ID}", settings.bundle_identifier())
+            .replace("{BIN_PATH}", &binary_path)
             .replace("{BIN_NAME}", settings.binary_name())
             .replace("{RELEASE}", profile)
             .as_bytes(),
@@ -252,16 +263,21 @@ fn create_src_archive(settings: &Settings) -> crate::Result<()> {
 
     let file = File::create("/tmp/placeholder.tar").chain_err(|| "Failed to create archive")?;
     let mut tarfile = Builder::new(file);
-    tarfile
-        .append_dir_all("vendor/src", "src")
-        .chain_err(|| "src directory couldn't be put in archive")?;
-    tarfile.append_dir_all("vendor/vendor", "vendor").ok();
-    tarfile
-        .append_path_with_name("Cargo.toml", "vendor/Cargo.toml")
-        .chain_err(|| "Cargo.toml couldn't be put in archive")?;
-    tarfile
-        .append_path_with_name("Cargo.lock", "vendor/Cargo.lock")
-        .chain_err(|| "Cargo.lock couldn't be put in archive")?;
+    for path in fs::read_dir(".").unwrap() {
+        let path = path.unwrap().path();
+
+        if !(path == Path::new("./target") || path == Path::new("./.git")) {
+            if path.is_dir() {
+                tarfile
+                    .append_dir_all(Path::new("vendor").join(path.clone()), path)
+                    .chain_err(|| "Couldn't add directory to source archive")?;
+            } else {
+                tarfile
+                    .append_path_with_name(path.clone(), Path::new("vendor").join(path))
+                    .chain_err(|| "Couldn't add file or directory to source archive")?;
+            }
+        }
+    }
     tarfile
         .append_path_with_name("/tmp/config.toml", "vendor/.cargo/config.toml")
         .chain_err(|| "Couldn't add file to archive")?;
@@ -270,7 +286,7 @@ fn create_src_archive(settings: &Settings) -> crate::Result<()> {
     for src in settings.resource_files() {
         state += 1;
         let src = src?;
-        let dest = Path::new("vendor/resources")
+        let dest = Path::new("vendor/bundle_resources")
             .join(settings.binary_name())
             .join(common::resource_relpath(&src));
         tarfile
@@ -279,7 +295,7 @@ fn create_src_archive(settings: &Settings) -> crate::Result<()> {
     }
     // Got to have something in the location, else the Makefile will fail
     if state == 0 {
-        let dest = Path::new("vendor/resources")
+        let dest = Path::new("vendor/bundle_resources")
             .join(settings.binary_name())
             .join("file");
         tarfile
@@ -342,7 +358,7 @@ fn create_src_archive(settings: &Settings) -> crate::Result<()> {
         .into_result()
         .chain_err(|| "Encoding GZIP failed".to_string())?;
 
-    std::fs::remove_file("/tmp/placeholder.tar")
+    remove_file("/tmp/placeholder.tar")
         .chain_err(|| "placeholder.tar deletion failed".to_string())?;
     Ok(())
 }
@@ -402,25 +418,35 @@ fn create_flatpak_yml(path: &Path, settings: &Settings) -> crate::Result<()> {
         permission_list.push_str(&permissions);
     }
 
-    let mut cargo_build = "cargo build --offline".to_string();
+    let mut cargo_build = "cargo build --offline ".to_string();
     match settings.build_profile() {
         "dev" => {}
         "release" => {
-            cargo_build.push_str("--release");
+            cargo_build.push_str("--release ");
         }
         custom => {
-            cargo_build.push_str("--profile");
+            cargo_build.push_str("--profile ");
             cargo_build.push_str(custom);
         }
     }
     if let Some(triple) = settings.target_triple() {
-        cargo_build.push_str(&format!("--target={triple}"));
+        cargo_build.push_str(&format!("--target={triple} "));
     }
     if let Some(features) = settings.features() {
-        cargo_build.push_str(&format!("--features={features}"));
+        cargo_build.push_str(&format!("--features={features} "));
     }
     if settings.all_features() {
-        cargo_build.push_str("--all-features");
+        cargo_build.push_str("--all-features ");
+    }
+
+    match settings.build_artifact() {
+        BuildArtifact::Main => {}
+        BuildArtifact::Bin(name) => {
+            cargo_build.push_str(&format!("--bin={name} "));
+        }
+        BuildArtifact::Example(name) => {
+            cargo_build.push_str(&format!("--example={name}"));
+        }
     }
 
     file.write_all(
