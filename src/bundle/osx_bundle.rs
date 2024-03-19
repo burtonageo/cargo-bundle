@@ -20,7 +20,7 @@
 use super::common;
 use crate::{ResultExt, Settings};
 
-use image::{self, GenericImage, GenericImageView as _};
+use image::{self, GenericImageView as _};
 use std::cmp::min;
 use std::ffi::OsStr;
 use std::fs::{self, File};

@@ -12,7 +12,7 @@ use super::common;
 use crate::{ResultExt, Settings};
 
 use image::codecs::png::{PngDecoder, PngEncoder};
-use image::{self, GenericImage, GenericImageView as _, ImageDecoder, ImageEncoder};
+use image::{self, GenericImageView as _, ImageDecoder, ImageEncoder};
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -76,7 +76,7 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<
             }
 						let file = File::open(&icon_path)?;
 						let file_reader = std::io::BufReader::new(file);
-            let mut decoder = PngDecoder::new(file_reader)?;
+            let decoder = PngDecoder::new(file_reader)?;
             let (width, height) = decoder.dimensions();
             let is_retina = common::is_retina(&icon_path);
             if !sizes.contains(&(width, height, is_retina)) {

@@ -1,6 +1,6 @@
 use crate::bundle::{common, Settings};
 use image::codecs::png::{PngDecoder, PngEncoder};
-use image::{GenericImage, GenericImageView as _, ImageDecoder, ImageEncoder};
+use image::{GenericImageView as _, ImageDecoder, ImageEncoder};
 use libflate::gzip;
 use md5::Digest;
 use std::collections::BTreeSet;
@@ -134,7 +134,7 @@ fn generate_icon_files_png(
 ) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
     let file = File::open(icon_path)?;
     let file_reader = std::io::BufReader::new(file);
-    let mut decoder = PngDecoder::new(file_reader)?;
+    let decoder = PngDecoder::new(file_reader)?;
     let (width, height) = decoder.dimensions();
     let is_high_density = common::is_retina(icon_path);
 
