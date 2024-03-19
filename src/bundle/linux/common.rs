@@ -1,6 +1,6 @@
 use crate::bundle::{common, Settings};
-use image::png::{PNGDecoder, PNGEncoder};
-use image::{GenericImage, ImageDecoder};
+use image::codecs::png::{PngDecoder, PngEncoder};
+use image::{GenericImage, GenericImageView as _, ImageDecoder, ImageEncoder};
 use libflate::gzip;
 use md5::Digest;
 use std::collections::BTreeSet;
@@ -132,8 +132,10 @@ fn generate_icon_files_png(
     binary_name: &str,
     mut sizes: BTreeSet<(u32, u32, bool)>,
 ) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
-    let mut decoder = PNGDecoder::new(File::open(icon_path)?);
-    let (width, height) = decoder.dimensions()?;
+    let file = File::open(icon_path)?;
+    let file_reader = std::io::BufReader::new(file);
+    let mut decoder = PngDecoder::new(file_reader)?;
+    let (width, height) = decoder.dimensions();
     let is_high_density = common::is_retina(icon_path);
 
     if !sizes.contains(&(width, height, is_high_density)) {
@@ -174,8 +176,11 @@ fn generate_icon_files_non_png(
         if !sizes.contains(&(width, height, is_high_density)) {
             sizes.insert((width, height, is_high_density));
             let dest_path = get_dest_path(width, height, is_high_density, base_dir, binary_name);
-            let encoder = PNGEncoder::new(common::create_file(&dest_path)?);
-            encoder.encode(&icon.raw_pixels(), width, height, icon.color())?;
+            let encoder = PngEncoder::new(common::create_file(&dest_path)?);
+						tracing::warn!("Image transformation code is not tested yet!");
+						let pixels = icon.pixels(); 
+						let raw_pixels: Vec<u8>  = pixels.into_iter().flat_map(|p| p.2.0).collect();
+            encoder.write_image(&raw_pixels, width, height, icon.color().into())?;
         }
     }
 

@@ -8,16 +8,13 @@ use winit::{
 };
 
 fn main() {
-    let events_loop = EventLoop::new();
+    let events_loop = EventLoop::new().unwrap();
     let window = Window::new(&events_loop).unwrap();
     window.set_title("Hello, World!");
-    window.set_inner_size(PhysicalSize::new(640, 480));
+    window.request_inner_size(PhysicalSize::new(640, 480)).unwrap();
 
-    events_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => *control_flow = ControlFlow::Exit,
-        _ => *control_flow = ControlFlow::Wait,
-    });
+    events_loop.run(move |event, control_flow| {
+			// TODO: implement control flow to close the window?
+			//
+		}).unwrap();
 }
