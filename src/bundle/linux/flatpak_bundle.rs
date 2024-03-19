@@ -69,9 +69,7 @@ install:
 * @install \"$(TARGET_DIR)/$(RELEASE)/$(BIN_PATH)\" \"$(BIN_DIR)/{APP_ID}\"
 
 * @echo Installing icons into $(SHARE_DIR)/icons/hicolor
-* @ls icons/hicolor/32x32/apps
-* @ls icons/hicolor/128x128/apps
-* @mkdir $(SHARE_DIR)/icons/
+* @mkdir -p $(SHARE_DIR)/icons/
 * @cp -r icons/ -t $(SHARE_DIR)/icons/
 * @# Force cache of icons to refresh
 * @mkdir -p $(SHARE_DIR)/applications/
@@ -422,10 +420,10 @@ fn create_flatpak_yml(path: &Path, settings: &Settings) -> crate::Result<()> {
     match settings.build_profile() {
         "dev" => {}
         "release" => {
-            cargo_build.push_str("--release ");
+            cargo_build.push_str(" --release ");
         }
         custom => {
-            cargo_build.push_str("--profile ");
+            cargo_build.push_str(" --profile ");
             cargo_build.push_str(custom);
         }
     }
