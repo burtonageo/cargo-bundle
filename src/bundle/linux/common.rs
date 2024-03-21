@@ -126,7 +126,7 @@ fn get_dest_path<'a>(
     )
 }
 
-fn generate_icon_files_png(
+pub fn generate_icon_files_png(
     icon_path: &PathBuf,
     base_dir: &Path,
     binary_name: &str,
@@ -145,7 +145,7 @@ fn generate_icon_files_png(
     Ok(sizes.to_owned())
 }
 
-fn generate_icon_files_non_png(
+pub fn generate_icon_files_non_png(
     icon_path: &PathBuf,
     base_dir: &Path,
     binary_name: &str,
