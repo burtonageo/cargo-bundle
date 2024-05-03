@@ -22,6 +22,7 @@ cargo-bundle's support for bundling crate examples.
 """
 
 [dependencies]
+appimage = "0.4.0"
 ar = "0.9"
 cab = "0.4"
 cargo_metadata = "0.15"
@@ -35,6 +36,7 @@ image = "0.12"
 libflate = "1.2"
 md5 = "0.7"
 msi = "0.6"
+reqwest = { version = "0.12.4", features = ["blocking"] }
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1"

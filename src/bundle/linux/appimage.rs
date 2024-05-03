@@ -1,4 +1,9 @@
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter, Read, Write},
+    path::PathBuf,
+    process::Command,
+};
 
 use crate::{
     bundle::{common, Settings},
@@ -23,17 +28,53 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         std::fs::remove_dir_all(&package_dir)
             .chain_err(|| format!("Failed to remove old {package_base_name}"))?;
     }
-    let package_path = base_dir.join(package_name);
+    let package_path = base_dir.join(&package_name);
 
-    let data_dir = package_dir.join("AppDir");
-    let binary_dest = data_dir.join("usr/bin").join(settings.binary_name());
+    let app_dir = package_dir.join("AppDir");
+    let binary_dest = app_dir.join("usr/bin").join(settings.binary_name());
     common::copy_file(settings.binary_path(), &binary_dest)?;
-    generate_icon_files(settings, &data_dir)?;
-    generate_desktop_file(settings, &data_dir)?;
+    generate_icon_files(settings, &app_dir)?;
+    generate_desktop_file(settings, &app_dir)?;
 
     // TODO Symlinks
+    common::symlink_file(&binary_dest, &app_dir.join("AppRun"))?;
+
+    // Download the AppImage runtime
+    let runtime = fetch_runtime(settings.binary_arch())?;
+
+    // Make the squashfs
+    let squashfs = base_dir.join(format!("{}.squashfs", package_name));
+    let status = Command::new("mksquashfs")
+        .arg(&app_dir)
+        .arg(&squashfs)
+        .arg("-root-owned")
+        .arg("-noappend")
+        .arg("-quiet")
+        .status()
+        .chain_err(|| "Failed to make sqaushfs")?;
+
+    // Write the runtime to the file
+    let mut squashfs = BufReader::new(File::open(squashfs)?);
+    let mut f = File::create(&package_path)?;
+    let mut out = BufWriter::new(&mut f);
+    out.write_all(&runtime)?;
+    std::io::copy(&mut squashfs, &mut out)?;
 
     // TODO Generate .AppImage (either call linuxdeploy, or find a crate to generate it)
 
     Ok(vec![package_path])
+}
+
+fn fetch_runtime(arch: &str) -> crate::Result<Vec<u8>> {
+    let url = format!(
+        "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-{}",
+        arch
+    );
+
+    let response = reqwest::blocking::get(url)
+        .chain_err(|| "Failed to get appimage runtime")?
+        .bytes()
+        .chain_err(|| "Failed to ready bytes")?;
+
+    Ok(response.to_vec())
 }

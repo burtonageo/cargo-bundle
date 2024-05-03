@@ -39,7 +39,7 @@ fn symlink_dir(src: &Path, dst: &Path) -> io::Result<()> {
 }
 
 #[cfg(unix)]
-fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
+pub fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(src, dst)
 }
 
