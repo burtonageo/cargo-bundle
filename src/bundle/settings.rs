@@ -14,6 +14,7 @@ pub enum PackageType {
     WindowsMsi,
     Deb,
     Rpm,
+    AppImage,
 }
 
 impl PackageType {
@@ -25,6 +26,7 @@ impl PackageType {
             "msi" => Some(PackageType::WindowsMsi),
             "osx" => Some(PackageType::OsxBundle),
             "rpm" => Some(PackageType::Rpm),
+            "appimage" => Some(PackageType::AppImage),
             _ => None,
         }
     }
@@ -36,6 +38,7 @@ impl PackageType {
             PackageType::WindowsMsi => "msi",
             PackageType::OsxBundle => "osx",
             PackageType::Rpm => "rpm",
+            PackageType::AppImage => "appimage",
         }
     }
 
@@ -50,6 +53,7 @@ const ALL_PACKAGE_TYPES: &[PackageType] = &[
     PackageType::WindowsMsi,
     PackageType::OsxBundle,
     PackageType::Rpm,
+    PackageType::AppImage
 ];
 
 #[derive(Clone, Debug)]
@@ -173,7 +177,8 @@ impl Settings {
                 PackageType::OsxBundle
                 | PackageType::IosBundle
                 | PackageType::Deb
-                | PackageType::Rpm => "",
+                | PackageType::Rpm
+                | PackageType::AppImage => "",
                 PackageType::WindowsMsi => ".exe",
             },
             None => "",
