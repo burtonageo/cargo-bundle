@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufReader, BufWriter, Write},
     path::PathBuf,
     process::Command,
 };
@@ -36,7 +36,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     generate_icon_files(settings, &app_dir)?;
     generate_desktop_file(settings, &app_dir)?;
 
-    // TODO Symlinks
+    // TODO Symlinks (AppRun, .DirIcon, .desktop)
     common::symlink_file(&binary_dest, &app_dir.join("AppRun"))?;
 
     // Download the AppImage runtime
@@ -44,7 +44,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
 
     // Make the squashfs
     let squashfs = base_dir.join(format!("{}.squashfs", package_name));
-    let status = Command::new("mksquashfs")
+    let _status = Command::new("mksquashfs")
         .arg(&app_dir)
         .arg(&squashfs)
         .arg("-root-owned")
@@ -53,14 +53,12 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .status()
         .chain_err(|| "Failed to make sqaushfs")?;
 
-    // Write the runtime to the file
+    // Write the runtime and the fs to the .AppImage file
     let mut squashfs = BufReader::new(File::open(squashfs)?);
     let mut f = File::create(&package_path)?;
     let mut out = BufWriter::new(&mut f);
     out.write_all(&runtime)?;
     std::io::copy(&mut squashfs, &mut out)?;
-
-    // TODO Generate .AppImage (either call linuxdeploy, or find a crate to generate it)
 
     Ok(vec![package_path])
 }
