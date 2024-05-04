@@ -60,6 +60,8 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     out.write_all(&runtime)?;
     std::io::copy(&mut squashfs, &mut out)?;
 
+    // TODO Set permissions on the file? Make it executable
+
     Ok(vec![package_path])
 }
 

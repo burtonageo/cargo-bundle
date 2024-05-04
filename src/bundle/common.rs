@@ -44,7 +44,7 @@ pub fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
 }
 
 #[cfg(windows)]
-fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
+pub fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
     std::os::windows::fs::symlink_file(src, dst)
 }
 
