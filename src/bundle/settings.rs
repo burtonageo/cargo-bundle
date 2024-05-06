@@ -53,7 +53,7 @@ const ALL_PACKAGE_TYPES: &[PackageType] = &[
     PackageType::WindowsMsi,
     PackageType::OsxBundle,
     PackageType::Rpm,
-    PackageType::AppImage
+    PackageType::AppImage,
 ];
 
 #[derive(Clone, Debug)]
