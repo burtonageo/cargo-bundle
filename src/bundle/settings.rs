@@ -1,4 +1,5 @@
 use super::category::AppCategory;
+use super::common::print_warning;
 use clap::ArgMatches;
 
 use cargo_metadata::{Metadata, MetadataCommand};
@@ -59,7 +60,7 @@ pub enum BuildArtifact {
     Example(String),
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 struct BundleSettings {
     // General settings:
     name: Option<String>,
@@ -261,7 +262,12 @@ impl Settings {
                 return Ok((settings, package.clone()));
             }
         }
-        bail!("No package in workspace has [package.metadata.bundle] section")
+        print_warning("No package in workspace has [package.metadata.bundle] section")?;
+        if let Some(root_package) = metadata.root_package() {
+            Ok((BundleSettings::default(), root_package.clone()))
+        } else {
+            bail!("unable to find root package")
+        }
     }
 
     /// Returns the directory where the bundle should be placed.
@@ -469,11 +475,11 @@ fn bundle_settings_from_table(
     if let Some(bundle_settings) = opt_map.as_ref().and_then(|map| map.get(bundle_name)) {
         Ok(bundle_settings.clone())
     } else {
-        bail!(
+        print_warning(&format!(
             "No [package.metadata.bundle.{}.{}] section in Cargo.toml",
-            map_name,
-            bundle_name
-        );
+            map_name, bundle_name
+        ))?;
+        Ok(BundleSettings::default())
     }
 }
 
