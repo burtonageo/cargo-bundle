@@ -292,7 +292,7 @@ fn collect_directory_info(
             if let std::path::Component::Normal(name) = component {
                 dir_path.push(name);
                 if dir_map.contains_key(&dir_path) {
-                    dir_key = dir_map.get(&dir_path).unwrap().key.clone();
+                    dir_key.clone_from(&dir_map.get(&dir_path).unwrap().key);
                 } else {
                     let new_key = format!("RDIR{dir_index:04}");
                     dir_map.insert(
