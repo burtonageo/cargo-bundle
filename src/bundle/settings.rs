@@ -3,6 +3,7 @@ use super::common::print_warning;
 use clap::ArgMatches;
 
 use cargo_metadata::{Metadata, MetadataCommand};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -362,8 +363,18 @@ impl Settings {
             .unwrap_or(&self.package.name)
     }
 
-    pub fn bundle_identifier(&self) -> &str {
-        self.bundle_settings.identifier.as_deref().unwrap_or("")
+    pub fn bundle_identifier(&self) -> Cow<'_, str> {
+        if let Some(identifier) = &self.bundle_settings.identifier {
+            identifier.into()
+        } else {
+            match &self.build_artifact {
+                BuildArtifact::Main => "".into(),
+                BuildArtifact::Bin(name) => format!("{name}.{}", self.package.name).into(),
+                BuildArtifact::Example(name) => {
+                    format!("{name}.example.{}", self.package.name).into()
+                }
+            }
+        }
     }
 
     /// Returns an iterator over the icon files to be used for this bundle.
