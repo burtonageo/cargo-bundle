@@ -1,6 +1,7 @@
 use std::{
     fs::File,
     io::{BufReader, BufWriter, Write},
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::PathBuf,
     process::Command,
 };
@@ -51,7 +52,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .arg("-noappend")
         .arg("-quiet")
         .status()
-        .chain_err(|| "Failed to make sqaushfs")?;
+        .chain_err(|| "Failed to make sqaushfs, does the mksquashfs binary exist?")?;
 
     // Write the runtime and the fs to the .AppImage file
     let mut squashfs = BufReader::new(File::open(squashfs)?);
@@ -60,7 +61,9 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     out.write_all(&runtime)?;
     std::io::copy(&mut squashfs, &mut out)?;
 
-    // TODO Set permissions on the file? Make it executable
+    let mut perms = std::fs::metadata(&package_path)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&package_path, perms)?;
 
     Ok(vec![package_path])
 }
