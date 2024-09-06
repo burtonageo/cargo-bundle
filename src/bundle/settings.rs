@@ -3,8 +3,10 @@ use super::common::print_warning;
 use clap::ArgMatches;
 
 use cargo_metadata::{Metadata, MetadataCommand};
+use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use target_build_utils::TargetInfo;
@@ -214,8 +216,18 @@ impl Settings {
         profile: &str,
         build_artifact: &BuildArtifact,
     ) -> PathBuf {
-        let target_dir_env = std::env::var("CARGO_TARGET_DIR").map(PathBuf::from);
-        let mut path = target_dir_env.unwrap_or(project_root_dir.join("target"));
+        let mut cargo = std::process::Command::new(
+            std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo")),
+        );
+        cargo.args(["metadata", "--no-deps", "--format-version", "1"]);
+
+        let target_dir = cargo.output().ok().and_then(|output| {
+            let json_string = String::from_utf8(output.stdout).ok()?;
+            let json: Value = serde_json::from_str(&json_string).ok()?;
+            Some(PathBuf::from(json.get("target_directory")?.as_str()?))
+        });
+
+        let mut path = target_dir.unwrap_or(project_root_dir.join("target"));
 
         if let &Some((ref triple, _)) = target {
             path.push(triple);
