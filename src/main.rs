@@ -166,6 +166,11 @@ fn run() -> crate::Result<()> {
                         .help("Build a bundle with all crate features."),
                 )
                 .arg(
+                    Arg::with_name("generate-only")
+                        .long("generate-only")
+                        .help("Generate only the preliminary files, not the full bundle. [Flatpak only for now]"),
+                )
+                .arg(
                     Arg::with_name("no-default-features")
                         .long("no-default-features")
                         .help("Build a bundle without the default crate features."),

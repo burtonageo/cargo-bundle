@@ -8,7 +8,7 @@ Wrap Rust executables in OS-specific app bundles
 
 `cargo-bundle` is a tool used to generate installers or app bundles for GUI
 executables built with `cargo`.  It can create `.app` bundles for Mac OS X and
-iOS, `.deb` packages for Linux, and `.msi` installers for Windows (note however
+iOS, `.deb` and Flatpak packages for Linux, and `.msi` installers for Windows (note however
 that iOS and Windows support is still experimental).  Support for creating
 `.rpm` packages (for Linux) and `.apk` packages (for Android) is still pending.
 
@@ -30,7 +30,7 @@ cross-compile and bundle an application for another OS, add an appropriate
     --bin <NAME>             Bundle the specified binary
     --example <NAME>         Bundle the specified example
     --features <FEATURES>    Set crate features for the bundle. Eg: `--features "f1 f2"`
-    --format <FORMAT>        Which bundle format to produce [possible values: deb, ios, msi, osx, rpm]
+    --format <FORMAT>        Which bundle format to produce [possible values: flatpak, deb, ios, msi, osx, rpm]
     -h, --help                   Prints help information
     --no-default-features    Build a bundle without the default crate features.
     --profile <NAME>         Build a bundle from a target build using the given profile
@@ -134,6 +134,14 @@ These settings are used only when bundling `osx` packages.
   handles.
 
 * note: Github Actions and Bitbucket Pipelines both have Apple MacOS build runners/containers available to use for free 
+
+### Flatpak-specific settings
+
+These settings are used only when bundling `flatpak` packages.
+
+* `runtime`: The Flatpak Platform and Sdk to use. Defaults to org.feedesktop.
+* `runtime_version`: The version of the runtime to use. Defaults to the latest org.freedesktop release.
+* `permissions`: These are the sandbox permissions for the finished Flatpak, like `--share=network`. A full list of permissions can be found [in the Flatpak documentation](https://flatpak-docs.readthedocs.io/en/latest/sandbox-permissions-reference.html). 
 
 ### Example `Cargo.toml`:
 

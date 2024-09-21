@@ -17,6 +17,7 @@ pub enum PackageType {
     IosBundle,
     WindowsMsi,
     Deb,
+    Flatpak,
     Rpm,
 }
 
@@ -24,6 +25,7 @@ impl PackageType {
     pub fn from_short_name(name: &str) -> Option<PackageType> {
         // Other types we may eventually want to support: apk
         match name {
+            "flatpak" => Some(PackageType::Flatpak),
             "deb" => Some(PackageType::Deb),
             "ios" => Some(PackageType::IosBundle),
             "msi" => Some(PackageType::WindowsMsi),
@@ -35,6 +37,7 @@ impl PackageType {
 
     pub fn short_name(&self) -> &'static str {
         match *self {
+            PackageType::Flatpak => "flatpak",
             PackageType::Deb => "deb",
             PackageType::IosBundle => "ios",
             PackageType::WindowsMsi => "msi",
@@ -49,6 +52,7 @@ impl PackageType {
 }
 
 const ALL_PACKAGE_TYPES: &[PackageType] = &[
+    PackageType::Flatpak,
     PackageType::Deb,
     PackageType::IosBundle,
     PackageType::WindowsMsi,
@@ -83,6 +87,10 @@ struct BundleSettings {
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
     osx_url_schemes: Option<Vec<String>>,
+    // Flatpak-specific options
+    runtime: Option<String>,
+    runtime_version: Option<String>,
+    permissions: Option<Vec<String>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -99,6 +107,7 @@ pub struct Settings {
     profile: String,
     all_features: bool,
     no_default_features: bool,
+    generate_only: bool,
     binary_path: PathBuf,
     binary_name: String,
     bundle_settings: BundleSettings,
@@ -140,6 +149,7 @@ impl Settings {
         };
         let all_features = matches.is_present("all-features");
         let no_default_features = matches.is_present("no-default-features");
+        let generate_only = matches.is_present("generate-only");
         let target = match matches.value_of("target") {
             Some(triple) => Some((triple.to_string(), TargetInfo::from_str(triple)?)),
             None => None,
@@ -177,6 +187,7 @@ impl Settings {
                 PackageType::OsxBundle
                 | PackageType::IosBundle
                 | PackageType::Deb
+                | PackageType::Flatpak
                 | PackageType::Rpm => "",
                 PackageType::WindowsMsi => ".exe",
             },
@@ -193,6 +204,7 @@ impl Settings {
             profile,
             all_features,
             no_default_features,
+            generate_only,
             project_out_directory: target_dir,
             binary_path,
             binary_name,
@@ -368,6 +380,10 @@ impl Settings {
         self.no_default_features
     }
 
+    pub fn generate_only(&self) -> bool {
+        self.generate_only
+    }
+
     pub fn bundle_name(&self) -> &str {
         self.bundle_settings
             .name
@@ -487,6 +503,20 @@ impl Settings {
             Some(ref urlosx_url_schemes) => urlosx_url_schemes.as_slice(),
             None => &[],
         }
+    }
+    pub fn runtime(&self) -> Option<&str> {
+        self.bundle_settings.runtime.as_deref()
+    }
+
+    pub fn permissions(&self) -> &[String] {
+        match self.bundle_settings.permissions {
+            Some(ref permissions) => permissions.as_slice(),
+            None => &[],
+        }
+    }
+
+    pub fn runtime_version(&self) -> Option<&str> {
+        self.bundle_settings.runtime_version.as_deref()
     }
 }
 
