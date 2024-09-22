@@ -135,6 +135,25 @@ These settings are used only when bundling `osx` packages.
 
 * note: Github Actions and Bitbucket Pipelines both have Apple MacOS build runners/containers available to use for free 
 
+### Settings for specified binary
+
+`[package.metadata.bundle]` only applies to the main executable.
+Settings for other binaries can be specified in a `[package.metadata.bundle.bin.<binary name>]` section.
+
+```toml
+[package]
+# other fields...
+
+[package.metadata.bundle.bin.foo]
+icon = ["icons/foo32x32.png"]
+# other fields...
+
+[[bin]]
+name = "foo"
+path = "src/bin/foo.rs"
+# other fields...
+```
+
 ### Example `Cargo.toml`:
 
 ```toml
