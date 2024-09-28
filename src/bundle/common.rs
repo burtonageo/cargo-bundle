@@ -64,6 +64,18 @@ pub fn copy_file(from: &Path, to: &Path) -> crate::Result<()> {
     Ok(())
 }
 
+/// Reads a regular file into memory
+pub fn read_file(file: &Path) -> crate::Result<String> {
+    if !file.exists() {
+        bail!("{:?} does not exist", file);
+    }
+    if !file.is_file() {
+        bail!("{:?} is not a file", file);
+    }
+    let contents = fs::read_to_string(file).chain_err(|| format!("Failed to read {file:?}"))?;
+    Ok(contents)
+}
+
 /// Recursively copies a directory file from one path to another, creating any
 /// parent directories of the destination path as necessary.  Fails if the
 /// source path is not a directory or doesn't exist, or if the destination path
@@ -222,10 +234,10 @@ pub fn print_error(error: &crate::Error) -> crate::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{copy_dir, create_file, is_retina, resource_relpath, symlink_file};
+    use super::{copy_dir, create_file, is_retina, resource_relpath, symlink_file, read_file};
 
     use std::io::Write;
-    use std::path::PathBuf;
+    use std::path::{PathBuf, Path};
 
     #[test]
     fn create_file_with_parent_dirs() {
@@ -307,5 +319,27 @@ mod tests {
             resource_relpath(&PathBuf::from("/home/ferris/crab.png")),
             PathBuf::from("_root_/home/ferris/crab.png")
         );
+    }
+
+    #[test]
+    fn read_files() {
+        const HELLO_WORLD: &'static str = "Hello, world!";
+        const FILE: &'static str = "some/sub/file.txt";
+        let tmp = tempfile::tempdir().unwrap();
+        {
+            let mut file = create_file(&tmp.path().join(FILE)).unwrap();
+            write!(file, "{HELLO_WORLD}").unwrap();
+        }
+
+        // Happy path
+        let read = read_file(&tmp.path().join(FILE)).unwrap();
+        assert_eq!(read, HELLO_WORLD);
+
+        // Fail to find file
+        assert!(read_file(&tmp.path().join("other/path")).is_err());
+
+        // Find dir instead of file
+        assert!(read_file(&tmp.path().join(&Path::new(FILE).parent().unwrap())).is_err());
+
     }
 }

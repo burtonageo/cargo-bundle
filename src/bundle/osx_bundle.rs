@@ -17,7 +17,7 @@
 // Currently, cargo-bundle does not support Frameworks, nor does it support placing arbitrary
 // files into the `Contents` directory of the bundle.
 
-use super::common;
+use super::common::{self, read_file};
 use crate::{ResultExt, Settings};
 
 use image::{self, GenericImage};
@@ -187,6 +187,14 @@ fn create_info_plist(
             file,
             "  <key>NSHumanReadableCopyright</key>\n  \
                 <string>{copyright}</string>\n"
+        )?;
+    }
+    for plist in settings.osx_info_plist_exts() {
+        let plist = plist?;
+        let contents  = read_file(&plist)?;
+        write!(
+            file,
+            "{contents}"
         )?;
     }
     write!(file, "</dict>\n</plist>\n")?;
