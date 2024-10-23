@@ -53,7 +53,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     create_info_plist(&bundle_directory, bundle_icon_file, settings)
         .chain_err(|| "Failed to create Info.plist")?;
 
-    let copied=copy_frameworks_to_bundle(&bundle_directory, settings)
+    let copied = copy_frameworks_to_bundle(&bundle_directory, settings)
         .chain_err(|| "Failed to bundle frameworks")?;
 
     for src in settings.resource_files() {
@@ -62,93 +62,93 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         common::copy_file(&src, &dest)
             .chain_err(|| format!("Failed to copy resource file {src:?}"))?;
     }
-    
+
     copy_binary_to_bundle(&bundle_directory, settings)
         .chain_err(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
 
-    if copied>0 {
+    if copied > 0 {
         add_rpath(&bundle_directory, settings)?;
     }
 
     Ok(vec![app_bundle_path])
 }
 
-#[derive(Debug,Default)]
-struct DylibInfo{
-
-    dylibs:Vec<PathBuf>,
-    rpaths:Vec<PathBuf>,
-    
+#[allow(dead_code)]
+#[derive(Debug, Default)]
+struct DylibInfo {
+    dylibs: Vec<PathBuf>,
+    rpaths: Vec<PathBuf>,
 }
 
 impl DylibInfo {
-
-    fn inspect(dylib_path:&Path)->crate::Result<Self>{
-        
-        let out=process::Command::new("otool")
-             .arg("-l")
+    fn inspect(dylib_path: &Path) -> crate::Result<Self> {
+        let out = process::Command::new("otool")
+            .arg("-l")
             .arg(dylib_path)
-            .output()?
-        ;
-        
-        let mut dylibs=Vec::new();
-        let mut rpaths=Vec::new();
-        enum NextAction { Unknown,FindDylib, FindRpath}
+            .output()?;
 
-        let mut next_action=NextAction::Unknown;
+        let mut dylibs = Vec::new();
+        let mut rpaths = Vec::new();
+        enum NextAction {
+            Unknown,
+            FindDylib,
+            FindRpath,
+        }
 
-        let lines=String::from_utf8_lossy(&out.stdout);
-        let mut lines=lines.lines();
+        let mut next_action = NextAction::Unknown;
+
+        let lines = String::from_utf8_lossy(&out.stdout);
+        let mut lines = lines.lines();
         loop {
-            if let Some(line)=lines.next() {                
-                if let Some((w0,w1))=line.trim_start().split_once(" "){
-                    match next_action{
-                        NextAction::Unknown=>{
-                            if  w0=="cmd" {
-                                if w1=="LC_LOAD_DYLIB" {
-                                    next_action=NextAction::FindDylib;
-                                }else if w1=="LC_RPATH" {
-                                    next_action=NextAction::FindRpath;
+            if let Some(line) = lines.next() {
+                if let Some((w0, w1)) = line.trim_start().split_once(" ") {
+                    match next_action {
+                        NextAction::Unknown => {
+                            if w0 == "cmd" {
+                                if w1 == "LC_LOAD_DYLIB" {
+                                    next_action = NextAction::FindDylib;
+                                } else if w1 == "LC_RPATH" {
+                                    next_action = NextAction::FindRpath;
                                 }
                             }
                         }
-                        NextAction::FindDylib =>{
-                            if  w0=="name" {
-                                if let Some(trail)=w1.find('(') {
-                                    let name=&w1[..=trail-1];
+                        NextAction::FindDylib => {
+                            if w0 == "name" {
+                                if let Some(trail) = w1.find('(') {
+                                    let name = &w1[..=trail - 1];
                                     dylibs.push(PathBuf::from(name.trim_end()));
-                                }else{
+                                } else {
                                     bail!("unexpected otool output - expect name field after LC_LOAD_DYLIB");
                                 }
-                                next_action=NextAction::Unknown;                                
-                            }else if w0=="Load"{
-                                next_action=NextAction::Unknown; //just to avoid unexpected output                             
+                                next_action = NextAction::Unknown;
+                            } else if w0 == "Load" {
+                                next_action = NextAction::Unknown; //just to avoid unexpected output
                             }
                         }
-                        NextAction::FindRpath=>{
-                            if w0=="path" {
-                                 if let Some(trail)=w1.find('(') {
-                                    let name=&w1[..=trail-1];
+                        NextAction::FindRpath => {
+                            if w0 == "path" {
+                                if let Some(trail) = w1.find('(') {
+                                    let name = &w1[..=trail - 1];
                                     rpaths.push(PathBuf::from(name.trim_end()));
-                                }else{
+                                } else {
                                     bail!("unexpected otool output - expect path field after LC_RPATH");
-                                 }
-                                next_action=NextAction::Unknown;                                
-                            }else if w0=="Load"{
-                                next_action=NextAction::Unknown;   //just to avoid unexpected output                           
+                                }
+                                next_action = NextAction::Unknown;
+                            } else if w0 == "Load" {
+                                next_action = NextAction::Unknown; //just to avoid unexpected output
                             }
                         }
-                        _=>{ }
-
                     }
                 }
-            }else{ break; }
+            } else {
+                break;
+            }
         }
-        Ok(Self{dylibs,rpaths})
+        Ok(Self { dylibs, rpaths })
     }
-    
-    fn has_rpath<T:AsRef<Path>>(&self,path:T) -> bool{
-        self.rpaths.iter().find(|&s|s.as_path()==path.as_ref()).is_some()
+
+    fn has_rpath<T: AsRef<Path>>(&self, path: T) -> bool {
+        self.rpaths.iter().any(|s| s.as_path() == path.as_ref())
     }
 }
 
@@ -160,16 +160,15 @@ fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> crate:
     )
 }
 
-const FRAMEWORKS_RPATH:&str="@executable_path/../Frameworks"; 
+const FRAMEWORKS_RPATH: &str = "@executable_path/../Frameworks";
 
 fn add_rpath(bundle_directory: &Path, settings: &Settings) -> crate::Result<()> {
-    
     let bin = bundle_directory.join("MacOS").join(settings.binary_name());
-    
-    let dyinfo=DylibInfo::inspect(&bin)?;
-    
-    if dyinfo.has_rpath(FRAMEWORKS_RPATH) { 
-        //rpath already in dylib 
+
+    let dyinfo = DylibInfo::inspect(&bin)?;
+
+    if dyinfo.has_rpath(FRAMEWORKS_RPATH) {
+        //rpath already in dylib
         return Ok(());
     }
 
@@ -177,12 +176,13 @@ fn add_rpath(bundle_directory: &Path, settings: &Settings) -> crate::Result<()> 
         .arg("-add_rpath")
         .arg(FRAMEWORKS_RPATH)
         .arg(bin)
-        .status()?.success() {
+        .status()?
+        .success()
+    {
         bail!("failed to execute install_name_tool");
     }
 
     Ok(())
- 
 }
 
 fn create_info_plist(
@@ -320,24 +320,24 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
     if frameworks.is_empty() {
         return Ok(0);
     }
-    let mut copied=0;
+    let mut copied = 0;
     let dest_dir = bundle_directory.join("Frameworks");
     fs::create_dir_all(bundle_directory)
         .chain_err(|| format!("Failed to create Frameworks directory at {dest_dir:?}"))?;
     for framework in frameworks.iter() {
-        if framework.ends_with(".framework")  {
+        if framework.ends_with(".framework") {
             let src_path = PathBuf::from(framework);
             let src_name = src_path.file_name().unwrap();
             common::copy_dir(&src_path, &dest_dir.join(src_name))?;
-            copied+=1;            
+            copied += 1;
             continue;
-        }else if framework.ends_with(".dylib") {
+        } else if framework.ends_with(".dylib") {
             let src_path = PathBuf::from(framework);
             let src_name = src_path.file_name().unwrap();
             common::copy_file(&src_path, &dest_dir.join(src_name))?;
-            copied+=1;            
+            copied += 1;
             continue;
-        }else if framework.contains('/') {
+        } else if framework.contains('/') {
             bail!(
                 "Framework path should have .framework extension: {}",
                 framework
@@ -345,7 +345,7 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
         }
         if let Some(home_dir) = dirs::home_dir() {
             if copy_framework_from(&dest_dir, framework, &home_dir.join("Library/Frameworks/"))? {
-                copied+=1;
+                copied += 1;
                 continue;
             }
         }
@@ -361,7 +361,7 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
                 &PathBuf::from("/System/Library/Frameworks/"),
             )?
         {
-            copied+=1;
+            copied += 1;
             continue;
         }
         bail!("Could not locate {}.framework", framework);
