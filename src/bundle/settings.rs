@@ -533,7 +533,7 @@ impl<'a> ResourcePaths<'a> {
     }
 }
 
-impl<'a> Iterator for ResourcePaths<'a> {
+impl Iterator for ResourcePaths<'_> {
     type Item = crate::Result<PathBuf>;
 
     fn next(&mut self) -> Option<crate::Result<PathBuf>> {

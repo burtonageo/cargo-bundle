@@ -234,10 +234,10 @@ pub fn print_error(error: &crate::Error) -> crate::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{copy_dir, create_file, is_retina, resource_relpath, symlink_file, read_file};
+    use super::{copy_dir, create_file, is_retina, read_file, resource_relpath, symlink_file};
 
     use std::io::Write;
-    use std::path::{PathBuf, Path};
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn create_file_with_parent_dirs() {
@@ -323,8 +323,8 @@ mod tests {
 
     #[test]
     fn read_files() {
-        const HELLO_WORLD: &'static str = "Hello, world!";
-        const FILE: &'static str = "some/sub/file.txt";
+        const HELLO_WORLD: &str = "Hello, world!";
+        const FILE: &str = "some/sub/file.txt";
         let tmp = tempfile::tempdir().unwrap();
         {
             let mut file = create_file(&tmp.path().join(FILE)).unwrap();
@@ -339,7 +339,6 @@ mod tests {
         assert!(read_file(&tmp.path().join("other/path")).is_err());
 
         // Find dir instead of file
-        assert!(read_file(&tmp.path().join(&Path::new(FILE).parent().unwrap())).is_err());
-
+        assert!(read_file(&tmp.path().join(Path::new(FILE).parent().unwrap())).is_err());
     }
 }

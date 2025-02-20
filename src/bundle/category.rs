@@ -231,7 +231,7 @@ struct AppCategoryVisitor {
     did_you_mean: Option<&'static str>,
 }
 
-impl<'d> serde::de::Visitor<'d> for AppCategoryVisitor {
+impl serde::de::Visitor<'_> for AppCategoryVisitor {
     type Value = AppCategory;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
