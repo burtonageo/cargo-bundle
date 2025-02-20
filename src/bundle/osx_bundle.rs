@@ -19,7 +19,6 @@
 
 use super::common::{self, read_file};
 use crate::{ResultExt, Settings};
-use std::borrow::Cow;
 
 use image::{self, GenericImage};
 use std::cmp::min;
@@ -82,15 +81,14 @@ trait PlistEntryFormatter {
 impl<T: AsRef<str>> PlistEntryFormatter for T {
     fn format_plist_entry(&self) -> String {
         let input = self.as_ref();
-        let escaped: Cow<str> = if input.contains("&") {
-            Cow::Owned(input.replace("&", "&amp;")) // Modify only if needed
-                                                    //
-                                                    // add other necessary modifications here...
-                                                    //
+        if input.contains("&") {
+            input.replace("&", "&amp;")
+            //
+            // add other necessary modifications here...
+            //
         } else {
-            Cow::Borrowed(input) // No allocation if no `&` is present
-        };
-        escaped.to_string()
+            input.to_string()
+        }
     }
 }
 
