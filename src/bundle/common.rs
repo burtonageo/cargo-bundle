@@ -323,8 +323,8 @@ mod tests {
 
     #[test]
     fn read_files() {
-        const HELLO_WORLD: &'static str = "Hello, world!";
-        const FILE: &'static str = "some/sub/file.txt";
+        const HELLO_WORLD: &str = "Hello, world!";
+        const FILE: &str = "some/sub/file.txt";
         let tmp = tempfile::tempdir().unwrap();
         {
             let mut file = create_file(&tmp.path().join(FILE)).unwrap();
@@ -339,6 +339,6 @@ mod tests {
         assert!(read_file(&tmp.path().join("other/path")).is_err());
 
         // Find dir instead of file
-        assert!(read_file(&tmp.path().join(&Path::new(FILE).parent().unwrap())).is_err());
+        assert!(read_file(&tmp.path().join(Path::new(FILE).parent().unwrap())).is_err());
     }
 }
