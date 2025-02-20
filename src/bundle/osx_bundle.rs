@@ -191,11 +191,8 @@ fn create_info_plist(
     }
     for plist in settings.osx_info_plist_exts() {
         let plist = plist?;
-        let contents  = read_file(&plist)?;
-        write!(
-            file,
-            "{contents}"
-        )?;
+        let contents = read_file(&plist)?;
+        write!(file, "{contents}")?;
     }
     write!(file, "</dict>\n</plist>\n")?;
     file.flush()?;
