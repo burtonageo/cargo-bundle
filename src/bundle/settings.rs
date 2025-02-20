@@ -3,8 +3,10 @@ use super::common::print_warning;
 use clap::ArgMatches;
 
 use cargo_metadata::{Metadata, MetadataCommand};
+use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use target_build_utils::TargetInfo;
@@ -81,6 +83,7 @@ struct BundleSettings {
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
     osx_url_schemes: Option<Vec<String>>,
+    osx_info_plist_exts: Option<Vec<String>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -214,8 +217,18 @@ impl Settings {
         profile: &str,
         build_artifact: &BuildArtifact,
     ) -> PathBuf {
-        let target_dir_env = std::env::var("CARGO_TARGET_DIR").map(PathBuf::from);
-        let mut path = target_dir_env.unwrap_or(project_root_dir.join("target"));
+        let mut cargo = std::process::Command::new(
+            std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo")),
+        );
+        cargo.args(["metadata", "--no-deps", "--format-version", "1"]);
+
+        let target_dir = cargo.output().ok().and_then(|output| {
+            let json_string = String::from_utf8(output.stdout).ok()?;
+            let json: Value = serde_json::from_str(&json_string).ok()?;
+            Some(PathBuf::from(json.get("target_directory")?.as_str()?))
+        });
+
+        let mut path = target_dir.unwrap_or(project_root_dir.join("target"));
 
         if let &Some((ref triple, _)) = target {
             path.push(triple);
@@ -474,6 +487,14 @@ impl Settings {
         match self.bundle_settings.osx_url_schemes {
             Some(ref urlosx_url_schemes) => urlosx_url_schemes.as_slice(),
             None => &[],
+        }
+    }
+
+    /// Returns an iterator over the plist files for this bundle
+    pub fn osx_info_plist_exts(&self) -> ResourcePaths<'_> {
+        match self.bundle_settings.osx_info_plist_exts {
+            Some(ref paths) => ResourcePaths::new(paths.as_slice(), false),
+            None => ResourcePaths::new(&[], false),
         }
     }
 }
