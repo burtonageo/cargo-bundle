@@ -81,14 +81,8 @@ trait PlistEntryFormatter {
 impl<T: AsRef<str>> PlistEntryFormatter for T {
     fn format_plist_entry(&self) -> String {
         let input = self.as_ref();
-        if input.contains("&") {
-            input.replace("&", "&amp;")
-            //
-            // add other necessary modifications here...
-            //
-        } else {
-            input.to_string()
-        }
+        input.replace("&", "&amp;")
+        // add other necessary modifications here...
     }
 }
 
