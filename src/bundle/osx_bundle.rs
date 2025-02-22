@@ -74,6 +74,17 @@ fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> crate:
         &dest_dir.join(settings.binary_name()),
     )
 }
+trait PlistEntryFormatter {
+    fn format_plist_entry(&self) -> String;
+}
+
+impl<T: AsRef<str>> PlistEntryFormatter for T {
+    fn format_plist_entry(&self) -> String {
+        let input = self.as_ref();
+        input.replace("&", "&amp;")
+        // add other necessary modifications here...
+    }
+}
 
 fn create_info_plist(
     bundle_dir: &Path,
@@ -98,7 +109,7 @@ fn create_info_plist(
     write!(
         file,
         "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n",
-        settings.bundle_name()
+        settings.bundle_name().format_plist_entry()
     )?;
     write!(
         file,
@@ -125,7 +136,7 @@ fn create_info_plist(
     write!(
         file,
         "  <key>CFBundleName</key>\n  <string>{}</string>\n",
-        settings.bundle_name()
+        settings.bundle_name().format_plist_entry()
     )?;
     write!(
         file,
@@ -148,10 +159,14 @@ fn create_info_plist(
                        <string>Viewer</string>\n      \
                        <key>CFBundleURLSchemes</key>\n      \
                        <array>\n",
-            settings.bundle_name()
+            settings.bundle_name().format_plist_entry()
         )?;
         for scheme in settings.osx_url_schemes() {
-            writeln!(file, "        <string>{scheme}</string>")?;
+            writeln!(
+                file,
+                "        <string>{}</string>",
+                scheme.format_plist_entry()
+            )?;
         }
         write!(
             file,
@@ -170,7 +185,9 @@ fn create_info_plist(
             file,
             "  <key>LSApplicationCategoryType</key>\n  \
                 <string>{}</string>\n",
-            category.osx_application_category_type()
+            category
+                .osx_application_category_type()
+                .format_plist_entry()
         )?;
     }
     if let Some(version) = settings.osx_minimum_system_version() {
@@ -186,13 +203,14 @@ fn create_info_plist(
         write!(
             file,
             "  <key>NSHumanReadableCopyright</key>\n  \
-                <string>{copyright}</string>\n"
+                <string>{}</string>\n",
+            copyright.format_plist_entry()
         )?;
     }
     for plist in settings.osx_info_plist_exts() {
         let plist = plist?;
         let contents = read_file(&plist)?;
-        write!(file, "{contents}")?;
+        write!(file, "{:}", contents.format_plist_entry())?
     }
     write!(file, "</dict>\n</plist>\n")?;
     file.flush()?;
