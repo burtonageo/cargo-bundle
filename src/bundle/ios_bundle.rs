@@ -11,8 +11,8 @@
 use super::common;
 use crate::{ResultExt, Settings};
 
-use image::png::{PNGDecoder, PNGEncoder};
-use image::{self, GenericImage, ImageDecoder};
+use image::codecs::png::{PngDecoder, PngEncoder};
+use image::{self, GenericImageView as _, ImageDecoder, ImageEncoder};
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -74,8 +74,10 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<
             if icon_path.extension() != Some(OsStr::new("png")) {
                 continue;
             }
-            let mut decoder = PNGDecoder::new(File::open(&icon_path)?);
-            let (width, height) = decoder.dimensions()?;
+						let file = File::open(&icon_path)?;
+						let file_reader = std::io::BufReader::new(file);
+            let decoder = PngDecoder::new(file_reader)?;
+            let (width, height) = decoder.dimensions();
             let is_retina = common::is_retina(&icon_path);
             if !sizes.contains(&(width, height, is_retina)) {
                 sizes.insert((width, height, is_retina));
@@ -108,8 +110,11 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<
                 if !sizes.contains(&(width, height, is_retina)) {
                     sizes.insert((width, height, is_retina));
                     let dest_path = get_dest_path(width, height, is_retina);
-                    let encoder = PNGEncoder::new(common::create_file(&dest_path)?);
-                    encoder.encode(&icon.raw_pixels(), width, height, icon.color())?;
+                    let encoder = PngEncoder::new(common::create_file(&dest_path)?);
+
+										tracing::warn!("Code for converting image to raw pixels is not tested!");
+										let raw_pixels: Vec<u8> = icon.pixels().flat_map(|p| p.2.0).collect::<Vec<_>>();
+                    encoder.write_image(&raw_pixels, width, height, icon.color().into())?;
                 }
             }
         }

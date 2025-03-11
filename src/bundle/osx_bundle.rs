@@ -20,7 +20,7 @@
 use super::common::{self, read_file};
 use crate::{ResultExt, Settings};
 
-use image::{self, GenericImage};
+use image::{self, GenericImageView as _};
 use std::cmp::min;
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -336,7 +336,7 @@ fn create_icns_file(
     }
 
     for (icon, next_size_down, density) in images_to_resize {
-        let icon = icon.resize_exact(next_size_down, next_size_down, image::Lanczos3);
+        let icon = icon.resize_exact(next_size_down, next_size_down, image::imageops::Lanczos3);
         add_icon_to_family(icon, density, &mut family)?;
     }
 
@@ -356,14 +356,19 @@ fn create_icns_file(
 /// Converts an image::DynamicImage into an icns::Image.
 fn make_icns_image(img: image::DynamicImage) -> io::Result<icns::Image> {
     let pixel_format = match img.color() {
-        image::ColorType::RGBA(8) => icns::PixelFormat::RGBA,
-        image::ColorType::RGB(8) => icns::PixelFormat::RGB,
-        image::ColorType::GrayA(8) => icns::PixelFormat::GrayAlpha,
-        image::ColorType::Gray(8) => icns::PixelFormat::Gray,
+        image::ColorType::Rgba8 => icns::PixelFormat::RGBA,
+        image::ColorType::Rgb8 => icns::PixelFormat::RGB,
+				// TODO: support other color types?
+        // image::ColorType::GrayA(8) => icns::PixelFormat::GrayAlpha,
+        // image::ColorType::Gray(8) => icns::PixelFormat::Gray,
         _ => {
             let msg = format!("unsupported ColorType: {:?}", img.color());
             return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
         }
     };
-    icns::Image::from_data(pixel_format, img.width(), img.height(), img.raw_pixels())
+		// TODO: This code is NOT tested!
+		tracing::warn!("Code for converting image::DynamicImage into icns::Image is not tested!");
+		let pixels = img.pixels().collect::<Vec<_>>();
+		let raw_pixels: Vec<u8> = pixels.iter().flat_map(|p| p.2.0).collect();
+    icns::Image::from_data(pixel_format, img.width(), img.height(), raw_pixels)
 }
