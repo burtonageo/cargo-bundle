@@ -55,8 +55,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     copy_frameworks_to_bundle(&bundle_directory, settings)
         .chain_err(|| "Failed to bundle frameworks")?;
 
-    copy_plugins_to_bundle(&bundle_directory, settings)
-        .chain_err(|| "Failed to bundle plugins")?;
+    copy_plugins_to_bundle(&bundle_directory, settings).chain_err(|| "Failed to bundle plugins")?;
 
     for src in settings.resource_files() {
         let src = src?;
