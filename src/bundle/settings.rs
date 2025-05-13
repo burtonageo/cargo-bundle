@@ -81,6 +81,7 @@ struct BundleSettings {
     linux_use_terminal: Option<bool>,
     deb_depends: Option<Vec<String>>,
     osx_frameworks: Option<Vec<String>>,
+    osx_plugins: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
     osx_url_schemes: Option<Vec<String>>,
     osx_info_plist_exts: Option<Vec<String>>,
@@ -475,6 +476,13 @@ impl Settings {
     pub fn osx_frameworks(&self) -> &[String] {
         match self.bundle_settings.osx_frameworks {
             Some(ref frameworks) => frameworks.as_slice(),
+            None => &[],
+        }
+    }
+
+    pub fn osx_plugins(&self) -> &[String] {
+        match self.bundle_settings.osx_plugins {
+            Some(ref plugins) => plugins.as_slice(),
             None => &[],
         }
     }
