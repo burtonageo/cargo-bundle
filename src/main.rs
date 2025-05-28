@@ -149,6 +149,12 @@ fn run() -> crate::Result<()> {
                         .help("Build a bundle from a target build using the given profile"),
                 )
                 .arg(
+                    Arg::with_name("bundle-type")
+                        .long("bundle-type")
+                        .value_name("NAME")
+                        .help("Build a bundle of the specified type"),
+                )
+                .arg(
                     Arg::with_name("target")
                         .long("target")
                         .value_name("TRIPLE")
