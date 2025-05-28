@@ -147,8 +147,9 @@ impl Settings {
         };
         let features = matches.value_of("features").map(|features| features.into());
         // TODO: support multiple packages?
+        let bundle_type = matches.value_of("bundle-type");
         let (bundle_settings, package) =
-            Settings::find_bundle_package(load_metadata(&current_dir)?)?;
+            Settings::find_bundle_package(load_metadata(&current_dir)?, bundle_type)?;
         let workspace_dir = Settings::get_workspace_dir(current_dir);
         let target_dir =
             Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
@@ -268,15 +269,35 @@ impl Settings {
 
     fn find_bundle_package(
         metadata: Metadata,
+        bundle_type: Option<&str>,
     ) -> crate::Result<(BundleSettings, cargo_metadata::Package)> {
         for package_id in metadata.workspace_members.iter() {
             let package = &metadata[package_id];
-            if let Some(bundle) = package.metadata.get("bundle") {
+
+            let bundle_settings = if let Some(bundle_type) = bundle_type {
+                package
+                    .metadata
+                    .get("bundle")
+                    .and_then(|m| m.get(bundle_type))
+            } else {
+                package.metadata.get("bundle")
+            };
+
+            if let Some(bundle) = bundle_settings {
                 let settings = serde_json::from_value::<BundleSettings>(bundle.clone())?;
                 return Ok((settings, package.clone()));
             }
         }
-        print_warning("No package in workspace has [package.metadata.bundle] section")?;
+
+        if let Some(bundle_type) = bundle_type {
+            print_warning(&format!(
+                "No package in workspace has [package.metadata.bundle.{}] section",
+                bundle_type
+            ))?;
+        } else {
+            print_warning("No package in workspace has [package.metadata.bundle] section")?;
+        }
+
         if let Some(root_package) = metadata.root_package() {
             Ok((BundleSettings::default(), root_package.clone()))
         } else {
