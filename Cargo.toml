@@ -27,7 +27,7 @@ ar = "0.9"
 cab = "0.6"
 cargo_metadata = "0.20"
 chrono = "0.4"
-clap = "^2"
+clap = { version = "4", features = ["derive", "wrap_help"] }
 dirs = "6"
 glob = "0.3"
 icns = "0.3"

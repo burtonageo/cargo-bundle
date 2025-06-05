@@ -1,7 +1,5 @@
 use super::category::AppCategory;
 use super::common::print_warning;
-use clap::ArgMatches;
-
 use cargo_metadata::{Metadata, MetadataCommand, TargetKind};
 use serde_json::Value;
 use std::borrow::Cow;
@@ -20,6 +18,33 @@ pub enum PackageType {
     Rpm,
 }
 
+impl std::str::FromStr for PackageType {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        PackageType::try_from(s)
+    }
+}
+
+impl std::fmt::Display for PackageType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.short_name())
+    }
+}
+
+impl TryFrom<&str> for PackageType {
+    type Error = anyhow::Error;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        PackageType::from_short_name(s).ok_or_else(|| {
+            let all = PackageType::all()
+                .iter()
+                .map(|&s| s.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            anyhow::anyhow!("Unsupported package type: '{s}'. Supported types are: {all}")
+        })
+    }
+}
+
 impl PackageType {
     pub fn from_short_name(name: &str) -> Option<PackageType> {
         // Other types we may eventually want to support: apk
@@ -33,7 +58,7 @@ impl PackageType {
         }
     }
 
-    pub fn short_name(&self) -> &'static str {
+    pub const fn short_name(&self) -> &'static str {
         match *self {
             PackageType::Deb => "deb",
             PackageType::IosBundle => "ios",
@@ -43,18 +68,10 @@ impl PackageType {
         }
     }
 
-    pub fn all() -> &'static [PackageType] {
-        ALL_PACKAGE_TYPES
+    pub const fn all() -> &'static [&'static str] {
+        &["deb", "ios", "msi", "osx", "rpm"]
     }
 }
-
-const ALL_PACKAGE_TYPES: &[PackageType] = &[
-    PackageType::Deb,
-    PackageType::IosBundle,
-    PackageType::WindowsMsi,
-    PackageType::OsxBundle,
-    PackageType::Rpm,
-];
 
 #[derive(Clone, Debug)]
 pub enum BuildArtifact {
@@ -114,24 +131,18 @@ fn load_metadata(dir: &Path) -> crate::Result<Metadata> {
 }
 
 impl Settings {
-    pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> crate::Result<Self> {
-        let package_type = match matches.value_of("format") {
-            Some(name) => match PackageType::from_short_name(name) {
-                Some(package_type) => Some(package_type),
-                None => anyhow::bail!("Unsupported bundle format: {}", name),
-            },
-            None => None,
-        };
-        let build_artifact = if let Some(bin) = matches.value_of("bin") {
+    pub fn new(current_dir: PathBuf, cli: &crate::Cli) -> crate::Result<Self> {
+        let package_type = cli.format;
+        let build_artifact = if let Some(bin) = cli.bin.as_ref() {
             BuildArtifact::Bin(bin.to_string())
-        } else if let Some(example) = matches.value_of("example") {
+        } else if let Some(example) = cli.example.as_ref() {
             BuildArtifact::Example(example.to_string())
         } else {
             BuildArtifact::Main
         };
-        let profile = if matches.is_present("release") {
+        let profile = if cli.release {
             "release".to_string()
-        } else if let Some(profile) = matches.value_of("profile") {
+        } else if let Some(profile) = cli.profile.as_ref() {
             if profile == "debug" {
                 anyhow::bail!("Profile name `debug` is reserved")
             }
@@ -139,13 +150,15 @@ impl Settings {
         } else {
             "dev".to_string()
         };
-        let all_features = matches.is_present("all-features");
-        let no_default_features = matches.is_present("no-default-features");
-        let target = match matches.value_of("target") {
-            Some(triple) => Some((triple.to_string(), TargetInfo::from_str(triple)?)),
-            None => None,
+        let all_features = cli.all_features;
+        let no_default_features = cli.no_default_features;
+        let target = if let Some(triple) = cli.target.as_ref() {
+            Some((triple.to_string(), TargetInfo::from_str(triple)?))
+        } else {
+            None
         };
-        let features = matches.value_of("features").map(|features| features.into());
+        let features = cli.features.as_ref().map(|features| features.into());
+
         // TODO: support multiple packages?
         let (bundle_settings, package) =
             Settings::find_bundle_package(load_metadata(&current_dir)?)?;
@@ -174,14 +187,8 @@ impl Settings {
             ),
         };
         let binary_extension = match package_type {
-            Some(x) => match x {
-                PackageType::OsxBundle
-                | PackageType::IosBundle
-                | PackageType::Deb
-                | PackageType::Rpm => "",
-                PackageType::WindowsMsi => ".exe",
-            },
-            None => "",
+            Some(PackageType::WindowsMsi) => ".exe",
+            _ => "",
         };
         binary_name += binary_extension;
         let binary_path = target_dir.join(&binary_name);

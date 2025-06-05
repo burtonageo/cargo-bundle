@@ -170,7 +170,7 @@ fn set_summary_info(package: &mut Package, package_guid: Uuid, settings: &Settin
     if let Some(authors) = settings.authors_comma_separated() {
         summary_info.set_author(authors);
     }
-    let creating_app = format!("cargo-bundle v{}", crate_version!());
+    let creating_app = crate::version_info!();
     summary_info.set_creating_application(creating_app);
     summary_info.set_word_count(2);
 }

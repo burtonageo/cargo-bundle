@@ -1,8 +1,6 @@
 extern crate ar;
 extern crate cab;
 extern crate chrono;
-#[macro_use]
-extern crate clap;
 extern crate dirs;
 extern crate glob;
 extern crate icns;
@@ -28,10 +26,65 @@ mod bundle;
 
 use crate::bundle::{bundle_project, BuildArtifact, PackageType, Settings};
 use anyhow::Result;
-use clap::{App, AppSettings, Arg, SubCommand};
 use std::env;
 use std::ffi::OsString;
 use std::process;
+
+#[macro_export]
+macro_rules! version_info {
+    () => {
+        concat!(env!("CARGO_PKG_NAME"), " v", env!("CARGO_PKG_VERSION"))
+    };
+}
+
+const fn about_info() -> &'static str {
+    concat!(
+        version_info!(),
+        "\n",
+        env!("CARGO_PKG_AUTHORS"),
+        "\nBundle Rust executables into OS bundles",
+    )
+}
+
+#[derive(clap::Parser, Clone)]
+#[command(version, author, bin_name = "cargo bundle", about = about_info())]
+pub struct Cli {
+    /// Bundle the specified binary
+    #[arg(short, long, value_name = "NAME")]
+    pub bin: Option<String>,
+
+    /// Bundle the specified example
+    #[arg(short, long, value_name = "NAME", conflicts_with = "bin")]
+    pub example: Option<String>,
+
+    /// Which bundle format to produce
+    #[arg(short, long, value_name = "FORMAT", value_parser = clap::builder::PossibleValuesParser::new(crate::bundle::PackageType::all()))]
+    pub format: Option<PackageType>,
+
+    /// Build a bundle from a target built in release mode
+    #[arg(short, long)]
+    pub release: bool,
+
+    /// Build a bundle from a target build using the given profile
+    #[arg(short, long, value_name = "NAME", conflicts_with = "release")]
+    pub profile: Option<String>,
+
+    /// Build a bundle for the target triple
+    #[arg(short, long, value_name = "TRIPLE")]
+    pub target: Option<String>,
+
+    /// Set crate features for the bundle. Eg: `--features "f1 f2"`
+    #[arg(long, value_name = "FEATURES")]
+    pub features: Option<String>,
+
+    /// Build a bundle with all crate features.
+    #[arg(long)]
+    pub all_features: bool,
+
+    /// Build a bundle without the default crate features.
+    #[arg(long)]
+    pub no_default_features: bool,
+}
 
 /// Runs `cargo build` to make sure the binary file is up-to-date.
 fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
@@ -84,82 +137,16 @@ fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
 }
 
 fn run() -> crate::Result<()> {
-    let all_formats: Vec<&str> = PackageType::all()
-        .iter()
-        .map(PackageType::short_name)
-        .collect();
-    let m = App::new("cargo-bundle")
-        .version(format!("v{}", crate_version!()).as_str())
-        .bin_name("cargo")
-        .setting(AppSettings::GlobalVersion)
-        .setting(AppSettings::SubcommandRequired)
-        .subcommand(
-            SubCommand::with_name("bundle")
-                .author("George Burton <burtonageo@gmail.com>")
-                .about("Bundle Rust executables into OS bundles")
-                .setting(AppSettings::DisableVersion)
-                .setting(AppSettings::UnifiedHelpMessage)
-                .arg(
-                    Arg::with_name("bin")
-                        .long("bin")
-                        .value_name("NAME")
-                        .help("Bundle the specified binary"),
-                )
-                .arg(
-                    Arg::with_name("example")
-                        .long("example")
-                        .value_name("NAME")
-                        .conflicts_with("bin")
-                        .help("Bundle the specified example"),
-                )
-                .arg(
-                    Arg::with_name("format")
-                        .long("format")
-                        .value_name("FORMAT")
-                        .possible_values(&all_formats)
-                        .help("Which bundle format to produce"),
-                )
-                .arg(
-                    Arg::with_name("release")
-                        .long("release")
-                        .help("Build a bundle from a target built in release mode"),
-                )
-                .arg(
-                    Arg::with_name("profile")
-                        .long("profile")
-                        .value_name("NAME")
-                        .conflicts_with("release")
-                        .help("Build a bundle from a target build using the given profile"),
-                )
-                .arg(
-                    Arg::with_name("target")
-                        .long("target")
-                        .value_name("TRIPLE")
-                        .help("Build a bundle for the target triple"),
-                )
-                .arg(
-                    Arg::with_name("features")
-                        .long("features")
-                        .value_name("FEATURES")
-                        .help("Set crate features for the bundle. Eg: `--features \"f1 f2\"`"),
-                )
-                .arg(
-                    Arg::with_name("all-features")
-                        .long("all-features")
-                        .help("Build a bundle with all crate features."),
-                )
-                .arg(
-                    Arg::with_name("no-default-features")
-                        .long("no-default-features")
-                        .help("Build a bundle without the default crate features."),
-                ),
-        )
-        .get_matches();
+    let mut args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && args[1] == "bundle" {
+        args.remove(1);
+    }
+    let cli = <Cli as clap::Parser>::parse_from(args); // <Cli as clap::Parser>::parse();
 
-    if let Some(m) = m.subcommand_matches("bundle") {
+    {
         let output_paths = env::current_dir()
             .map_err(From::from)
-            .and_then(|d| Settings::new(d, m))
+            .and_then(|d| Settings::new(d, &cli))
             .and_then(|s| {
                 build_project_if_unbuilt(&s)?;
                 Ok(s)
