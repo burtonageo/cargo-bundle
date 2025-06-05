@@ -1,6 +1,5 @@
 use crate::bundle::{common, Settings};
-use image::png::{PNGDecoder, PNGEncoder};
-use image::{GenericImage, ImageDecoder};
+use image::GenericImageView;
 use libflate::gzip;
 use md5::Digest;
 use std::collections::BTreeSet;
@@ -132,8 +131,10 @@ fn generate_icon_files_png(
     binary_name: &str,
     mut sizes: BTreeSet<(u32, u32, bool)>,
 ) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
-    let mut decoder = PNGDecoder::new(File::open(icon_path)?);
-    let (width, height) = decoder.dimensions()?;
+    let img = image::ImageReader::open(icon_path)?
+        .with_guessed_format()?
+        .decode()?;
+    let (width, height) = img.dimensions();
     let is_high_density = common::is_retina(icon_path);
 
     if !sizes.contains(&(width, height, is_high_density)) {
@@ -174,8 +175,8 @@ fn generate_icon_files_non_png(
         if !sizes.contains(&(width, height, is_high_density)) {
             sizes.insert((width, height, is_high_density));
             let dest_path = get_dest_path(width, height, is_high_density, base_dir, binary_name);
-            let encoder = PNGEncoder::new(common::create_file(&dest_path)?);
-            encoder.encode(&icon.raw_pixels(), width, height, icon.color())?;
+            let mut file = common::create_file(&dest_path)?;
+            icon.write_to(&mut file, image::ImageFormat::Png)?;
         }
     }
 

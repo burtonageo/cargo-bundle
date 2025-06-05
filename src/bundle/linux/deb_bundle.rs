@@ -18,17 +18,15 @@
 // metadata, as well as generating the md5sums file.  Currently we do not
 // generate postinst or prerm files.
 
-use crate::{
-    bundle::{
-        common,
-        linux::common::{
-            create_file_with_data, generate_desktop_file, generate_icon_files, generate_md5sum,
-            tar_and_gzip_dir, total_dir_size,
-        },
-        Settings,
+use crate::bundle::{
+    common,
+    linux::common::{
+        create_file_with_data, generate_desktop_file, generate_icon_files, generate_md5sum,
+        tar_and_gzip_dir, total_dir_size,
     },
-    ResultExt,
+    Settings,
 };
+use anyhow::Context;
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -54,7 +52,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let package_dir = base_dir.join(&package_base_name);
     if package_dir.exists() {
         std::fs::remove_dir_all(&package_dir)
-            .chain_err(|| format!("Failed to remove old {package_base_name}"))?;
+            .with_context(|| format!("Failed to remove old {package_base_name}"))?;
     }
     let package_path = base_dir.join(package_name);
 
@@ -62,33 +60,34 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let data_dir = package_dir.join("data");
     let binary_dest = data_dir.join("usr/bin").join(settings.binary_name());
     common::copy_file(settings.binary_path(), &binary_dest)
-        .chain_err(|| "Failed to copy binary file")?;
-    transfer_resource_files(settings, &data_dir).chain_err(|| "Failed to copy resource files")?;
-    generate_icon_files(settings, &data_dir).chain_err(|| "Failed to create icon files")?;
-    generate_desktop_file(settings, &data_dir).chain_err(|| "Failed to create desktop file")?;
+        .with_context(|| "Failed to copy binary file")?;
+    transfer_resource_files(settings, &data_dir)
+        .with_context(|| "Failed to copy resource files")?;
+    generate_icon_files(settings, &data_dir).with_context(|| "Failed to create icon files")?;
+    generate_desktop_file(settings, &data_dir).with_context(|| "Failed to create desktop file")?;
 
     // Generate control files.
     let control_dir = package_dir.join("control");
     generate_control_file(settings, arch, &control_dir, &data_dir)
-        .chain_err(|| "Failed to create control file")?;
-    generate_md5sums(&control_dir, &data_dir).chain_err(|| "Failed to create md5sums file")?;
+        .with_context(|| "Failed to create control file")?;
+    generate_md5sums(&control_dir, &data_dir).with_context(|| "Failed to create md5sums file")?;
 
     // Generate `debian-binary` file; see
     // http://www.tldp.org/HOWTO/Debian-Binary-Package-Building-HOWTO/x60.html#AEN66
     let debian_binary_path = package_dir.join("debian-binary");
     create_file_with_data(&debian_binary_path, "2.0\n")
-        .chain_err(|| "Failed to create debian-binary file")?;
+        .with_context(|| "Failed to create debian-binary file")?;
 
     // Apply tar/gzip/ar to create the final package file.
     let control_tar_gz_path =
-        tar_and_gzip_dir(control_dir).chain_err(|| "Failed to tar/gzip control directory")?;
+        tar_and_gzip_dir(control_dir).with_context(|| "Failed to tar/gzip control directory")?;
     let data_tar_gz_path =
-        tar_and_gzip_dir(data_dir).chain_err(|| "Failed to tar/gzip data directory")?;
+        tar_and_gzip_dir(data_dir).with_context(|| "Failed to tar/gzip data directory")?;
     create_archive(
         vec![debian_binary_path, control_tar_gz_path, data_tar_gz_path],
         &package_path,
     )
-    .chain_err(|| "Failed to create package archive")?;
+    .with_context(|| "Failed to create package archive")?;
     Ok(vec![package_path])
 }
 
@@ -114,7 +113,7 @@ fn generate_control_file(
     writeln!(
         &mut file,
         "Installed-Size: {}",
-        (total_dir_size(data_dir)? + 1023) / 1024
+        (total_dir_size(data_dir)?).div_ceil(1024)
     )?;
     let authors = settings.authors_comma_separated().unwrap_or_default();
     writeln!(&mut file, "Maintainer: {authors}")?;
@@ -178,7 +177,7 @@ fn transfer_resource_files(settings: &Settings, data_dir: &Path) -> crate::Resul
         let src = src?;
         let dest = resource_dir.join(common::resource_relpath(&src));
         common::copy_file(&src, &dest)
-            .chain_err(|| format!("Failed to copy resource file {src:?}"))?;
+            .with_context(|| format!("Failed to copy resource file {src:?}"))?;
     }
     Ok(())
 }
