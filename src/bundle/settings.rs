@@ -2,7 +2,7 @@ use super::category::AppCategory;
 use super::common::print_warning;
 use clap::ArgMatches;
 
-use cargo_metadata::{Metadata, MetadataCommand};
+use cargo_metadata::{Metadata, MetadataCommand, TargetKind};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -118,7 +118,7 @@ impl Settings {
         let package_type = match matches.value_of("format") {
             Some(name) => match PackageType::from_short_name(name) {
                 Some(package_type) => Some(package_type),
-                None => bail!("Unsupported bundle format: {}", name),
+                None => anyhow::bail!("Unsupported bundle format: {}", name),
             },
             None => None,
         };
@@ -133,7 +133,7 @@ impl Settings {
             "release".to_string()
         } else if let Some(profile) = matches.value_of("profile") {
             if profile == "debug" {
-                bail!("Profile name `debug` is reserved")
+                anyhow::bail!("Profile name `debug` is reserved")
             }
             profile.to_string()
         } else {
@@ -157,11 +157,11 @@ impl Settings {
                 if let Some(target) = package
                     .targets
                     .iter()
-                    .find(|target| target.kind.iter().any(|k| k == "bin"))
+                    .find(|target| target.kind.contains(&TargetKind::Bin))
                 {
                     (bundle_settings, target.name.clone())
                 } else {
-                    bail!("No `bin` target is found in package '{}'", package.name)
+                    anyhow::bail!("No `bin` target is found in package '{}'", package.name)
                 }
             }
             BuildArtifact::Bin(ref name) => (
@@ -280,7 +280,7 @@ impl Settings {
         if let Some(root_package) = metadata.root_package() {
             Ok((BundleSettings::default(), root_package.clone()))
         } else {
-            bail!("unable to find root package")
+            anyhow::bail!("unable to find root package")
         }
     }
 
@@ -328,7 +328,7 @@ impl Settings {
                 "ios" => Ok(vec![PackageType::IosBundle]),
                 "linux" => Ok(vec![PackageType::Deb]), // TODO: Do Rpm too, once it's implemented.
                 "windows" => Ok(vec![PackageType::WindowsMsi]),
-                os => bail!("Native {} bundles not yet supported.", os),
+                os => anyhow::bail!("Native {} bundles not yet supported.", os),
             }
         }
     }
@@ -542,7 +542,7 @@ impl Iterator for ResourcePaths<'_> {
                 if let Some(entry) = walk_entries.next() {
                     let entry = match entry {
                         Ok(entry) => entry,
-                        Err(error) => return Some(Err(crate::Error::from(error))),
+                        Err(error) => return Some(Err(anyhow::Error::from(error))),
                     };
                     let path = entry.path();
                     if path.is_dir() {
@@ -556,7 +556,7 @@ impl Iterator for ResourcePaths<'_> {
                 if let Some(glob_result) = glob_paths.next() {
                     let path = match glob_result {
                         Ok(path) => path,
-                        Err(error) => return Some(Err(crate::Error::from(error))),
+                        Err(error) => return Some(Err(anyhow::Error::from(error))),
                     };
                     if path.is_dir() {
                         if self.allow_walk {
@@ -564,8 +564,7 @@ impl Iterator for ResourcePaths<'_> {
                             self.walk_iter = Some(walk.into_iter());
                             continue;
                         } else {
-                            let msg = format!("{path:?} is a directory");
-                            return Some(Err(crate::Error::from(msg)));
+                            return Some(Err(anyhow::anyhow!("{path:?} is a directory")));
                         }
                     }
                     return Some(Ok(path));
@@ -575,7 +574,7 @@ impl Iterator for ResourcePaths<'_> {
             if let Some(pattern) = self.pattern_iter.next() {
                 let glob = match glob::glob(pattern) {
                     Ok(glob) => glob,
-                    Err(error) => return Some(Err(crate::Error::from(error))),
+                    Err(error) => return Some(Err(anyhow::Error::from(error))),
                 };
                 self.glob_iter = Some(glob);
                 continue;

@@ -4,8 +4,6 @@ extern crate chrono;
 #[macro_use]
 extern crate clap;
 extern crate dirs;
-#[macro_use]
-extern crate error_chain;
 extern crate glob;
 extern crate icns;
 extern crate image;
@@ -29,26 +27,11 @@ extern crate tempfile;
 mod bundle;
 
 use crate::bundle::{bundle_project, BuildArtifact, PackageType, Settings};
+use anyhow::Result;
 use clap::{App, AppSettings, Arg, SubCommand};
 use std::env;
 use std::ffi::OsString;
 use std::process;
-
-error_chain! {
-    foreign_links {
-        Glob(::glob::GlobError);
-        GlobPattern(::glob::PatternError);
-        Io(::std::io::Error);
-        Image(::image::ImageError);
-        Json(serde_json::Error);
-        Metadata(cargo_metadata::Error);
-        Target(::target_build_utils::Error);
-        Term(::term::Error);
-        Toml(::toml::de::Error);
-        Walkdir(::walkdir::Error);
-    }
-    errors { }
-}
 
 /// Runs `cargo build` to make sure the binary file is up-to-date.
 fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
@@ -92,7 +75,7 @@ fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
     }
     let status = cargo.status()?;
     if !status.success() {
-        bail!(
+        anyhow::bail!(
             "Result of `cargo build` operation was unsuccessful: {}",
             status
         );

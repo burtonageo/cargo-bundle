@@ -18,9 +18,10 @@
 // files into the `Contents` directory of the bundle.
 
 use super::common::{self, read_file};
-use crate::{ResultExt, Settings};
-
-use image::{self, GenericImage};
+use crate::Settings;
+use anyhow::Context;
+use image::imageops::FilterType::Lanczos3;
+use image::{self, GenericImageView};
 use std::cmp::min;
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -37,32 +38,33 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .join(&app_bundle_name);
     if app_bundle_path.exists() {
         fs::remove_dir_all(&app_bundle_path)
-            .chain_err(|| format!("Failed to remove old {app_bundle_name}"))?;
+            .with_context(|| format!("Failed to remove old {app_bundle_name}"))?;
     }
     let bundle_directory = app_bundle_path.join("Contents");
     fs::create_dir_all(&bundle_directory)
-        .chain_err(|| format!("Failed to create bundle directory at {bundle_directory:?}"))?;
+        .with_context(|| format!("Failed to create bundle directory at {bundle_directory:?}"))?;
 
     let resources_dir = bundle_directory.join("Resources");
 
-    let bundle_icon_file: Option<PathBuf> =
-        { create_icns_file(&resources_dir, settings).chain_err(|| "Failed to create app icon")? };
+    let bundle_icon_file: Option<PathBuf> = {
+        create_icns_file(&resources_dir, settings).with_context(|| "Failed to create app icon")?
+    };
 
     create_info_plist(&bundle_directory, bundle_icon_file, settings)
-        .chain_err(|| "Failed to create Info.plist")?;
+        .with_context(|| "Failed to create Info.plist")?;
 
     copy_frameworks_to_bundle(&bundle_directory, settings)
-        .chain_err(|| "Failed to bundle frameworks")?;
+        .with_context(|| "Failed to bundle frameworks")?;
 
     for src in settings.resource_files() {
         let src = src?;
         let dest = resources_dir.join(common::resource_relpath(&src));
         common::copy_file(&src, &dest)
-            .chain_err(|| format!("Failed to copy resource file {src:?}"))?;
+            .with_context(|| format!("Failed to copy resource file {src:?}"))?;
     }
 
     copy_binary_to_bundle(&bundle_directory, settings)
-        .chain_err(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
+        .with_context(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
 
     Ok(vec![app_bundle_path])
 }
@@ -235,7 +237,7 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
     }
     let dest_dir = bundle_directory.join("Frameworks");
     fs::create_dir_all(bundle_directory)
-        .chain_err(|| format!("Failed to create Frameworks directory at {dest_dir:?}"))?;
+        .with_context(|| format!("Failed to create Frameworks directory at {dest_dir:?}"))?;
     for framework in frameworks.iter() {
         if framework.ends_with(".framework") {
             let src_path = PathBuf::from(framework);
@@ -243,7 +245,7 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
             common::copy_dir(&src_path, &dest_dir.join(src_name))?;
             continue;
         } else if framework.contains('/') {
-            bail!(
+            anyhow::bail!(
                 "Framework path should have .framework extension: {}",
                 framework
             );
@@ -267,7 +269,7 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
         {
             continue;
         }
-        bail!("Could not locate {}.framework", framework);
+        anyhow::bail!("Could not locate {}.framework", framework);
     }
     Ok(())
 }
@@ -336,7 +338,7 @@ fn create_icns_file(
     }
 
     for (icon, next_size_down, density) in images_to_resize {
-        let icon = icon.resize_exact(next_size_down, next_size_down, image::Lanczos3);
+        let icon = icon.resize_exact(next_size_down, next_size_down, Lanczos3);
         add_icon_to_family(icon, density, &mut family)?;
     }
 
@@ -350,20 +352,20 @@ fn create_icns_file(
         return Ok(Some(dest_path));
     }
 
-    bail!("No usable icon files found.");
+    anyhow::bail!("No usable icon files found.");
 }
 
 /// Converts an image::DynamicImage into an icns::Image.
 fn make_icns_image(img: image::DynamicImage) -> io::Result<icns::Image> {
     let pixel_format = match img.color() {
-        image::ColorType::RGBA(8) => icns::PixelFormat::RGBA,
-        image::ColorType::RGB(8) => icns::PixelFormat::RGB,
-        image::ColorType::GrayA(8) => icns::PixelFormat::GrayAlpha,
-        image::ColorType::Gray(8) => icns::PixelFormat::Gray,
+        image::ColorType::Rgba8 => icns::PixelFormat::RGBA,
+        image::ColorType::Rgb8 => icns::PixelFormat::RGB,
+        image::ColorType::La8 => icns::PixelFormat::GrayAlpha,
+        image::ColorType::L8 => icns::PixelFormat::Gray,
         _ => {
             let msg = format!("unsupported ColorType: {:?}", img.color());
             return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
         }
     };
-    icns::Image::from_data(pixel_format, img.width(), img.height(), img.raw_pixels())
+    icns::Image::from_data(pixel_format, img.width(), img.height(), img.into_bytes())
 }
