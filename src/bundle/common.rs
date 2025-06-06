@@ -1,5 +1,4 @@
-use crate::ResultExt;
-
+use anyhow::Context;
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
@@ -22,9 +21,9 @@ pub fn is_retina<P: AsRef<Path>>(path: P) -> bool {
 pub fn create_file(path: &Path) -> crate::Result<BufWriter<File>> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
-            .chain_err(|| format!("Failed to create directory {parent:?}"))?;
+            .with_context(|| format!("Failed to create directory {parent:?}"))?;
     }
-    let file = File::create(path).chain_err(|| format!("Failed to create file {path:?}"))?;
+    let file = File::create(path).with_context(|| format!("Failed to create file {path:?}"))?;
     Ok(BufWriter::new(file))
 }
 
@@ -53,15 +52,27 @@ pub fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
 /// is a directory or doesn't exist.
 pub fn copy_file(from: &Path, to: &Path) -> crate::Result<()> {
     if !from.exists() {
-        bail!("{:?} does not exist", from);
+        anyhow::bail!("{:?} does not exist", from);
     }
     if !from.is_file() {
-        bail!("{:?} is not a file", from);
+        anyhow::bail!("{:?} is not a file", from);
     }
     let dest_dir = to.parent().unwrap();
-    fs::create_dir_all(dest_dir).chain_err(|| format!("Failed to create {dest_dir:?}"))?;
-    fs::copy(from, to).chain_err(|| format!("Failed to copy {from:?} to {to:?}"))?;
+    fs::create_dir_all(dest_dir).with_context(|| format!("Failed to create {dest_dir:?}"))?;
+    fs::copy(from, to).with_context(|| format!("Failed to copy {from:?} to {to:?}"))?;
     Ok(())
+}
+
+/// Reads a regular file into memory
+pub fn read_file(file: &Path) -> crate::Result<String> {
+    if !file.exists() {
+        anyhow::bail!("{:?} does not exist", file);
+    }
+    if !file.is_file() {
+        anyhow::bail!("{:?} is not a file", file);
+    }
+    let contents = fs::read_to_string(file).with_context(|| format!("Failed to read {file:?}"))?;
+    Ok(contents)
 }
 
 /// Recursively copies a directory file from one path to another, creating any
@@ -70,16 +81,16 @@ pub fn copy_file(from: &Path, to: &Path) -> crate::Result<()> {
 /// already exists.
 pub fn copy_dir(from: &Path, to: &Path) -> crate::Result<()> {
     if !from.exists() {
-        bail!("{:?} does not exist", from);
+        anyhow::bail!("{:?} does not exist", from);
     }
     if !from.is_dir() {
-        bail!("{:?} is not a directory", from);
+        anyhow::bail!("{:?} is not a directory", from);
     }
     if to.exists() {
-        bail!("{:?} already exists", to);
+        anyhow::bail!("{:?} already exists", to);
     }
     let parent = to.parent().unwrap();
-    fs::create_dir_all(parent).chain_err(|| format!("Failed to create {parent:?}"))?;
+    fs::create_dir_all(parent).with_context(|| format!("Failed to create {parent:?}"))?;
     for entry in walkdir::WalkDir::new(from) {
         let entry = entry?;
         debug_assert!(entry.path().starts_with(from));
@@ -188,7 +199,7 @@ pub fn print_warning(message: &str) -> crate::Result<()> {
 }
 
 /// Prints an error to stderr, in the same format that `cargo` uses.
-pub fn print_error(error: &crate::Error) -> crate::Result<()> {
+pub fn print_error(error: &anyhow::Error) -> crate::Result<()> {
     if let Some(mut output) = term::stderr() {
         safe_term_attr(&mut output, term::Attr::Bold)?;
         output.fg(term::color::RED)?;
@@ -197,24 +208,22 @@ pub fn print_error(error: &crate::Error) -> crate::Result<()> {
         safe_term_attr(&mut output, term::Attr::Bold)?;
         writeln!(output, " {error}")?;
         output.reset()?;
-        for cause in error.iter().skip(1) {
+        for cause in error.chain().skip(1) {
             writeln!(output, "  Caused by: {cause}")?;
         }
-        if let Some(backtrace) = error.backtrace() {
-            writeln!(output, "{backtrace:?}")?;
-        }
+        let backtrace = error.backtrace();
+        writeln!(output, "{backtrace:?}")?;
         output.flush()?;
         Ok(())
     } else {
         let mut output = io::stderr();
         write!(output, "error:")?;
         writeln!(output, " {error}")?;
-        for cause in error.iter().skip(1) {
+        for cause in error.chain().skip(1) {
             writeln!(output, "  Caused by: {cause}")?;
         }
-        if let Some(backtrace) = error.backtrace() {
-            writeln!(output, "{backtrace:?}")?;
-        }
+        let backtrace = error.backtrace();
+        writeln!(output, "{backtrace:?}")?;
         output.flush()?;
         Ok(())
     }
@@ -222,10 +231,10 @@ pub fn print_error(error: &crate::Error) -> crate::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{copy_dir, create_file, is_retina, resource_relpath, symlink_file};
+    use super::{copy_dir, create_file, is_retina, read_file, resource_relpath, symlink_file};
 
     use std::io::Write;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn create_file_with_parent_dirs() {
@@ -307,5 +316,26 @@ mod tests {
             resource_relpath(&PathBuf::from("/home/ferris/crab.png")),
             PathBuf::from("_root_/home/ferris/crab.png")
         );
+    }
+
+    #[test]
+    fn read_files() {
+        const HELLO_WORLD: &str = "Hello, world!";
+        const FILE: &str = "some/sub/file.txt";
+        let tmp = tempfile::tempdir().unwrap();
+        {
+            let mut file = create_file(&tmp.path().join(FILE)).unwrap();
+            write!(file, "{HELLO_WORLD}").unwrap();
+        }
+
+        // Happy path
+        let read = read_file(&tmp.path().join(FILE)).unwrap();
+        assert_eq!(read, HELLO_WORLD);
+
+        // Fail to find file
+        assert!(read_file(&tmp.path().join("other/path")).is_err());
+
+        // Find dir instead of file
+        assert!(read_file(&tmp.path().join(Path::new(FILE).parent().unwrap())).is_err());
     }
 }

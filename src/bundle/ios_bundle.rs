@@ -9,10 +9,9 @@
 // explanation.
 
 use super::common;
-use crate::{ResultExt, Settings};
-
-use image::png::{PNGDecoder, PNGEncoder};
-use image::{self, GenericImage, ImageDecoder};
+use crate::Settings;
+use anyhow::Context;
+use image::{self, GenericImageView};
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -30,25 +29,25 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .join(&app_bundle_name);
     if bundle_dir.exists() {
         fs::remove_dir_all(&bundle_dir)
-            .chain_err(|| format!("Failed to remove old {app_bundle_name}"))?;
+            .with_context(|| format!("Failed to remove old {app_bundle_name}"))?;
     }
     fs::create_dir_all(&bundle_dir)
-        .chain_err(|| format!("Failed to create bundle directory at {bundle_dir:?}"))?;
+        .with_context(|| format!("Failed to create bundle directory at {bundle_dir:?}"))?;
 
     for src in settings.resource_files() {
         let src = src?;
         let dest = bundle_dir.join(common::resource_relpath(&src));
         common::copy_file(&src, &dest)
-            .chain_err(|| format!("Failed to copy resource file {src:?}"))?;
+            .with_context(|| format!("Failed to copy resource file {src:?}"))?;
     }
 
     let icon_filenames =
-        generate_icon_files(&bundle_dir, settings).chain_err(|| "Failed to create app icons")?;
+        generate_icon_files(&bundle_dir, settings).with_context(|| "Failed to create app icons")?;
     generate_info_plist(&bundle_dir, settings, &icon_filenames)
-        .chain_err(|| "Failed to create Info.plist")?;
+        .with_context(|| "Failed to create Info.plist")?;
     let bin_path = bundle_dir.join(settings.binary_name());
     common::copy_file(settings.binary_path(), &bin_path)
-        .chain_err(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
+        .with_context(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
     Ok(vec![bundle_dir])
 }
 
@@ -74,8 +73,10 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<
             if icon_path.extension() != Some(OsStr::new("png")) {
                 continue;
             }
-            let mut decoder = PNGDecoder::new(File::open(&icon_path)?);
-            let (width, height) = decoder.dimensions()?;
+            let img = image::ImageReader::open(&icon_path)?
+                .with_guessed_format()?
+                .decode()?;
+            let (width, height) = img.dimensions();
             let is_retina = common::is_retina(&icon_path);
             if !sizes.contains(&(width, height, is_retina)) {
                 sizes.insert((width, height, is_retina));
@@ -108,8 +109,8 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<
                 if !sizes.contains(&(width, height, is_retina)) {
                     sizes.insert((width, height, is_retina));
                     let dest_path = get_dest_path(width, height, is_retina);
-                    let encoder = PNGEncoder::new(common::create_file(&dest_path)?);
-                    encoder.encode(&icon.raw_pixels(), width, height, icon.color())?;
+                    let mut file = common::create_file(&dest_path)?;
+                    icon.write_to(&mut file, image::ImageFormat::Png)?;
                 }
             }
         }

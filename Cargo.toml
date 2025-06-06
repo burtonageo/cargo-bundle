@@ -1,6 +1,6 @@
 [package]
 name = "cargo-bundle"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["George Burton <burtonageo@gmail.com>"]
 license = "MIT OR Apache-2.0"
 keywords = ["bundle", "cargo"]
@@ -22,28 +22,28 @@ cargo-bundle's support for bundling crate examples.
 """
 
 [dependencies]
+anyhow = "1"
 ar = "0.9"
-cab = "0.4"
-cargo_metadata = "0.15"
+cab = "0.6"
+cargo_metadata = "0.20"
 chrono = "0.4"
-clap = "^2"
-dirs = "1.0"
-error-chain = "0.12"
+clap = { version = "4", features = ["derive", "wrap_help"] }
+dirs = "6"
 glob = "0.3"
 icns = "0.3"
-image = "0.12"
-libflate = "1.2"
+image = { version = "0.25", features = ["png"] }
+libflate = "2"
 md5 = "0.7"
 msi = "0.6"
 reqwest = { version = "0.12.4", features = ["blocking", "native-tls"], default-features = false }
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1"
-strsim = "0.10"
+strsim = "0.11"
 tar = "0.4"
 target_build_utils = "0.3"
-term = "0.4"
-toml = "0.5"
+term = "1"
+toml = "0.8"
 uuid = { version = "1", features = ["v5"] }
 walkdir = "2"
 

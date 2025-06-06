@@ -1,7 +1,6 @@
 use super::common;
 use super::settings::Settings;
-use crate::ResultExt;
-
+use anyhow::Context;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fs;
@@ -72,47 +71,49 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let base_dir = settings.project_out_directory().join("bundle/msi");
     let msi_path = base_dir.join(&msi_name);
     let mut package =
-        new_empty_package(&msi_path).chain_err(|| "Failed to initialize MSI package")?;
+        new_empty_package(&msi_path).with_context(|| "Failed to initialize MSI package")?;
 
     // Generate package metadata:
     let guid = generate_package_guid(settings);
     set_summary_info(&mut package, guid, settings);
     create_property_table(&mut package, guid, settings)
-        .chain_err(|| "Failed to generate Property table")?;
+        .with_context(|| "Failed to generate Property table")?;
 
     // Copy resource files into package:
     let mut resources = collect_resource_info(settings)
-        .chain_err(|| "Failed to collect resource file information")?;
+        .with_context(|| "Failed to collect resource file information")?;
     let directories = collect_directory_info(settings, &mut resources)
-        .chain_err(|| "Failed to collect resource directory information")?;
+        .with_context(|| "Failed to collect resource directory information")?;
     let cabinets = divide_resources_into_cabinets(resources);
     generate_resource_cabinets(&mut package, &cabinets)
-        .chain_err(|| "Failed to generate resource cabinets")?;
+        .with_context(|| "Failed to generate resource cabinets")?;
 
     // Set up installer database tables:
     create_directory_table(&mut package, &directories)
-        .chain_err(|| "Failed to generate Directory table")?;
+        .with_context(|| "Failed to generate Directory table")?;
     create_feature_table(&mut package, settings)
-        .chain_err(|| "Failed to generate Feature table")?;
+        .with_context(|| "Failed to generate Feature table")?;
     create_component_table(&mut package, guid, &directories)
-        .chain_err(|| "Failed to generate Component table")?;
+        .with_context(|| "Failed to generate Component table")?;
     create_feature_components_table(&mut package, &directories)
-        .chain_err(|| "Failed to generate FeatureComponents table")?;
-    create_media_table(&mut package, &cabinets).chain_err(|| "Failed to generate Media table")?;
-    create_file_table(&mut package, &cabinets).chain_err(|| "Failed to generate File table")?;
+        .with_context(|| "Failed to generate FeatureComponents table")?;
+    create_media_table(&mut package, &cabinets)
+        .with_context(|| "Failed to generate Media table")?;
+    create_file_table(&mut package, &cabinets).with_context(|| "Failed to generate File table")?;
     create_install_execute_sequence_table(&mut package, &cabinets)
-        .chain_err(|| "Failed to generate InstallExecuteSequence table")?;
+        .with_context(|| "Failed to generate InstallExecuteSequence table")?;
     create_install_ui_sequence_table(&mut package, &cabinets)
-        .chain_err(|| "Failed to generate InstallUISequence table")?;
-    create_dialog_table(&mut package, &cabinets).chain_err(|| "Failed to generate Dialog table")?;
+        .with_context(|| "Failed to generate InstallUISequence table")?;
+    create_dialog_table(&mut package, &cabinets)
+        .with_context(|| "Failed to generate Dialog table")?;
     create_control_table(&mut package, &cabinets)
-        .chain_err(|| "Failed to generate Control table")?;
+        .with_context(|| "Failed to generate Control table")?;
     create_control_event_table(&mut package, &cabinets)
-        .chain_err(|| "Failed to generate ControlEvent table")?;
+        .with_context(|| "Failed to generate ControlEvent table")?;
     create_event_mapping_table(&mut package, &cabinets)
-        .chain_err(|| "Failed to generate EventMapping table")?;
+        .with_context(|| "Failed to generate EventMapping table")?;
     create_text_style_table(&mut package, &cabinets)
-        .chain_err(|| "Failed to generate TextStyle table")?;
+        .with_context(|| "Failed to generate TextStyle table")?;
     // TODO: Create other needed tables.
 
     // Create app icon:
@@ -140,7 +141,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
 fn new_empty_package(msi_path: &Path) -> crate::Result<Package> {
     if let Some(parent) = msi_path.parent() {
         fs::create_dir_all(parent)
-            .chain_err(|| format!("Failed to create directory {parent:?}"))?;
+            .with_context(|| format!("Failed to create directory {parent:?}"))?;
     }
     let msi_file = fs::OpenOptions::new()
         .read(true)
@@ -148,7 +149,7 @@ fn new_empty_package(msi_path: &Path) -> crate::Result<Package> {
         .create(true)
         .truncate(true)
         .open(msi_path)
-        .chain_err(|| format!("Failed to create file {msi_path:?}"))?;
+        .with_context(|| format!("Failed to create file {msi_path:?}"))?;
     let package = msi::Package::create(msi::PackageType::Installer, msi_file)?;
     Ok(package)
 }
@@ -169,7 +170,7 @@ fn set_summary_info(package: &mut Package, package_guid: Uuid, settings: &Settin
     if let Some(authors) = settings.authors_comma_separated() {
         summary_info.set_author(authors);
     }
-    let creating_app = format!("cargo-bundle v{}", crate_version!());
+    let creating_app = crate::version_info!();
     summary_info.set_creating_application(creating_app);
     summary_info.set_word_count(2);
 }
@@ -292,7 +293,7 @@ fn collect_directory_info(
             if let std::path::Component::Normal(name) = component {
                 dir_path.push(name);
                 if dir_map.contains_key(&dir_path) {
-                    dir_key = dir_map.get(&dir_path).unwrap().key.clone();
+                    dir_key.clone_from(&dir_map.get(&dir_path).unwrap().key);
                 } else {
                     let new_key = format!("RDIR{dir_index:04}");
                     dir_map.insert(

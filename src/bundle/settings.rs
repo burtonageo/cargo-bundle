@@ -1,8 +1,10 @@
 use super::category::AppCategory;
-use clap::ArgMatches;
-
-use cargo_metadata::{Metadata, MetadataCommand};
+use super::common::print_warning;
+use cargo_metadata::{Metadata, MetadataCommand, TargetKind};
+use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use target_build_utils::TargetInfo;
@@ -15,6 +17,33 @@ pub enum PackageType {
     Deb,
     Rpm,
     AppImage,
+}
+
+impl std::str::FromStr for PackageType {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        PackageType::try_from(s)
+    }
+}
+
+impl std::fmt::Display for PackageType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.short_name())
+    }
+}
+
+impl TryFrom<&str> for PackageType {
+    type Error = anyhow::Error;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        PackageType::from_short_name(s).ok_or_else(|| {
+            let all = PackageType::all()
+                .iter()
+                .map(|&s| s.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            anyhow::anyhow!("Unsupported package type: '{s}'. Supported types are: {all}")
+        })
+    }
 }
 
 impl PackageType {
@@ -31,7 +60,7 @@ impl PackageType {
         }
     }
 
-    pub fn short_name(&self) -> &'static str {
+    pub const fn short_name(&self) -> &'static str {
         match *self {
             PackageType::Deb => "deb",
             PackageType::IosBundle => "ios",
@@ -42,8 +71,8 @@ impl PackageType {
         }
     }
 
-    pub fn all() -> &'static [PackageType] {
-        ALL_PACKAGE_TYPES
+    pub const fn all() -> &'static [&'static str] {
+        &["deb", "ios", "msi", "osx", "rpm"]
     }
 }
 
@@ -63,7 +92,7 @@ pub enum BuildArtifact {
     Example(String),
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 struct BundleSettings {
     // General settings:
     name: Option<String>,
@@ -83,6 +112,7 @@ struct BundleSettings {
     osx_frameworks: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
     osx_url_schemes: Option<Vec<String>>,
+    osx_info_plist_exts: Option<Vec<String>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -113,38 +143,34 @@ fn load_metadata(dir: &Path) -> crate::Result<Metadata> {
 }
 
 impl Settings {
-    pub fn new(current_dir: PathBuf, matches: &ArgMatches) -> crate::Result<Self> {
-        let package_type = match matches.value_of("format") {
-            Some(name) => match PackageType::from_short_name(name) {
-                Some(package_type) => Some(package_type),
-                None => bail!("Unsupported bundle format: {}", name),
-            },
-            None => None,
-        };
-        let build_artifact = if let Some(bin) = matches.value_of("bin") {
+    pub fn new(current_dir: PathBuf, cli: &crate::Cli) -> crate::Result<Self> {
+        let package_type = cli.format;
+        let build_artifact = if let Some(bin) = cli.bin.as_ref() {
             BuildArtifact::Bin(bin.to_string())
-        } else if let Some(example) = matches.value_of("example") {
+        } else if let Some(example) = cli.example.as_ref() {
             BuildArtifact::Example(example.to_string())
         } else {
             BuildArtifact::Main
         };
-        let profile = if matches.is_present("release") {
+        let profile = if cli.release {
             "release".to_string()
-        } else if let Some(profile) = matches.value_of("profile") {
+        } else if let Some(profile) = cli.profile.as_ref() {
             if profile == "debug" {
-                bail!("Profile name `debug` is reserved")
+                anyhow::bail!("Profile name `debug` is reserved")
             }
             profile.to_string()
         } else {
             "dev".to_string()
         };
-        let all_features = matches.is_present("all-features");
-        let no_default_features = matches.is_present("no-default-features");
-        let target = match matches.value_of("target") {
-            Some(triple) => Some((triple.to_string(), TargetInfo::from_str(triple)?)),
-            None => None,
+        let all_features = cli.all_features;
+        let no_default_features = cli.no_default_features;
+        let target = if let Some(triple) = cli.target.as_ref() {
+            Some((triple.to_string(), TargetInfo::from_str(triple)?))
+        } else {
+            None
         };
-        let features = matches.value_of("features").map(|features| features.into());
+        let features = cli.features.as_ref().map(|features| features.into());
+
         // TODO: support multiple packages?
         let (bundle_settings, package) =
             Settings::find_bundle_package(load_metadata(&current_dir)?)?;
@@ -156,11 +182,11 @@ impl Settings {
                 if let Some(target) = package
                     .targets
                     .iter()
-                    .find(|target| target.kind.iter().any(|k| k == "bin"))
+                    .find(|target| target.kind.contains(&TargetKind::Bin))
                 {
                     (bundle_settings, target.name.clone())
                 } else {
-                    bail!("No `bin` target is found in package '{}'", package.name)
+                    anyhow::bail!("No `bin` target is found in package '{}'", package.name)
                 }
             }
             BuildArtifact::Bin(ref name) => (
@@ -173,15 +199,8 @@ impl Settings {
             ),
         };
         let binary_extension = match package_type {
-            Some(x) => match x {
-                PackageType::OsxBundle
-                | PackageType::IosBundle
-                | PackageType::Deb
-                | PackageType::Rpm
-                | PackageType::AppImage => "",
-                PackageType::WindowsMsi => ".exe",
-            },
-            None => "",
+            Some(PackageType::WindowsMsi) => ".exe",
+            _ => "",
         };
         binary_name += binary_extension;
         let binary_path = target_dir.join(&binary_name);
@@ -217,8 +236,18 @@ impl Settings {
         profile: &str,
         build_artifact: &BuildArtifact,
     ) -> PathBuf {
-        let target_dir_env = std::env::var("CARGO_TARGET_DIR").map(PathBuf::from);
-        let mut path = target_dir_env.unwrap_or(project_root_dir.join("target"));
+        let mut cargo = std::process::Command::new(
+            std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo")),
+        );
+        cargo.args(["metadata", "--no-deps", "--format-version", "1"]);
+
+        let target_dir = cargo.output().ok().and_then(|output| {
+            let json_string = String::from_utf8(output.stdout).ok()?;
+            let json: Value = serde_json::from_str(&json_string).ok()?;
+            Some(PathBuf::from(json.get("target_directory")?.as_str()?))
+        });
+
+        let mut path = target_dir.unwrap_or(project_root_dir.join("target"));
 
         if let &Some((ref triple, _)) = target {
             path.push(triple);
@@ -266,7 +295,12 @@ impl Settings {
                 return Ok((settings, package.clone()));
             }
         }
-        bail!("No package in workspace has [package.metadata.bundle] section")
+        print_warning("No package in workspace has [package.metadata.bundle] section")?;
+        if let Some(root_package) = metadata.root_package() {
+            Ok((BundleSettings::default(), root_package.clone()))
+        } else {
+            anyhow::bail!("unable to find root package")
+        }
     }
 
     /// Returns the directory where the bundle should be placed.
@@ -313,7 +347,7 @@ impl Settings {
                 "ios" => Ok(vec![PackageType::IosBundle]),
                 "linux" => Ok(vec![PackageType::Deb]), // TODO: Do Rpm too, once it's implemented.
                 "windows" => Ok(vec![PackageType::WindowsMsi]),
-                os => bail!("Native {} bundles not yet supported.", os),
+                os => anyhow::bail!("Native {} bundles not yet supported.", os),
             }
         }
     }
@@ -361,8 +395,18 @@ impl Settings {
             .unwrap_or(&self.package.name)
     }
 
-    pub fn bundle_identifier(&self) -> &str {
-        self.bundle_settings.identifier.as_deref().unwrap_or("")
+    pub fn bundle_identifier(&self) -> Cow<'_, str> {
+        if let Some(identifier) = &self.bundle_settings.identifier {
+            identifier.into()
+        } else {
+            match &self.build_artifact {
+                BuildArtifact::Main => "".into(),
+                BuildArtifact::Bin(name) => format!("{name}.{}", self.package.name).into(),
+                BuildArtifact::Example(name) => {
+                    format!("{name}.example.{}", self.package.name).into()
+                }
+            }
+        }
     }
 
     /// Returns an iterator over the icon files to be used for this bundle.
@@ -464,6 +508,14 @@ impl Settings {
             None => &[],
         }
     }
+
+    /// Returns an iterator over the plist files for this bundle
+    pub fn osx_info_plist_exts(&self) -> ResourcePaths<'_> {
+        match self.bundle_settings.osx_info_plist_exts {
+            Some(ref paths) => ResourcePaths::new(paths.as_slice(), false),
+            None => ResourcePaths::new(&[], false),
+        }
+    }
 }
 
 fn bundle_settings_from_table(
@@ -474,11 +526,11 @@ fn bundle_settings_from_table(
     if let Some(bundle_settings) = opt_map.as_ref().and_then(|map| map.get(bundle_name)) {
         Ok(bundle_settings.clone())
     } else {
-        bail!(
+        print_warning(&format!(
             "No [package.metadata.bundle.{}.{}] section in Cargo.toml",
-            map_name,
-            bundle_name
-        );
+            map_name, bundle_name
+        ))?;
+        Ok(BundleSettings::default())
     }
 }
 
@@ -500,7 +552,7 @@ impl<'a> ResourcePaths<'a> {
     }
 }
 
-impl<'a> Iterator for ResourcePaths<'a> {
+impl Iterator for ResourcePaths<'_> {
     type Item = crate::Result<PathBuf>;
 
     fn next(&mut self) -> Option<crate::Result<PathBuf>> {
@@ -509,7 +561,7 @@ impl<'a> Iterator for ResourcePaths<'a> {
                 if let Some(entry) = walk_entries.next() {
                     let entry = match entry {
                         Ok(entry) => entry,
-                        Err(error) => return Some(Err(crate::Error::from(error))),
+                        Err(error) => return Some(Err(anyhow::Error::from(error))),
                     };
                     let path = entry.path();
                     if path.is_dir() {
@@ -523,7 +575,7 @@ impl<'a> Iterator for ResourcePaths<'a> {
                 if let Some(glob_result) = glob_paths.next() {
                     let path = match glob_result {
                         Ok(path) => path,
-                        Err(error) => return Some(Err(crate::Error::from(error))),
+                        Err(error) => return Some(Err(anyhow::Error::from(error))),
                     };
                     if path.is_dir() {
                         if self.allow_walk {
@@ -531,8 +583,7 @@ impl<'a> Iterator for ResourcePaths<'a> {
                             self.walk_iter = Some(walk.into_iter());
                             continue;
                         } else {
-                            let msg = format!("{path:?} is a directory");
-                            return Some(Err(crate::Error::from(msg)));
+                            return Some(Err(anyhow::anyhow!("{path:?} is a directory")));
                         }
                     }
                     return Some(Ok(path));
@@ -542,7 +593,7 @@ impl<'a> Iterator for ResourcePaths<'a> {
             if let Some(pattern) = self.pattern_iter.next() {
                 let glob = match glob::glob(pattern) {
                     Ok(glob) => glob,
-                    Err(error) => return Some(Err(crate::Error::from(error))),
+                    Err(error) => return Some(Err(anyhow::Error::from(error))),
                 };
                 self.glob_iter = Some(glob);
                 continue;
