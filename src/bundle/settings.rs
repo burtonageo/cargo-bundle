@@ -46,6 +46,13 @@ impl TryFrom<&str> for PackageType {
     }
 }
 
+impl TryFrom<String> for PackageType {
+    type Error = anyhow::Error;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        PackageType::try_from(s.as_str())
+    }
+}
+
 impl PackageType {
     pub fn from_short_name(name: &str) -> Option<PackageType> {
         // Other types we may eventually want to support: apk
