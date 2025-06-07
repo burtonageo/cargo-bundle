@@ -26,14 +26,22 @@ mod bundle;
 
 use crate::bundle::{bundle_project, BuildArtifact, PackageType, Settings};
 use anyhow::Result;
+use clap::builder::{PossibleValuesParser, TypedValueParser};
 use std::env;
 use std::ffi::OsString;
 use std::process;
 
 #[macro_export]
+macro_rules! version_0 {
+    () => {
+        concat!("v", env!("CARGO_PKG_VERSION"))
+    };
+}
+
+#[macro_export]
 macro_rules! version_info {
     () => {
-        concat!(env!("CARGO_PKG_NAME"), " v", env!("CARGO_PKG_VERSION"))
+        concat!(env!("CARGO_PKG_NAME"), " ", $crate::version_0!())
     };
 }
 
@@ -47,7 +55,7 @@ const fn about_info() -> &'static str {
 }
 
 #[derive(clap::Parser, Clone)]
-#[command(version, author, bin_name = "cargo bundle", about = about_info())]
+#[command(version = version_0!(), author, bin_name = "cargo bundle", about = about_info())]
 pub struct Cli {
     /// Bundle the specified binary
     #[arg(short, long, value_name = "NAME")]
@@ -58,7 +66,7 @@ pub struct Cli {
     pub example: Option<String>,
 
     /// Which bundle format to produce
-    #[arg(short, long, value_name = "FORMAT", value_parser = clap::builder::PossibleValuesParser::new(crate::bundle::PackageType::all()))]
+    #[arg(short, long, value_name = "FORMAT", value_parser = PossibleValuesParser::new(PackageType::all()).map(|s| PackageType::try_from(s).unwrap()))]
     pub format: Option<PackageType>,
 
     /// Build a bundle from a target built in release mode

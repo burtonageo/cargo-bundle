@@ -38,12 +38,12 @@ fn symlink_dir(src: &Path, dst: &Path) -> io::Result<()> {
 }
 
 #[cfg(unix)]
-fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
+pub fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(src, dst)
 }
 
 #[cfg(windows)]
-fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
+pub fn symlink_file(src: &Path, dst: &Path) -> io::Result<()> {
     std::os::windows::fs::symlink_file(src, dst)
 }
 
