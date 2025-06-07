@@ -46,6 +46,13 @@ impl TryFrom<&str> for PackageType {
     }
 }
 
+impl TryFrom<String> for PackageType {
+    type Error = anyhow::Error;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        PackageType::try_from(s.as_str())
+    }
+}
+
 impl PackageType {
     pub fn from_short_name(name: &str) -> Option<PackageType> {
         // Other types we may eventually want to support: apk
@@ -72,18 +79,9 @@ impl PackageType {
     }
 
     pub const fn all() -> &'static [&'static str] {
-        &["deb", "ios", "msi", "osx", "rpm"]
+        &["deb", "ios", "msi", "osx", "rpm", "appimage"]
     }
 }
-
-const ALL_PACKAGE_TYPES: &[PackageType] = &[
-    PackageType::Deb,
-    PackageType::IosBundle,
-    PackageType::WindowsMsi,
-    PackageType::OsxBundle,
-    PackageType::Rpm,
-    PackageType::AppImage,
-];
 
 #[derive(Clone, Debug)]
 pub enum BuildArtifact {
@@ -345,7 +343,7 @@ impl Settings {
             match target_os {
                 "macos" => Ok(vec![PackageType::OsxBundle]),
                 "ios" => Ok(vec![PackageType::IosBundle]),
-                "linux" => Ok(vec![PackageType::Deb]), // TODO: Do Rpm too, once it's implemented.
+                "linux" => Ok(vec![PackageType::Deb, PackageType::AppImage]), // TODO: Do Rpm too, once it's implemented.
                 "windows" => Ok(vec![PackageType::WindowsMsi]),
                 os => anyhow::bail!("Native {} bundles not yet supported.", os),
             }

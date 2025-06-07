@@ -34,8 +34,11 @@ icns = "0.3"
 image = { version = "0.25", features = ["png"] }
 libflate = "2"
 md5 = "0.7"
-msi = "0.6"
-reqwest = { version = "0.12.4", features = ["blocking", "native-tls"], default-features = false }
+msi = "0.8"
+reqwest = { version = "0.12", features = [
+    "blocking",
+    "native-tls",
+], default-features = false }
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1"
