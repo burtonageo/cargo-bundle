@@ -72,18 +72,9 @@ impl PackageType {
     }
 
     pub const fn all() -> &'static [&'static str] {
-        &["deb", "ios", "msi", "osx", "rpm"]
+        &["deb", "ios", "msi", "osx", "rpm", "appimage"]
     }
 }
-
-const ALL_PACKAGE_TYPES: &[PackageType] = &[
-    PackageType::Deb,
-    PackageType::IosBundle,
-    PackageType::WindowsMsi,
-    PackageType::OsxBundle,
-    PackageType::Rpm,
-    PackageType::AppImage,
-];
 
 #[derive(Clone, Debug)]
 pub enum BuildArtifact {
@@ -345,7 +336,7 @@ impl Settings {
             match target_os {
                 "macos" => Ok(vec![PackageType::OsxBundle]),
                 "ios" => Ok(vec![PackageType::IosBundle]),
-                "linux" => Ok(vec![PackageType::Deb]), // TODO: Do Rpm too, once it's implemented.
+                "linux" => Ok(vec![PackageType::Deb, PackageType::AppImage]), // TODO: Do Rpm too, once it's implemented.
                 "windows" => Ok(vec![PackageType::WindowsMsi]),
                 os => anyhow::bail!("Native {} bundles not yet supported.", os),
             }
