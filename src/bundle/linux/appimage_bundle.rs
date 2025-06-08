@@ -1,8 +1,9 @@
 use anyhow::Context;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::{
     fs::File,
     io::{BufReader, BufWriter, Write},
-    os::unix::fs::PermissionsExt,
     path::PathBuf,
     process::Command,
 };
@@ -59,7 +60,9 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     out.write_all(&runtime)?;
     std::io::copy(&mut squashfs, &mut out)?;
 
+    #[allow(unused_mut)]
     let mut perms = std::fs::metadata(&package_path)?.permissions();
+    #[cfg(unix)]
     perms.set_mode(0o755);
     std::fs::set_permissions(&package_path, perms)?;
 
