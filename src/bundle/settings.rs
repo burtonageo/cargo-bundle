@@ -16,6 +16,7 @@ pub enum PackageType {
     WindowsMsi,
     Deb,
     Rpm,
+    AppImage,
 }
 
 impl std::str::FromStr for PackageType {
@@ -45,6 +46,13 @@ impl TryFrom<&str> for PackageType {
     }
 }
 
+impl TryFrom<String> for PackageType {
+    type Error = anyhow::Error;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        PackageType::try_from(s.as_str())
+    }
+}
+
 impl PackageType {
     pub fn from_short_name(name: &str) -> Option<PackageType> {
         // Other types we may eventually want to support: apk
@@ -54,6 +62,7 @@ impl PackageType {
             "msi" => Some(PackageType::WindowsMsi),
             "osx" => Some(PackageType::OsxBundle),
             "rpm" => Some(PackageType::Rpm),
+            "appimage" => Some(PackageType::AppImage),
             _ => None,
         }
     }
@@ -65,11 +74,12 @@ impl PackageType {
             PackageType::WindowsMsi => "msi",
             PackageType::OsxBundle => "osx",
             PackageType::Rpm => "rpm",
+            PackageType::AppImage => "appimage",
         }
     }
 
     pub const fn all() -> &'static [&'static str] {
-        &["deb", "ios", "msi", "osx", "rpm"]
+        &["deb", "ios", "msi", "osx", "rpm", "appimage"]
     }
 }
 
@@ -333,7 +343,7 @@ impl Settings {
             match target_os {
                 "macos" => Ok(vec![PackageType::OsxBundle]),
                 "ios" => Ok(vec![PackageType::IosBundle]),
-                "linux" => Ok(vec![PackageType::Deb]), // TODO: Do Rpm too, once it's implemented.
+                "linux" => Ok(vec![PackageType::Deb, PackageType::AppImage]), // TODO: Do Rpm too, once it's implemented.
                 "windows" => Ok(vec![PackageType::WindowsMsi]),
                 os => anyhow::bail!("Native {} bundles not yet supported.", os),
             }
