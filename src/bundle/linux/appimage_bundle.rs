@@ -31,13 +31,14 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let package_path = base_dir.join(&package_name);
 
     let app_dir = package_dir.join("AppDir");
-    let binary_dest = app_dir.join("usr/bin").join(settings.binary_name());
-    common::copy_file(settings.binary_path(), &binary_dest)?;
+    let binary_dest_rel = PathBuf::from("usr/bin").join(settings.binary_name());
+    let binary_dest_abs = app_dir.join(binary_dest_rel.clone());
+    common::copy_file(settings.binary_path(), &binary_dest_abs)?;
     generate_icon_files(settings, &app_dir)?;
     generate_desktop_file(settings, &app_dir)?;
 
     // TODO Symlinks (AppRun, .DirIcon, .desktop)
-    common::symlink_file(&binary_dest, &app_dir.join("AppRun"))?;
+    common::symlink_file(&binary_dest_rel, &app_dir.join("AppRun"))?;
 
     // Download the AppImage runtime
     let runtime = fetch_runtime(settings.binary_arch())?;
