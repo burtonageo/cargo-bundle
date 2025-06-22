@@ -261,7 +261,7 @@ mod tests {
             writeln!(file, "Hello, world!").unwrap();
         }
         symlink_file(
-            &PathBuf::from("sub/file.txt"),
+            &tmp.path().join("orig/sub/file.txt"),
             &tmp.path().join("orig/link"),
         )
         .unwrap();
@@ -286,7 +286,7 @@ mod tests {
         assert!(tmp.path().join("parent/copy/link").exists());
         assert_eq!(
             std::fs::read_link(tmp.path().join("parent/copy/link")).unwrap(),
-            PathBuf::from("sub/file.txt")
+            tmp.path().join("orig/sub/file.txt")
         );
         assert_eq!(
             std::fs::read(tmp.path().join("parent/copy/link"))
