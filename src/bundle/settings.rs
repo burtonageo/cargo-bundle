@@ -90,7 +90,7 @@ pub enum BuildArtifact {
     Example(String),
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, serde::Deserialize)]
 struct BundleSettings {
     // General settings:
     name: Option<String>,

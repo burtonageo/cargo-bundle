@@ -1,27 +1,3 @@
-extern crate ar;
-extern crate cab;
-extern crate chrono;
-extern crate dirs;
-extern crate glob;
-extern crate icns;
-extern crate image;
-extern crate libflate;
-extern crate md5;
-extern crate msi;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate strsim;
-extern crate tar;
-extern crate target_build_utils;
-extern crate term;
-extern crate toml;
-extern crate uuid;
-extern crate walkdir;
-
-#[cfg(test)]
-extern crate tempfile;
-
 mod bundle;
 
 use crate::bundle::{bundle_project, BuildArtifact, PackageType, Settings};
@@ -34,28 +10,28 @@ use std::process;
 #[macro_export]
 macro_rules! version_0 {
     () => {
-        concat!("v", env!("CARGO_PKG_VERSION"))
+        concat!("v", clap::crate_version!())
     };
 }
 
 #[macro_export]
 macro_rules! version_info {
     () => {
-        concat!(env!("CARGO_PKG_NAME"), " ", $crate::version_0!())
+        concat!(clap::crate_name!(), " ", $crate::version_0!())
     };
 }
 
-const fn about_info() -> &'static str {
-    concat!(
+fn about_info() -> String {
+    format!(
+        "{}\n{}\n{}",
         version_info!(),
-        "\n",
-        env!("CARGO_PKG_AUTHORS"),
-        "\nBundle Rust executables into OS bundles",
+        clap::crate_authors!(", "),
+        "Bundle Rust executables into OS bundles",
     )
 }
 
 #[derive(clap::Parser, Clone)]
-#[command(version = version_0!(), author, bin_name = "cargo bundle", about = about_info())]
+#[command(version = version_0!(), author = clap::crate_authors!(", "), bin_name = "cargo bundle", about = about_info())]
 pub struct Cli {
     /// Bundle the specified binary
     #[arg(short, long, value_name = "NAME")]
