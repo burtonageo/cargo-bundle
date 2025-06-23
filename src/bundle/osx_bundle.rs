@@ -9,6 +9,7 @@
 //         Resources      # Data files such as images, sounds, translations and nib files
 //             en.lproj        # Folder containing english translation strings/data
 //         Frameworks     # A directory containing private frameworks (shared libraries)
+//         PlugIns        # A directory containing Plugins
 //         ...            # Any other optional files the developer wants to place here
 //
 // See https://developer.apple.com/go/?id=bundle-structure for a full
@@ -55,6 +56,9 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
 
     copy_frameworks_to_bundle(&bundle_directory, settings)
         .with_context(|| "Failed to bundle frameworks")?;
+
+    copy_plugins_to_bundle(&bundle_directory, settings)
+        .with_context(|| "Failed to bundle plugins")?;
 
     for src in settings.resource_files() {
         let src = src?;
@@ -270,6 +274,22 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
             continue;
         }
         anyhow::bail!("Could not locate {}.framework", framework);
+    }
+    Ok(())
+}
+
+fn copy_plugins_to_bundle(bundle_directory: &Path, settings: &Settings) -> crate::Result<()> {
+    let plugins = settings.osx_plugins();
+    if plugins.is_empty() {
+        return Ok(());
+    }
+    let dest_dir = bundle_directory.join("PlugIns");
+    fs::create_dir_all(bundle_directory)
+        .with_context(|| format!("Failed to create PlugIns directory at {dest_dir:?}"))?;
+    for plugin in plugins.iter() {
+        let src_path = PathBuf::from(plugin);
+        let src_name = src_path.file_name().unwrap();
+        common::copy_dir(&src_path, &dest_dir.join(src_name))?;
     }
     Ok(())
 }
