@@ -54,7 +54,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     create_info_plist(&bundle_directory, bundle_icon_file, settings)
         .with_context(|| "Failed to create Info.plist")?;
 
-    copy_frameworks_to_bundle(&bundle_directory, settings)
+    let copied = copy_frameworks_to_bundle(&bundle_directory, settings)
         .with_context(|| "Failed to bundle frameworks")?;
 
     copy_plugins_to_bundle(&bundle_directory, settings)
@@ -70,7 +70,94 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     copy_binary_to_bundle(&bundle_directory, settings)
         .with_context(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
 
+    if copied > 0 {
+        add_rpath(&bundle_directory, settings)?;
+    }
+
     Ok(vec![app_bundle_path])
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Default)]
+struct DylibInfo {
+    dylibs: Vec<PathBuf>,
+    rpaths: Vec<PathBuf>,
+}
+
+impl DylibInfo {
+    fn inspect(dylib_path: &Path) -> crate::Result<Self> {
+        use std::process::Command;
+        let out = Command::new("otool").arg("-l").arg(dylib_path).output()?;
+
+        if !out.status.success() {
+            anyhow::bail!("otool command failed with status: {}", out.status);
+        }
+
+        let mut dylibs = Vec::new();
+        let mut rpaths = Vec::new();
+        enum NextAction {
+            Unknown,
+            FindDylib,
+            FindRpath,
+        }
+
+        let mut next_action = NextAction::Unknown;
+
+        let lines = String::from_utf8_lossy(&out.stdout);
+        for line in lines.lines() {
+            if let Some((w0, w1)) = line.trim_start().split_once(" ") {
+                match next_action {
+                    NextAction::Unknown => {
+                        if w0 == "cmd" {
+                            if w1 == "LC_LOAD_DYLIB" {
+                                next_action = NextAction::FindDylib;
+                            } else if w1 == "LC_RPATH" {
+                                next_action = NextAction::FindRpath;
+                            }
+                        }
+                    }
+                    NextAction::FindDylib => {
+                        if w0 == "name" {
+                            dylibs.push(Self::extract_path_from_line(w1, "name", "LC_LOAD_DYLIB")?);
+                            next_action = NextAction::Unknown;
+                        } else if w0 == "Load" {
+                            next_action = NextAction::Unknown; //just to avoid unexpected output
+                        }
+                    }
+                    NextAction::FindRpath => {
+                        if w0 == "path" {
+                            rpaths.push(Self::extract_path_from_line(w1, "path", "LC_RPATH")?);
+                            next_action = NextAction::Unknown;
+                        } else if w0 == "Load" {
+                            next_action = NextAction::Unknown; //just to avoid unexpected output
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Self { dylibs, rpaths })
+    }
+
+    fn extract_path_from_line(
+        line: &str,
+        field_name: &str,
+        context: &str,
+    ) -> crate::Result<PathBuf> {
+        if let Some(trail) = line.find('(') {
+            if trail > 0 {
+                let name = &line[..trail];
+                Ok(PathBuf::from(name.trim_end()))
+            } else {
+                anyhow::bail!("unexpected otool output - empty {field_name} field");
+            }
+        } else {
+            anyhow::bail!("unexpected otool output - expect {field_name} field after {context}");
+        }
+    }
+
+    fn has_rpath<T: AsRef<Path>>(&self, path: T) -> bool {
+        self.rpaths.iter().any(|s| s.as_path() == path.as_ref())
+    }
 }
 
 fn copy_binary_to_bundle(bundle_directory: &Path, settings: &Settings) -> crate::Result<()> {
@@ -90,6 +177,31 @@ impl<T: AsRef<str>> PlistEntryFormatter for T {
         input.replace("&", "&amp;")
         // add other necessary modifications here...
     }
+}
+
+const FRAMEWORKS_RPATH: &str = "@executable_path/../Frameworks";
+
+fn add_rpath(bundle_directory: &Path, settings: &Settings) -> crate::Result<()> {
+    let bin = bundle_directory.join("MacOS").join(settings.binary_name());
+
+    let dyinfo = DylibInfo::inspect(&bin)?;
+
+    if dyinfo.has_rpath(FRAMEWORKS_RPATH) {
+        //rpath already in dylib
+        return Ok(());
+    }
+
+    if !std::process::Command::new("install_name_tool")
+        .arg("-add_rpath")
+        .arg(FRAMEWORKS_RPATH)
+        .arg(bin)
+        .status()?
+        .success()
+    {
+        anyhow::bail!("failed to execute install_name_tool");
+    }
+
+    Ok(())
 }
 
 fn create_info_plist(
@@ -234,11 +346,12 @@ fn copy_framework_from(dest_dir: &Path, framework: &str, src_dir: &Path) -> crat
     }
 }
 
-fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> crate::Result<()> {
+fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> crate::Result<i32> {
     let frameworks = settings.osx_frameworks();
     if frameworks.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
+    let mut copied = 0;
     let dest_dir = bundle_directory.join("Frameworks");
     fs::create_dir_all(bundle_directory)
         .with_context(|| format!("Failed to create Frameworks directory at {dest_dir:?}"))?;
@@ -247,6 +360,13 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
             let src_path = PathBuf::from(framework);
             let src_name = src_path.file_name().unwrap();
             common::copy_dir(&src_path, &dest_dir.join(src_name))?;
+            copied += 1;
+            continue;
+        } else if framework.ends_with(".dylib") {
+            let src_path = PathBuf::from(framework);
+            let src_name = src_path.file_name().unwrap();
+            common::copy_file(&src_path, &dest_dir.join(src_name))?;
+            copied += 1;
             continue;
         } else if framework.contains('/') {
             anyhow::bail!(
@@ -256,6 +376,7 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
         }
         if let Some(home_dir) = dirs::home_dir() {
             if copy_framework_from(&dest_dir, framework, &home_dir.join("Library/Frameworks/"))? {
+                copied += 1;
                 continue;
             }
         }
@@ -271,11 +392,12 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
                 &PathBuf::from("/System/Library/Frameworks/"),
             )?
         {
+            copied += 1;
             continue;
         }
         anyhow::bail!("Could not locate {}.framework", framework);
     }
-    Ok(())
+    Ok(copied)
 }
 
 fn copy_plugins_to_bundle(bundle_directory: &Path, settings: &Settings) -> crate::Result<()> {
