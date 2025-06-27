@@ -33,7 +33,7 @@ glob = "0.3"
 icns = "0.3"
 image = { version = "0.25", features = ["png"] }
 libflate = "2"
-md5 = "0.7"
+md5 = "0.8"
 msi = "0.8"
 reqwest = { version = "0.12", features = [
     "blocking",

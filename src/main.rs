@@ -68,6 +68,10 @@ pub struct Cli {
     /// Build a bundle without the default crate features.
     #[arg(long)]
     pub no_default_features: bool,
+
+    /// Select the root package for parsing `Cargo.toml`, according to the workspace's `cargo metadata`.
+    #[arg(long)]
+    pub select_workspace_root: bool,
 }
 
 /// Runs `cargo build` to make sure the binary file is up-to-date.

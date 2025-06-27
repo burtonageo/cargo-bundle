@@ -220,7 +220,7 @@ pub fn generate_md5sum(file_path: &Path) -> crate::Result<Digest> {
     let mut file = File::open(file_path)?;
     let mut hash = md5::Context::new();
     io::copy(&mut file, &mut hash)?;
-    Ok(hash.compute())
+    Ok(hash.finalize())
 }
 
 #[cfg(test)]
