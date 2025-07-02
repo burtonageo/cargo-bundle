@@ -1,6 +1,6 @@
 use super::category::AppCategory;
 use super::common::print_warning;
-use cargo_metadata::{Metadata, MetadataCommand, TargetKind};
+use cargo_metadata::{Metadata, MetadataCommand, Package, TargetKind};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -169,10 +169,18 @@ impl Settings {
             None
         };
         let features = cli.features.as_ref().map(|features| features.into());
-
-        // TODO: support multiple packages?
-        let (bundle_settings, package) =
-            Settings::find_bundle_package(load_metadata(&current_dir)?)?;
+        let cargo_settings = load_metadata(&current_dir)?;
+        let package = if cli.select_workspace_root {
+            if let Some(root_package) = cargo_settings.root_package() {
+                root_package
+            } else {
+                anyhow::bail!("No root package found by `cargo metadata`");
+            }
+        } else {
+            // TODO: support multiple packages?
+            Settings::find_bundle_package(&cargo_settings)?
+        };
+        let bundle_settings = Settings::bundle_settings_of_package(package)?;
         let workspace_dir = Settings::get_workspace_dir(current_dir);
         let target_dir =
             Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
@@ -204,7 +212,7 @@ impl Settings {
         binary_name += binary_extension;
         let binary_path = target_dir.join(&binary_name);
         Ok(Settings {
-            package,
+            package: package.clone(),
             package_type,
             target,
             features,
@@ -284,22 +292,30 @@ impl Settings {
         current_dir
     }
 
-    fn find_bundle_package(
-        metadata: Metadata,
-    ) -> crate::Result<(BundleSettings, cargo_metadata::Package)> {
+    fn find_bundle_package(metadata: &Metadata) -> crate::Result<&Package> {
         for package_id in metadata.workspace_members.iter() {
             let package = &metadata[package_id];
-            if let Some(bundle) = package.metadata.get("bundle") {
-                let settings = serde_json::from_value::<BundleSettings>(bundle.clone())?;
-                return Ok((settings, package.clone()));
+            if let Some(_bundle) = package.metadata.get("bundle") {
+                return Ok(package);
             }
         }
         print_warning("No package in workspace has [package.metadata.bundle] section")?;
         if let Some(root_package) = metadata.root_package() {
-            Ok((BundleSettings::default(), root_package.clone()))
+            Ok(root_package)
         } else {
             anyhow::bail!("unable to find root package")
         }
+    }
+
+    fn bundle_settings_of_package(package: &Package) -> crate::Result<BundleSettings> {
+        if let Some(bundle) = package.metadata.get("bundle") {
+            return Ok(serde_json::from_value::<BundleSettings>(bundle.clone())?);
+        }
+        print_warning(&format!(
+            "No [package.metadata.bundle] section in package \"{}\"",
+            package.name
+        ))?;
+        Ok(BundleSettings::default())
     }
 
     /// Returns the directory where the bundle should be placed.
