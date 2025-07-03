@@ -44,7 +44,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let runtime = fetch_runtime(settings.binary_arch())?;
 
     // Make the squashfs
-    let squashfs = base_dir.join(format!("{}.squashfs", package_name));
+    let squashfs = base_dir.join(format!("{package_name}.squashfs"));
     let _status = Command::new("mksquashfs")
         .arg(&app_dir)
         .arg(&squashfs)
@@ -72,8 +72,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
 
 fn fetch_runtime(arch: &str) -> crate::Result<Vec<u8>> {
     let url = format!(
-        "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-{}",
-        arch
+        "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-{arch}"
     );
 
     let response = reqwest::blocking::get(url)

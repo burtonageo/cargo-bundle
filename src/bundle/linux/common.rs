@@ -13,7 +13,7 @@ use walkdir::WalkDir;
 /// Generate the application desktop file and store it under the `data_dir`.
 pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
     let bin_name = settings.binary_name();
-    let desktop_file_name = format!("{}.desktop", bin_name);
+    let desktop_file_name = format!("{bin_name}.desktop");
     let desktop_file_path = data_dir
         .join("usr/share/applications")
         .join(desktop_file_name);
@@ -21,7 +21,7 @@ pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Res
     let mime_types = settings
         .linux_mime_types()
         .iter()
-        .fold("".to_owned(), |acc, s| format!("{}{};", acc, s));
+        .fold("".to_owned(), |acc, s| format!("{acc}{s};"));
     // For more information about the format of this file, see
     // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
     writeln!(file, "[Desktop Entry]")?;
@@ -33,11 +33,11 @@ pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Res
         writeln!(file, "Comment={}", settings.short_description())?;
     }
     let exec = match settings.linux_exec_args() {
-        Some(args) => format!("{} {}", bin_name, args),
+        Some(args) => format!("{bin_name} {args}"),
         None => bin_name.to_owned(),
     };
-    writeln!(file, "Exec={}", exec)?;
-    writeln!(file, "Icon={}", bin_name)?;
+    writeln!(file, "Exec={exec}")?;
+    writeln!(file, "Icon={bin_name}")?;
     writeln!(file, "Name={}", settings.bundle_name())?;
     writeln!(
         file,
@@ -45,7 +45,7 @@ pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Res
         settings.linux_use_terminal().unwrap_or(false)
     )?;
     writeln!(file, "Type=Application")?;
-    writeln!(file, "MimeType={}", mime_types)?;
+    writeln!(file, "MimeType={mime_types}")?;
     // The `Version` field is omitted on pupose. See `generate_control_file` for specifying
     // the application version.
     Ok(())
@@ -270,7 +270,7 @@ mod tests {
         let mut md5_str = String::new();
 
         for b in md5_sums.unwrap().iter() {
-            md5_str.push_str(&format!("{:02x}", b));
+            md5_str.push_str(&format!("{b:02x}"));
         }
 
         assert_eq!(md5_str, "098f6bcd4621d373cade4e832627b4f6".to_string());

@@ -549,8 +549,7 @@ fn bundle_settings_from_table(
         Ok(bundle_settings.clone())
     } else {
         print_warning(&format!(
-            "No [package.metadata.bundle.{}.{}] section in Cargo.toml",
-            map_name, bundle_name
+            "No [package.metadata.bundle.{map_name}.{bundle_name}] section in Cargo.toml"
         ))?;
         Ok(BundleSettings::default())
     }

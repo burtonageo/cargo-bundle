@@ -14,15 +14,18 @@ jobs:
     name: Test
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - name: Run tests
-        run: cargo test --color never
+        run: cargo test --all-features --verbose --all-targets
   clippy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - run: cargo clippy --all-targets -- -D warnings
   rustfmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --all -- --check
