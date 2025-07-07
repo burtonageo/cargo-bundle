@@ -164,9 +164,13 @@ fn safe_term_attr<T: term::Terminal + ?Sized>(
 fn print_progress(step: &str, msg: &str) -> crate::Result<()> {
     if let Some(mut output) = term::stderr() {
         safe_term_attr(&mut output, term::Attr::Bold)?;
-        output.fg(term::color::GREEN)?;
+        if output.supports_color() {
+            output.fg(term::color::GREEN)?;
+        }
         write!(output, "    {step}")?;
-        output.reset()?;
+        if output.supports_reset() {
+            output.reset()?;
+        }
         writeln!(output, " {msg}")?;
         output.flush()?;
         Ok(())
@@ -183,7 +187,9 @@ fn print_progress(step: &str, msg: &str) -> crate::Result<()> {
 pub fn print_warning(message: &str) -> crate::Result<()> {
     if let Some(mut output) = term::stderr() {
         safe_term_attr(&mut output, term::Attr::Bold)?;
-        output.fg(term::color::YELLOW)?;
+        if output.supports_color() {
+            output.fg(term::color::YELLOW)?;
+        }
         write!(output, "warning:")?;
         output.reset()?;
         writeln!(output, " {message}")?;
@@ -202,12 +208,18 @@ pub fn print_warning(message: &str) -> crate::Result<()> {
 pub fn print_error(error: &anyhow::Error) -> crate::Result<()> {
     if let Some(mut output) = term::stderr() {
         safe_term_attr(&mut output, term::Attr::Bold)?;
-        output.fg(term::color::RED)?;
+        if output.supports_color() {
+            output.fg(term::color::RED)?;
+        }
         write!(output, "error:")?;
-        output.reset()?;
+        if output.supports_reset() {
+            output.reset()?;
+        }
         safe_term_attr(&mut output, term::Attr::Bold)?;
         writeln!(output, " {error}")?;
-        output.reset()?;
+        if output.supports_reset() {
+            output.reset()?;
+        }
         for cause in error.chain().skip(1) {
             writeln!(output, "  Caused by: {cause}")?;
         }
