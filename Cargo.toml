@@ -1,6 +1,6 @@
 [package]
 name = "cargo-bundle"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["George Burton <burtonageo@gmail.com>"]
 license = "MIT OR Apache-2.0"
 keywords = ["bundle", "cargo"]
@@ -34,7 +34,7 @@ icns = "0.3"
 image = { version = "0.25", features = ["png"] }
 libflate = "2"
 md5 = "0.8"
-msi = "0.8"
+msi = "0.9"
 reqwest = { version = "0.12", features = [
     "blocking",
     "native-tls",
