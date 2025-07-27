@@ -19,12 +19,11 @@
 // generate postinst or prerm files.
 
 use crate::bundle::{
-    common,
+    Settings, common,
     linux::common::{
         create_file_with_data, generate_desktop_file, generate_icon_files, generate_md5sum,
         tar_and_gzip_dir, total_dir_size,
     },
-    Settings,
 };
 use anyhow::Context;
 

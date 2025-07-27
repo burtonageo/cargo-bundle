@@ -1,6 +1,6 @@
 mod bundle;
 
-use crate::bundle::{bundle_project, BuildArtifact, PackageType, Settings};
+use crate::bundle::{BuildArtifact, PackageType, Settings, bundle_project};
 use anyhow::Result;
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use std::env;

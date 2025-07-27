@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 keywords = ["bundle", "cargo"]
 repository = "https://github.com/burtonageo/cargo-bundle"
 description = "Wrap rust executables in OS-specific app bundles"
-edition = "2021"
+edition = "2024"
 
 [package.metadata.bundle.example.hello]
 name = "hello"
@@ -25,7 +25,7 @@ cargo-bundle's support for bundling crate examples.
 anyhow = "1"
 ar = "0.9"
 cab = "0.6"
-cargo_metadata = "0.20"
+cargo_metadata = "0.21"
 chrono = "0.4"
 clap = { version = "4", features = ["derive", "wrap_help", "cargo"] }
 dirs = "6"
@@ -46,7 +46,7 @@ strsim = "0.11"
 tar = "0.4"
 target_build_utils = "0.3"
 term = "1"
-toml = "0.8"
+toml = "0.9"
 uuid = { version = "1", features = ["v5"] }
 walkdir = "2"
 
