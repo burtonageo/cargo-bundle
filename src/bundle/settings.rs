@@ -170,21 +170,12 @@ impl Settings {
         };
         let features = cli.features.as_ref().map(|features| features.into());
         let cargo_settings = load_metadata(&current_dir)?;
-        let package = if cli.select_workspace_root {
-            if let Some(root_package) = cargo_settings.root_package() {
-                root_package
-            } else {
-                anyhow::bail!("No root package found by `cargo metadata`");
-            }
-        } else {
-            // TODO: support multiple packages?
-            Settings::find_bundle_package(&cargo_settings)?
-        };
+        let package = Settings::find_bundle_package(cli.package.as_deref(), &cargo_settings)?;
         let bundle_settings = Settings::bundle_settings_of_package(package)?;
         let workspace_dir = Settings::get_workspace_dir(current_dir);
         let target_dir =
             Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
-        let (bundle_settings, mut binary_name) = match build_artifact {
+        let (bundle_settings, mut binary_name) = match &build_artifact {
             BuildArtifact::Main => {
                 if let Some(target) = package
                     .targets
@@ -196,11 +187,11 @@ impl Settings {
                     anyhow::bail!("No `bin` target is found in package '{}'", package.name)
                 }
             }
-            BuildArtifact::Bin(ref name) => (
+            BuildArtifact::Bin(name) => (
                 bundle_settings_from_table(&bundle_settings.bin, "bin", name)?,
                 name.clone(),
             ),
-            BuildArtifact::Example(ref name) => (
+            BuildArtifact::Example(name) => (
                 bundle_settings_from_table(&bundle_settings.example, "example", name)?,
                 name.clone(),
             ),
@@ -292,19 +283,28 @@ impl Settings {
         current_dir
     }
 
-    fn find_bundle_package(metadata: &Metadata) -> crate::Result<&Package> {
-        for package_id in metadata.workspace_members.iter() {
-            let package = &metadata[package_id];
-            if let Some(_bundle) = package.metadata.get("bundle") {
-                return Ok(package);
+    fn find_bundle_package<'a>(
+        package: Option<&'a str>,
+        metadata: &'a Metadata,
+    ) -> crate::Result<&'a Package> {
+        match package {
+            Some(package) => {
+                if let Some(_package) = metadata
+                    .packages
+                    .iter()
+                    .find(|p| p.name.as_str() == package)
+                {
+                    return Ok(_package);
+                }
+                anyhow::bail!("Package '{package}' not found in workspace");
+            }
+            None => {
+                if let Some(root_package) = metadata.root_package() {
+                    return Ok(root_package);
+                }
             }
         }
-        print_warning("No package in workspace has [package.metadata.bundle] section")?;
-        if let Some(root_package) = metadata.root_package() {
-            Ok(root_package)
-        } else {
-            anyhow::bail!("unable to find root package")
-        }
+        anyhow::bail!("No package specified and no root package found in workspace");
     }
 
     fn bundle_settings_of_package(package: &Package) -> crate::Result<BundleSettings> {
