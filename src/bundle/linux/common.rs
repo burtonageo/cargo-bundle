@@ -1,4 +1,4 @@
-use crate::bundle::{common, Settings};
+use crate::bundle::{Settings, common};
 use image::GenericImageView;
 use libflate::gzip;
 use md5::Digest;

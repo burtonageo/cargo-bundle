@@ -8,7 +8,7 @@ use std::{
     process::Command,
 };
 
-use crate::bundle::{common, Settings};
+use crate::bundle::{Settings, common};
 
 use super::common::{generate_desktop_file, generate_icon_files};
 

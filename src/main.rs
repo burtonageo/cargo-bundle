@@ -1,6 +1,6 @@
 mod bundle;
 
-use crate::bundle::{bundle_project, BuildArtifact, PackageType, Settings};
+use crate::bundle::{BuildArtifact, PackageType, Settings, bundle_project};
 use anyhow::Result;
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use std::env;
@@ -69,9 +69,9 @@ pub struct Cli {
     #[arg(long)]
     pub no_default_features: bool,
 
-    /// Select the root package for parsing `Cargo.toml`, according to the workspace's `cargo metadata`.
-    #[arg(long)]
-    pub select_workspace_root: bool,
+    /// The name of the package to bundle. If not specified, the root package will be used.
+    #[arg(short = 'k', long, value_name = "NAME")]
+    pub package: Option<String>,
 }
 
 /// Runs `cargo build` to make sure the binary file is up-to-date.
