@@ -288,23 +288,15 @@ impl Settings {
         metadata: &'a Metadata,
     ) -> crate::Result<&'a Package> {
         match package {
-            Some(package) => {
-                if let Some(_package) = metadata
-                    .packages
-                    .iter()
-                    .find(|p| p.name.as_str() == package)
-                {
-                    return Ok(_package);
-                }
-                anyhow::bail!("Package '{package}' not found in workspace");
-            }
-            None => {
-                if let Some(root_package) = metadata.root_package() {
-                    return Ok(root_package);
-                }
-            }
+            Some(package) => metadata
+                .packages
+                .iter()
+                .find(|p| p.name.as_str() == package)
+                .ok_or_else(|| anyhow::anyhow!("Package '{package}' not found in workspace")),
+            None => metadata
+                .root_package()
+                .ok_or_else(|| anyhow::anyhow!("No root package found in workspace")),
         }
-        anyhow::bail!("No package specified and no root package found in workspace");
     }
 
     fn bundle_settings_of_package(package: &Package) -> crate::Result<BundleSettings> {
