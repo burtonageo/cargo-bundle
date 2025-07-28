@@ -1,5 +1,6 @@
 # Cargo bundle
 
+[![Crates.io](https://img.shields.io/crates/v/cargo-bundle.svg)](https://crates.io/crates/cargo-bundle)
 [![Build Status](https://github.com/burtonageo/cargo-bundle/workflows/CI/badge.svg?branch=master)](https://github.com/burtonageo/cargo-bundle/actions?query=branch%3Amaster)
 
 Wrap Rust executables in OS-specific app bundles
@@ -26,26 +27,32 @@ cross-compile and bundle an application for another OS, add an appropriate
 `--target` flag, just as you would for `cargo build`.
 
 ## Flags
-    --all-features           Build a bundle with all crate features.
-    --bin <NAME>             Bundle the specified binary
-    --example <NAME>         Bundle the specified example
-    --features <FEATURES>    Set crate features for the bundle. Eg: `--features "f1 f2"`
-    --format <FORMAT>        Which bundle format to produce [possible values: deb, ios, msi, osx, rpm]
-    -h, --help                   Prints help information
-    --no-default-features    Build a bundle without the default crate features.
-    --profile <NAME>         Build a bundle from a target build using the given profile
-    --release                Build a bundle from a target built in release mode
-    --target <TRIPLE>        Build a bundle for the target triple
+  ```plaintext
+  -b, --bin <NAME>           Bundle the specified binary
+  -e, --example <NAME>       Bundle the specified example
+  -f, --format <FORMAT>      Which bundle format to produce [possible values: deb, ios, msi, osx, rpm, appimage]
+  -r, --release              Build a bundle from a target built in release mode
+  -p, --profile <NAME>       Build a bundle from a target build using the given profile
+  -t, --target <TRIPLE>      Build a bundle for the target triple
+      --features <FEATURES>  Set crate features for the bundle. Eg: `--features "f1 f2"`
+      --all-features         Build a bundle with all crate features
+      --no-default-features  Build a bundle without the default crate features
+  -k, --package <SPEC>       The name of the package to bundle. If not specified, the root package will be used
+  -h, --help                 Print help
+  -V, --version              Print version
+  ```
 
 ## Targets
-    aarch64-unknown-linux-gnu	ARM64 Linux (kernel 4.1, glibc 2.17+) 1
-    i686-pc-windows-gnu	        32-bit MinGW (Windows 7+) 2 3
-    i686-pc-windows-msvc	    32-bit MSVC (Windows 7+) 2 3
-    i686-unknown-linux-gnu	    32-bit Linux (kernel 3.2+, glibc 2.17+) 3
-    x86_64-apple-darwin	        64-bit macOS (10.12+, Sierra+)
-    x86_64-pc-windows-gnu	    64-bit MinGW (Windows 7+) 2
-    x86_64-pc-windows-msvc	    64-bit MSVC (Windows 7+) 2
-    x86_64-unknown-linux-gnu	64-bit Linux (kernel 3.2+, glibc 2.17+)
+  ```bash
+  aarch64-unknown-linux-gnu     ARM64 Linux (kernel 4.1, glibc 2.17+) 1
+  i686-pc-windows-gnu	          32-bit MinGW (Windows 7+) 2 3
+  i686-pc-windows-msvc	        32-bit MSVC (Windows 7+) 2 3
+  i686-unknown-linux-gnu	      32-bit Linux (kernel 3.2+, glibc 2.17+) 3
+  x86_64-apple-darwin	          64-bit macOS (10.12+, Sierra+)
+  x86_64-pc-windows-gnu	        64-bit MinGW (Windows 7+) 2
+  x86_64-pc-windows-msvc	      64-bit MSVC (Windows 7+) 2
+  x86_64-unknown-linux-gnu	    64-bit Linux (kernel 3.2+, glibc 2.17+)
+  ```
 
 ## Bundle manifest format
 

@@ -70,7 +70,7 @@ pub struct Cli {
     pub no_default_features: bool,
 
     /// The name of the package to bundle. If not specified, the root package will be used.
-    #[arg(short = 'k', long, value_name = "NAME")]
+    #[arg(short = 'k', long, value_name = "SPEC")]
     pub package: Option<String>,
 }
 
