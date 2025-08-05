@@ -98,6 +98,7 @@ struct BundleSettings {
     icon: Option<Vec<String>>,
     version: Option<String>,
     resources: Option<Vec<String>>,
+    colocate: Option<bool>,
     copyright: Option<String>,
     category: Option<AppCategory>,
     short_description: Option<String>,
@@ -431,6 +432,11 @@ impl Settings {
             Some(ref paths) => ResourcePaths::new(paths.as_slice(), true),
             None => ResourcePaths::new(&[], true),
         }
+    }
+
+    // TODO What does this flag do on non-MacOS OSes?
+    pub fn colocate(&self) -> bool {
+        self.bundle_settings.colocate.unwrap_or(false)
     }
 
     pub fn version_string(&self) -> &dyn Display {
