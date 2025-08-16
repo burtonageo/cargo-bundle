@@ -50,7 +50,7 @@ pub struct Cli {
     pub release: bool,
 
     /// Build a bundle from a target build using the given profile
-    #[arg(short, long, value_name = "NAME", conflicts_with = "release")]
+    #[arg(long, value_name = "NAME", conflicts_with = "release")]
     pub profile: Option<String>,
 
     /// Build a bundle for the target triple
@@ -70,7 +70,7 @@ pub struct Cli {
     pub no_default_features: bool,
 
     /// The name of the package to bundle. If not specified, the root package will be used.
-    #[arg(short = 'k', long, value_name = "SPEC")]
+    #[arg(short, long, value_name = "SPEC")]
     pub package: Option<String>,
 }
 
