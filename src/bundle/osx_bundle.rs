@@ -374,11 +374,11 @@ fn copy_frameworks_to_bundle(bundle_directory: &Path, settings: &Settings) -> cr
                 framework
             );
         }
-        if let Some(home_dir) = dirs::home_dir() {
-            if copy_framework_from(&dest_dir, framework, &home_dir.join("Library/Frameworks/"))? {
-                copied += 1;
-                continue;
-            }
+        if let Some(home_dir) = dirs::home_dir()
+            && copy_framework_from(&dest_dir, framework, &home_dir.join("Library/Frameworks/"))?
+        {
+            copied += 1;
+            continue;
         }
         if copy_framework_from(&dest_dir, framework, &PathBuf::from("/Library/Frameworks/"))?
             || copy_framework_from(
