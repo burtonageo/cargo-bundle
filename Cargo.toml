@@ -25,7 +25,7 @@ cargo-bundle's support for bundling crate examples.
 anyhow = "1"
 ar = "0.9"
 cab = "0.6"
-cargo_metadata = "0.21"
+cargo_metadata = "0.22"
 chrono = "0.4"
 clap = { version = "4", features = ["derive", "wrap_help", "cargo"] }
 dirs = "6"
