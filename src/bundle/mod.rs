@@ -5,6 +5,7 @@ mod linux;
 mod msi_bundle;
 mod osx_bundle;
 mod settings;
+mod wxsmsi_bundle;
 
 pub use self::common::{print_error, print_finished};
 use self::linux::appimage_bundle;
@@ -19,6 +20,7 @@ pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
             PackageType::OsxBundle => osx_bundle::bundle_project(&settings)?,
             PackageType::IosBundle => ios_bundle::bundle_project(&settings)?,
             PackageType::WindowsMsi => msi_bundle::bundle_project(&settings)?,
+            PackageType::WxsMsi => wxsmsi_bundle::bundle_project(&settings)?,
             PackageType::Deb => deb_bundle::bundle_project(&settings)?,
             PackageType::Rpm => rpm_bundle::bundle_project(&settings)?,
             PackageType::AppImage => appimage_bundle::bundle_project(&settings)?,
