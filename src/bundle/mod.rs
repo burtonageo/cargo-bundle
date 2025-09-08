@@ -2,7 +2,7 @@ mod category;
 mod common;
 mod ios_bundle;
 mod linux;
-mod msi_bundle;
+mod msi_bundle2;
 mod osx_bundle;
 mod settings;
 
@@ -18,7 +18,7 @@ pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
         paths.append(&mut match package_type {
             PackageType::OsxBundle => osx_bundle::bundle_project(&settings)?,
             PackageType::IosBundle => ios_bundle::bundle_project(&settings)?,
-            PackageType::WindowsMsi => msi_bundle::bundle_project(&settings)?,
+            PackageType::WindowsMsi => msi_bundle2::bundle_project(&settings)?,
             PackageType::Deb => deb_bundle::bundle_project(&settings)?,
             PackageType::Rpm => rpm_bundle::bundle_project(&settings)?,
             PackageType::AppImage => appimage_bundle::bundle_project(&settings)?,
