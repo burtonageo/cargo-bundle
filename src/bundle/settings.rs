@@ -218,6 +218,10 @@ impl Settings {
         })
     }
 
+    pub fn manifest_path(&self) -> &Path {
+        Path::new(&self.package.manifest_path)
+    }
+
     /*
         The target_dir where binaries will be compiled to by cargo can vary:
             - this directory is a member of a workspace project
@@ -381,8 +385,7 @@ impl Settings {
         &self.build_artifact
     }
 
-    /// Returns true if the bundle is being compiled in release mode, false if
-    /// it's being compiled in debug mode.
+    /// Returns `release`, 'dev` or other profile.
     pub fn build_profile(&self) -> &str {
         &self.profile
     }
@@ -474,6 +477,31 @@ impl Settings {
 
     pub fn long_description(&self) -> Option<&str> {
         self.bundle_settings.long_description.as_deref()
+    }
+
+    pub fn license_content(&self) -> Option<String> {
+        self.package
+            .license_file
+            .as_ref()
+            .and_then(|license_file| {
+                let dir = self
+                    .manifest_path()
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."));
+
+                let license_path = dir.join(license_file);
+                match std::fs::read_to_string(&license_path) {
+                    Ok(content) => Some(content),
+                    Err(err) => {
+                        print_warning(&format!(
+                            "Failed to read license file '{license_path:?}': {err} -- ignoring",
+                        ))
+                        .ok();
+                        None
+                    }
+                }
+            })
+            .or_else(|| self.package.license.as_ref().map(|s| s.to_string()))
     }
 
     pub fn debian_dependencies(&self) -> &[String] {
