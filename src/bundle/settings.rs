@@ -14,6 +14,7 @@ pub enum PackageType {
     OsxBundle,
     IosBundle,
     WindowsMsi,
+    WxsMsi,
     Deb,
     Rpm,
     AppImage,
@@ -60,6 +61,7 @@ impl PackageType {
             "deb" => Some(PackageType::Deb),
             "ios" => Some(PackageType::IosBundle),
             "msi" => Some(PackageType::WindowsMsi),
+            "wxsmsi" => Some(PackageType::WxsMsi),
             "osx" => Some(PackageType::OsxBundle),
             "rpm" => Some(PackageType::Rpm),
             "appimage" => Some(PackageType::AppImage),
@@ -72,6 +74,7 @@ impl PackageType {
             PackageType::Deb => "deb",
             PackageType::IosBundle => "ios",
             PackageType::WindowsMsi => "msi",
+            PackageType::WxsMsi => "wxsmsi",
             PackageType::OsxBundle => "osx",
             PackageType::Rpm => "rpm",
             PackageType::AppImage => "appimage",
@@ -79,7 +82,7 @@ impl PackageType {
     }
 
     pub const fn all() -> &'static [&'static str] {
-        &["deb", "ios", "msi", "osx", "rpm", "appimage"]
+        &["deb", "ios", "msi", "wxsmsi", "osx", "rpm", "appimage"]
     }
 }
 
@@ -216,6 +219,10 @@ impl Settings {
             binary_name,
             bundle_settings,
         })
+    }
+
+    pub fn manifest_path(&self) -> &Path {
+        Path::new(&self.package.manifest_path)
     }
 
     /*
@@ -381,8 +388,7 @@ impl Settings {
         &self.build_artifact
     }
 
-    /// Returns true if the bundle is being compiled in release mode, false if
-    /// it's being compiled in debug mode.
+    /// Returns `release`, 'dev` or other profile.
     pub fn build_profile(&self) -> &str {
         &self.profile
     }
@@ -474,6 +480,31 @@ impl Settings {
 
     pub fn long_description(&self) -> Option<&str> {
         self.bundle_settings.long_description.as_deref()
+    }
+
+    pub fn license_content(&self) -> Option<String> {
+        self.package
+            .license_file
+            .as_ref()
+            .and_then(|license_file| {
+                let dir = self
+                    .manifest_path()
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."));
+
+                let license_path = dir.join(license_file);
+                match std::fs::read_to_string(&license_path) {
+                    Ok(content) => Some(content),
+                    Err(err) => {
+                        print_warning(&format!(
+                            "Failed to read license file '{license_path:?}': {err} -- ignoring",
+                        ))
+                        .ok();
+                        None
+                    }
+                }
+            })
+            .or_else(|| self.package.license.as_ref().map(|s| s.to_string()))
     }
 
     pub fn debian_dependencies(&self) -> &[String] {

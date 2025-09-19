@@ -30,7 +30,7 @@ cross-compile and bundle an application for another OS, add an appropriate
   ```plaintext
   -b, --bin <NAME>           Bundle the specified binary
   -e, --example <NAME>       Bundle the specified example
-  -f, --format <FORMAT>      Which bundle format to produce [possible values: deb, ios, msi, osx, rpm, appimage]
+  -f, --format <FORMAT>      Which bundle format to produce [possible values: deb, ios, msi, wxsmsi, osx, rpm, appimage]
   -r, --release              Build a bundle from a target built in release mode
       --profile <NAME>       Build a bundle from a target build using the given profile
   -t, --target <TRIPLE>      Build a bundle for the target triple
