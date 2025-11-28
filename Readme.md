@@ -139,6 +139,10 @@ These settings are used only when bundling `osx` packages.
   you want) to ensure that the compiled binary has the same minimum version.
 * `osx_url_schemes`: A list of strings indicating the URL schemes that the app
   handles.
+* `osx_info_plist_exts`: A list of path strings that contain extra values for
+  `Info.plist`. It reads each file in that path, and blindly appends its
+  contents into the `Info.plist` file, after cargo-bundle has generated its
+  keys but before it closes the `<dict>` and `<plist>`.
 
 * note: Github Actions and Bitbucket Pipelines both have Apple MacOS build runners/containers available to use for free 
 
