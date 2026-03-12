@@ -10,7 +10,7 @@ const UUID_NAMESPACE: uuid::Uuid = uuid::Uuid::from_bytes([
 ]);
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
-    crate::bundle::common::print_warning("MSI bundle support is still experimental.")?;
+    crate::bundle::common::print_warning("MSI bundle support by wix is still experimental.")?;
 
     let base_dir = settings
         .project_out_directory()
