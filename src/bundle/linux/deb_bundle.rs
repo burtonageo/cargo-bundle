@@ -114,8 +114,13 @@ fn generate_control_file(
         "Installed-Size: {}",
         (total_dir_size(data_dir)?).div_ceil(1024)
     )?;
-    let authors = settings.authors_comma_separated().unwrap_or_default();
-    writeln!(&mut file, "Maintainer: {authors}")?;
+    // Debian packages require a non-empty Maintainer field; if no author is provided
+    // in Cargo.toml, fall back to a generic placeholder.
+    let maintainer = settings
+        .authors_comma_separated()
+        .filter(|a| !a.trim().is_empty())
+        .unwrap_or_else(|| "Unknown <unknown@localhost>".to_string());
+    writeln!(&mut file, "Maintainer: {maintainer}")?;
     if !settings.homepage_url().is_empty() {
         writeln!(&mut file, "Homepage: {}", settings.homepage_url())?;
     }
