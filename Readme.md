@@ -9,9 +9,10 @@ Wrap Rust executables in OS-specific app bundles
 
 `cargo-bundle` is a tool used to generate installers or app bundles for GUI
 executables built with `cargo`.  It can create `.app` bundles for Mac OS X and
-iOS, `.deb` packages for Linux, and `.msi` installers for Windows (note however
-that iOS and Windows support is still experimental).  Support for creating
-`.rpm` packages (for Linux) and `.apk` packages (for Android) is still pending.
+iOS, `.deb` packages and `.AppImage` bundles for Linux, and `.msi` installers
+for Windows (note however that iOS and Windows support is still experimental).
+Support for creating `.rpm` packages (for Linux) and `.apk` packages (for
+Android) is still pending.
 
 To install `cargo bundle`, run `cargo install cargo-bundle`. This will add the most recent version of `cargo-bundle`
 published to [crates.io](https://crates.io/crates/cargo-bundle) as a subcommand to your default `cargo` installation.
@@ -99,7 +100,7 @@ note: `description` is also **required** in the `[package]` section.
 
 ### Linux-specific settings
 
-These settings are used only when bundling Linux compatible packages (currently `deb` only).
+These settings are used when bundling Linux packages (`deb`, `rpm`, `appimage`).
 
 * `linux_mime_types`: A list of strings which represent mime types. If present, these are assigned
   to the `MimeType` field of the .desktop file.
@@ -161,6 +162,26 @@ These settings are used only when bundling Linux compatible packages (currently 
   [package.metadata.bundle.linux_desktop_actions.new-window.NameLocalized]
   fr = "Nouvelle fenêtre"
   ```
+
+### AppImage-specific settings
+
+These settings are used only when bundling `appimage` packages.
+
+* `appimage_runtime_path`: [OPTIONAL] Path to a local type-2 AppImage runtime ELF. When set,
+  `cargo-bundle` will not download a runtime (useful for offline CI or pinning a known-good
+  runtime). The file must be a valid ELF binary.
+* `appimage_runtime_url`: [OPTIONAL] Override URL used to download the type-2 runtime. Defaults
+  to the official continuous release for the target architecture from
+  [AppImage/type2-runtime](https://github.com/AppImage/type2-runtime).
+* `appimage_metainfo_path`: [OPTIONAL] Path to an
+  [AppStream metainfo](https://www.freedesktop.org/software/appstream/docs/) XML file, copied to
+  `usr/share/metainfo/<identifier>.appdata.xml` inside the AppDir. A warning is printed when
+  absent — software centers increasingly expect metainfo.
+* `appimage_compression`: [OPTIONAL] SquashFS codec, `"gzip"` (default, maximally compatible)
+
+**Limitations:** Shared libraries are **not** auto-collected (unlike tools that wrap
+`linuxdeploy` / `appimagetool`). Dynamically linked GUI apps may need matching system libraries
+on the target machine, or you can stage libs under `usr/lib` in the AppDir yourself. 
 
 ### Debian-specific settings
 
