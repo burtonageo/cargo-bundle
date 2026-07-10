@@ -20,9 +20,9 @@
 
 use crate::bundle::{
     Settings, common,
-    linux::common::{
-        create_file_with_data, generate_desktop_file, generate_icon_files, generate_md5sum,
-        tar_and_gzip_dir, total_dir_size,
+    linux::{
+        DesktopFileOptions, create_file_with_data, generate_desktop_file, generate_icon_files,
+        generate_md5sum, tar_and_gzip_dir, total_dir_size,
     },
 };
 use anyhow::Context;
@@ -63,7 +63,8 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     transfer_resource_files(settings, &data_dir)
         .with_context(|| "Failed to copy resource files")?;
     generate_icon_files(settings, &data_dir).with_context(|| "Failed to create icon files")?;
-    generate_desktop_file(settings, &data_dir).with_context(|| "Failed to create desktop file")?;
+    generate_desktop_file(settings, &data_dir, &DesktopFileOptions::default())
+        .with_context(|| "Failed to create desktop file")?;
 
     // Generate control files.
     let control_dir = package_dir.join("control");

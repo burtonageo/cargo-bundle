@@ -14,7 +14,7 @@ use resvg::usvg::{Options, Tree};
 
 use crate::bundle::{Settings, common};
 
-use super::common::{generate_desktop_file, generate_icon_files};
+use super::{DesktopFileOptions, generate_desktop_file, generate_icon_files};
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let package_base_name = format!(
@@ -39,7 +39,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let binary_dest_abs = app_dir.join(binary_dest_rel.clone());
     common::copy_file(settings.binary_path(), &binary_dest_abs)?;
     generate_icon_files(settings, &app_dir)?;
-    generate_desktop_file(settings, &app_dir)?;
+    generate_desktop_file(settings, &app_dir, &DesktopFileOptions::default())?;
 
     common::symlink_file(&binary_dest_rel, &app_dir.join("AppRun"))?;
 
