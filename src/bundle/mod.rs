@@ -13,9 +13,8 @@ mod windows;
 mod wxsmsi_bundle;
 
 pub use self::common::{print_error, print_finished};
-use self::linux::appimage_bundle;
 pub use self::settings::{BuildArtifact, PackageType, Settings};
-use crate::bundle::linux::{deb_bundle, rpm_bundle};
+use crate::bundle::linux::{appimage, deb_bundle, rpm_bundle};
 use std::path::PathBuf;
 
 pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
@@ -30,7 +29,7 @@ pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
             PackageType::WindowsBundle => windows::exe_bundle::bundle_project(&settings)?,
             PackageType::Deb => deb_bundle::bundle_project(&settings)?,
             PackageType::Rpm => rpm_bundle::bundle_project(&settings)?,
-            PackageType::AppImage => appimage_bundle::bundle_project(&settings)?,
+            PackageType::AppImage => appimage::bundle_project(&settings)?,
         });
     }
     Ok(paths)
