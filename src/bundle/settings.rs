@@ -1,5 +1,6 @@
 use super::category::AppCategory;
 use super::common::print_warning;
+use super::localization::{LinuxDesktopLocale, LinuxDesktopLocalizations};
 use cargo_metadata::{Metadata, MetadataCommand, Package, TargetKind};
 use serde_json::Value;
 use std::borrow::Cow;
@@ -98,6 +99,26 @@ pub enum BuildArtifact {
     Example(String),
 }
 
+/// A single FreeDesktop desktop action.
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+pub struct DesktopAction {
+    /// Localizable display name for the action (required by the spec).
+    #[serde(rename = "Name")]
+    pub name: String,
+
+    /// Command to execute; falls back to the app binary when absent.
+    #[serde(rename = "Exec", default)]
+    pub exec: Option<String>,
+
+    /// Icon for this action.
+    #[serde(rename = "Icon", default)]
+    pub icon: Option<String>,
+
+    /// Per-locale names.
+    #[serde(rename = "NameLocalized", default)]
+    pub name_localized: Option<HashMap<String, String>>, // local code to translation
+}
+
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 struct BundleSettings {
     // General settings:
@@ -114,12 +135,22 @@ struct BundleSettings {
     linux_mime_types: Option<Vec<String>>,
     linux_exec_args: Option<String>,
     linux_use_terminal: Option<bool>,
+    /// Locale code → FreeDesktop localizable strings for `.desktop` files.
+    /// Mirrors `osx_localizations` shape: `[linux_localizations.fr] Name = "…"`.
+    /// Wrapped as [`LinuxDesktopLocalizations`] via [`Settings::linux_localizations`].
+    linux_localizations: Option<HashMap<String, LinuxDesktopLocale>>,
+    /// `StartupWMClass` value for the `.desktop` entry (Linux, all formats).
+    linux_startup_wm_class: Option<String>,
+    /// Named desktop actions emitted as `[Desktop Action <id>]` groups.
+    linux_desktop_actions: Option<HashMap<String, DesktopAction>>,
     deb_depends: Option<Vec<String>>,
     osx_frameworks: Option<Vec<String>>,
     osx_plugins: Option<Vec<String>>,
     osx_minimum_system_version: Option<String>,
     osx_url_schemes: Option<Vec<String>>,
     osx_info_plist_exts: Option<Vec<String>>,
+    /// Locale code → InfoPlist key/value strings for macOS `.lproj` files.
+    /// Wrapped as [`OsxLocalizations`] via [`Settings::osx_localizations`].
     osx_localizations: Option<HashMap<String, HashMap<String, String>>>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
@@ -535,6 +566,16 @@ impl Settings {
         self.bundle_settings.linux_exec_args.as_deref()
     }
 
+    /// `StartupWMClass` for the `.desktop` entry.
+    pub fn linux_startup_wm_class(&self) -> Option<&str> {
+        self.bundle_settings.linux_startup_wm_class.as_deref()
+    }
+
+    /// Desktop actions to emit as `[Desktop Action <id>]` groups.
+    pub fn linux_desktop_actions(&self) -> Option<&HashMap<String, DesktopAction>> {
+        self.bundle_settings.linux_desktop_actions.as_ref()
+    }
+
     pub fn osx_frameworks(&self) -> &[String] {
         match self.bundle_settings.osx_frameworks {
             Some(ref frameworks) => frameworks.as_slice(),
@@ -574,6 +615,18 @@ impl Settings {
     /// keys such as `"CFBundleDisplayName"` mapped to their translated value.
     pub fn osx_localizations(&self) -> Option<&HashMap<String, HashMap<String, String>>> {
         self.bundle_settings.osx_localizations.as_ref()
+    }
+
+    /// Linux desktop localizations as a [`LinuxDesktopLocalizations`] wrapper.
+    ///
+    /// Keys are inlined into the `.desktop` file as `Name[locale]=…` etc.
+    /// Unlocalized `Name` / `Comment` still come from
+    /// [`bundle_name`](Self::bundle_name) / [`short_description`](Self::short_description).
+    pub fn linux_localizations(&self) -> Option<LinuxDesktopLocalizations<'_>> {
+        self.bundle_settings
+            .linux_localizations
+            .as_ref()
+            .map(LinuxDesktopLocalizations::new)
     }
 }
 
@@ -664,6 +717,7 @@ impl Iterator for ResourcePaths<'_> {
 #[cfg(test)]
 mod tests {
     use super::{AppCategory, BundleSettings};
+    use crate::bundle::localization::DesktopKeywords;
 
     #[test]
     fn parse_cargo_toml() {
@@ -759,5 +813,47 @@ mod tests {
         let locs = bundle.osx_localizations.unwrap();
         assert_eq!(locs["fr"]["CFBundleDisplayName"], "Mon Application");
         assert_eq!(locs["de"]["CFBundleDisplayName"], "Meine Anwendung");
+    }
+
+    #[test]
+    fn linux_localizations_parses_from_toml() {
+        let toml_str = r#"
+            [linux_localizations.fr]
+            Name = "Mon App"
+            Comment = "Une description"
+            GenericName = "Utilitaire"
+            Keywords = ["outil", "utilitaire"]
+
+            [linux_localizations.de]
+            Name = "Meine App"
+            Comment = "Eine Beschreibung"
+            Keywords = "werkzeug;dienstprogramm"
+
+            [linux_localizations.pt_BR]
+            Name = "Meu App"
+            Comment = "Uma descrição"
+        "#;
+        let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
+        let locs = bundle.linux_localizations.unwrap();
+
+        assert_eq!(locs["fr"].name.as_deref(), Some("Mon App"));
+        assert_eq!(locs["fr"].comment.as_deref(), Some("Une description"));
+        assert_eq!(locs["fr"].generic_name.as_deref(), Some("Utilitaire"));
+        match locs["fr"].keywords.as_ref().unwrap() {
+            DesktopKeywords::List(items) => {
+                assert_eq!(items, &["outil".to_string(), "utilitaire".to_string()]);
+            }
+            DesktopKeywords::String(_) => panic!("expected Keywords list for fr"),
+        }
+
+        assert_eq!(locs["de"].name.as_deref(), Some("Meine App"));
+        match locs["de"].keywords.as_ref().unwrap() {
+            DesktopKeywords::String(s) => assert_eq!(s, "werkzeug;dienstprogramm"),
+            DesktopKeywords::List(_) => panic!("expected Keywords string for de"),
+        }
+
+        assert_eq!(locs["pt_BR"].name.as_deref(), Some("Meu App"));
+        assert!(locs["pt_BR"].generic_name.is_none());
+        assert!(locs["pt_BR"].keywords.is_none());
     }
 }
