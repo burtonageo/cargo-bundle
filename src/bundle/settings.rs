@@ -1,6 +1,6 @@
 use super::category::AppCategory;
 use super::common::print_warning;
-use super::localization::{LinuxDesktopLocale, LinuxDesktopLocalizations};
+use super::localization::{LinuxDesktopLocale, LinuxDesktopLocalizations, OsxLocalizations};
 use cargo_metadata::{Metadata, MetadataCommand, Package, TargetKind};
 use serde_json::Value;
 use std::borrow::Cow;
@@ -609,12 +609,14 @@ impl Settings {
         }
     }
 
-    /// Returns a map of locale codes to key-value localisation strings for
-    /// macOS `*.lproj/InfoPlist.strings` files.  The outer key is a locale
-    /// code such as `"fr"` or `"de"` and the inner map contains plist string
-    /// keys such as `"CFBundleDisplayName"` mapped to their translated value.
-    pub fn osx_localizations(&self) -> Option<&HashMap<String, HashMap<String, String>>> {
-        self.bundle_settings.osx_localizations.as_ref()
+    /// macOS localizations as an [`OsxLocalizations`] wrapper.
+    ///
+    /// Writes `*.lproj/InfoPlist.strings` under the Resources directory.
+    pub fn osx_localizations(&self) -> Option<OsxLocalizations<'_>> {
+        self.bundle_settings
+            .osx_localizations
+            .as_ref()
+            .map(OsxLocalizations::new)
     }
 
     /// Linux desktop localizations as a [`LinuxDesktopLocalizations`] wrapper.

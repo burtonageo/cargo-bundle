@@ -75,8 +75,11 @@ pub fn bundle_project_at(settings: &Settings, output_dir: &Path) -> crate::Resul
     copy_binary_to_bundle(&bundle_directory, settings)
         .with_context(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
 
-    write_localizations(&resources_dir, settings)
-        .with_context(|| "Failed to write localisation files")?;
+    if let Some(localizations) = settings.osx_localizations() {
+        localizations
+            .write_to_directory(&resources_dir)
+            .with_context(|| "Failed to write localisation files")?;
+    }
 
     if copied > 0 {
         add_rpath(&bundle_directory, settings)?;
@@ -541,31 +544,6 @@ fn create_icns_from_svg(
     family
         .write(icns_file)
         .with_context(|| format!("Failed to write ICNS file to {dest_path:?}"))?;
-
-    Ok(())
-}
-
-/// Writes `*.lproj/InfoPlist.strings` localisation files into `resources_dir`
-/// for every locale present in the settings' `osx_localizations` map.
-fn write_localizations(resources_dir: &Path, settings: &Settings) -> crate::Result<()> {
-    let Some(localizations) = settings.osx_localizations() else {
-        return Ok(());
-    };
-
-    for (locale, strings) in localizations {
-        let lproj_dir = resources_dir.join(locale).with_extension("lproj");
-        fs::create_dir_all(&lproj_dir)
-            .with_context(|| format!("Failed to create {lproj_dir:?}"))?;
-
-        let strings_path = lproj_dir.join("InfoPlist.strings");
-        let file = &mut common::create_file(&strings_path)?;
-        for (key, value) in strings {
-            // Escape embedded double-quotes in the value.
-            let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
-            writeln!(file, "{key} = \"{escaped}\";")?;
-        }
-        file.flush()?;
-    }
 
     Ok(())
 }
