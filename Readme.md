@@ -115,7 +115,7 @@ These settings are used only when bundling Linux compatible packages (currently 
   keys. Supported keys:
 
   * `Name` -- translated application name (`Name[fr]=…`)
-  * `GenericName` -- generic type name, e.g. “Web Browser”
+  * `GenericName` -- generic type name, e.g. "Web Browser"
   * `Comment` -- short description / tooltip
   * `Keywords` -- search keywords; either a semicolon-separated string
     (`"outil;utilitaire"`) or a TOML list (`["outil", "utilitaire"]`), both
