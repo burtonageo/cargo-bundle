@@ -130,7 +130,9 @@ struct BundleSettings {
 pub struct Settings {
     package: cargo_metadata::Package,
     package_type: Option<PackageType>, // If `None`, use the default package type for this os
-    target: Option<(String, TargetInfo)>,
+    /// Explicit target triples; empty means "build for the host". More than
+    /// one produces a universal binary combined with `lipo` (macOS only).
+    targets: Vec<(String, TargetInfo)>,
     features: Option<String>,
     project_out_directory: PathBuf,
     build_artifact: BuildArtifact,
@@ -138,6 +140,9 @@ pub struct Settings {
     all_features: bool,
     no_default_features: bool,
     binary_path: PathBuf,
+    /// Per-target binaries that `lipo` combines into `binary_path` when more
+    /// than one target triple was requested; empty otherwise.
+    universal_input_binary_paths: Vec<PathBuf>,
     binary_name: String,
     bundle_settings: BundleSettings,
 }
@@ -172,18 +177,25 @@ impl Settings {
         };
         let all_features = cli.all_features;
         let no_default_features = cli.no_default_features;
-        let target = if let Some(triple) = cli.target.as_ref() {
-            Some((triple.to_string(), TargetInfo::from_str(triple)?))
-        } else {
-            None
-        };
+        let targets = cli
+            .target
+            .iter()
+            .map(|triple| Ok((triple.to_string(), TargetInfo::from_str(triple)?)))
+            .collect::<crate::Result<Vec<_>>>()?;
         let features = cli.features.as_ref().map(|features| features.into());
         let cargo_settings = load_metadata(&current_dir)?;
         let package = Settings::find_bundle_package(cli.package.as_deref(), &cargo_settings)?;
         let bundle_settings = Settings::bundle_settings_of_package(package)?;
         let workspace_dir = Settings::get_workspace_dir(current_dir);
+        // With multiple targets the per-target binaries are combined into a
+        // universal binary living under its own `universal` directory.
+        let target_dir_name = match targets.as_slice() {
+            [] => None,
+            [(triple, _)] => Some(triple.as_str()),
+            _ => Some("universal"),
+        };
         let target_dir =
-            Settings::get_target_dir(&workspace_dir, &target, &profile, &build_artifact);
+            Settings::get_target_dir(&workspace_dir, target_dir_name, &profile, &build_artifact);
         let (bundle_settings, mut binary_name) = match &build_artifact {
             BuildArtifact::Main => {
                 if let Some(target) = package
@@ -211,10 +223,26 @@ impl Settings {
         };
         binary_name += binary_extension;
         let binary_path = target_dir.join(&binary_name);
+        let universal_input_binary_paths = if targets.len() > 1 {
+            targets
+                .iter()
+                .map(|(triple, _)| {
+                    Settings::get_target_dir(
+                        &workspace_dir,
+                        Some(triple),
+                        &profile,
+                        &build_artifact,
+                    )
+                    .join(&binary_name)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         Ok(Settings {
             package: package.clone(),
             package_type,
-            target,
+            targets,
             features,
             build_artifact,
             profile,
@@ -222,6 +250,7 @@ impl Settings {
             no_default_features,
             project_out_directory: target_dir,
             binary_path,
+            universal_input_binary_paths,
             binary_name,
             bundle_settings,
         })
@@ -243,7 +272,7 @@ impl Settings {
     */
     fn get_target_dir(
         project_root_dir: &Path,
-        target: &Option<(String, TargetInfo)>,
+        target_dir_name: Option<&str>,
         profile: &str,
         build_artifact: &BuildArtifact,
     ) -> PathBuf {
@@ -260,8 +289,8 @@ impl Settings {
 
         let mut path = target_dir.unwrap_or(project_root_dir.join("target"));
 
-        if let &Some((ref triple, _)) = target {
-            path.push(triple);
+        if let Some(name) = target_dir_name {
+            path.push(name);
         }
         path.push(if profile == "dev" { "debug" } else { profile });
         if let &BuildArtifact::Example(_) = build_artifact {
@@ -331,7 +360,7 @@ impl Settings {
     /// Returns the architecture for the binary being bundled (e.g. "arm" or
     /// "x86" or "x86_64").
     pub fn binary_arch(&self) -> &str {
-        if let Some((_, ref info)) = self.target {
+        if let Some((_, info)) = self.targets.first() {
             info.target_arch()
         } else {
             std::env::consts::ARCH
@@ -357,7 +386,7 @@ impl Settings {
         if let Some(package_type) = self.package_type {
             Ok(vec![package_type])
         } else {
-            let target_os = if let Some((_, ref info)) = self.target {
+            let target_os = if let Some((_, info)) = self.targets.first() {
                 info.target_os()
             } else {
                 std::env::consts::OS
@@ -372,14 +401,16 @@ impl Settings {
         }
     }
 
-    /// If the bundle is being cross-compiled, returns the target triple string
-    /// (e.g. `"x86_64-apple-darwin"`).  If the bundle is targeting the host
-    /// environment, returns `None`.
-    pub fn target_triple(&self) -> Option<&str> {
-        match self.target {
-            Some((ref triple, _)) => Some(triple.as_str()),
-            None => None,
-        }
+    /// Every target triple requested on the command line; empty when
+    /// building for the host.
+    pub fn target_triples(&self) -> impl Iterator<Item = &str> {
+        self.targets.iter().map(|(triple, _)| triple.as_str())
+    }
+
+    /// The per-target binaries that must be combined with `lipo` into
+    /// `binary_path`; empty unless more than one target was requested.
+    pub fn universal_input_binary_paths(&self) -> &[PathBuf] {
+        &self.universal_input_binary_paths
     }
 
     pub fn features(&self) -> Option<&str> {
