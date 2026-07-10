@@ -95,41 +95,16 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let mount_point = parse_mount_point(&output.stdout)
         .with_context(|| "Could not determine DMG mount point from hdiutil output")?;
 
-    // Copy the app bundle and create the /Applications symlink inside the image.
-    let copy_result = (|| -> crate::Result<()> {
-        common::copy_dir(&app_bundle_path, &mount_point.join(&app_bundle_name))?;
-        #[cfg(unix)]
-        std::os::unix::fs::symlink("/Applications", mount_point.join("Applications"))
-            .with_context(|| "Failed to create /Applications symlink")?;
-        Ok(())
-    })();
+/// Parses standard output from hdiutil attach to locate the /Volumes/ mount path.
+fn parse_mount_point(standard_output: &[u8]) -> crate::Result<PathBuf> {
+    let text_output = from_utf8(standard_output)?;
 
-    // Always unmount, even if copying failed.
-    let _ = Command::new("hdiutil")
-        .args(["detach", mount_point.to_str().unwrap()])
-        .status();
-
-    copy_result?;
-
-    // Convert the writable image to a read-only compressed UDZO image.
-    let status = Command::new("hdiutil")
-        .args([
-            "convert",
-            staging_dmg.to_str().unwrap(),
-            "-ov",
-            "-format",
-            "UDZO",
-            "-imagekey",
-            "zlib-level=9",
-            "-o",
-            dmg_path.to_str().unwrap(),
-        ])
-        .status()
-        .with_context(|| "Failed to run hdiutil convert")?;
-
-    if !status.success() {
-        anyhow::bail!("hdiutil convert failed");
-    }
+    let mount_point = text_output.lines().rev().find_map(|line| {
+        line.split('\t')
+            .last()
+            .map(str::trim)
+            .filter(|path| path.starts_with("/Volumes/"))
+    });
 
     Ok(vec![dmg_path])
 }
