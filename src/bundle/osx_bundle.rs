@@ -93,74 +93,31 @@ struct DylibInfo {
 }
 
 impl DylibInfo {
+    /// Inspect a Mach-O binary's load commands for linked dylibs and rpaths.
     fn inspect(dylib_path: &Path) -> crate::Result<Self> {
-        use std::process::Command;
-        let out = Command::new("otool").arg("-l").arg(dylib_path).output()?;
+        use goblin::mach::{Mach, SingleArch};
 
-        if !out.status.success() {
-            anyhow::bail!("otool command failed with status: {}", out.status);
-        }
+        let bytes = std::fs::read(dylib_path)
+            .with_context(|| format!("Failed to read {}", dylib_path.display()))?;
 
-        let mut dylibs = Vec::new();
-        let mut rpaths = Vec::new();
-        enum NextAction {
-            Unknown,
-            FindDylib,
-            FindRpath,
-        }
-
-        let mut next_action = NextAction::Unknown;
-
-        let lines = String::from_utf8_lossy(&out.stdout);
-        for line in lines.lines() {
-            if let Some((w0, w1)) = line.trim_start().split_once(" ") {
-                match next_action {
-                    NextAction::Unknown => {
-                        if w0 == "cmd" {
-                            if w1 == "LC_LOAD_DYLIB" {
-                                next_action = NextAction::FindDylib;
-                            } else if w1 == "LC_RPATH" {
-                                next_action = NextAction::FindRpath;
-                            }
-                        }
-                    }
-                    NextAction::FindDylib => {
-                        if w0 == "name" {
-                            dylibs.push(Self::extract_path_from_line(w1, "name", "LC_LOAD_DYLIB")?);
-                            next_action = NextAction::Unknown;
-                        } else if w0 == "Load" {
-                            next_action = NextAction::Unknown; //just to avoid unexpected output
-                        }
-                    }
-                    NextAction::FindRpath => {
-                        if w0 == "path" {
-                            rpaths.push(Self::extract_path_from_line(w1, "path", "LC_RPATH")?);
-                            next_action = NextAction::Unknown;
-                        } else if w0 == "Load" {
-                            next_action = NextAction::Unknown; //just to avoid unexpected output
-                        }
+        let mut info = Self::default();
+        match Mach::parse(&bytes)? {
+            Mach::Binary(macho) => info.absorb(&macho),
+            Mach::Fat(fat) => {
+                for architecture in fat.into_iter() {
+                    if let SingleArch::MachO(macho) = architecture? {
+                        info.absorb(&macho);
                     }
                 }
             }
         }
-        Ok(Self { dylibs, rpaths })
+        Ok(info)
     }
 
-    fn extract_path_from_line(
-        line: &str,
-        field_name: &str,
-        context: &str,
-    ) -> crate::Result<PathBuf> {
-        if let Some(trail) = line.find('(') {
-            if trail > 0 {
-                let name = &line[..trail];
-                Ok(PathBuf::from(name.trim_end()))
-            } else {
-                anyhow::bail!("unexpected otool output - empty {field_name} field");
-            }
-        } else {
-            anyhow::bail!("unexpected otool output - expect {field_name} field after {context}");
-        }
+    /// Collect the linked dylibs and rpaths from one Mach-O architecture slice.
+    fn absorb(&mut self, macho: &goblin::mach::MachO) {
+        self.dylibs.extend(macho.libs.iter().map(PathBuf::from));
+        self.rpaths.extend(macho.rpaths.iter().map(PathBuf::from));
     }
 
     fn has_rpath<T: AsRef<Path>>(&self, path: T) -> bool {
