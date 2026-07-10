@@ -121,6 +121,7 @@ struct BundleSettings {
     osx_url_schemes: Option<Vec<String>>,
     osx_info_plist_exts: Option<Vec<String>>,
     osx_localizations: Option<HashMap<String, HashMap<String, String>>>,
+    osx_dmg_background: Option<PathBuf>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -605,6 +606,13 @@ impl Settings {
     /// keys such as `"CFBundleDisplayName"` mapped to their translated value.
     pub fn osx_localizations(&self) -> Option<&HashMap<String, HashMap<String, String>>> {
         self.bundle_settings.osx_localizations.as_ref()
+    }
+
+    /// An SVG that becomes the Finder window background of the DMG. It must
+    /// contain elements with ids `app` and `applications`, whose centers
+    /// become the icon positions.
+    pub fn osx_dmg_background(&self) -> Option<&Path> {
+        self.bundle_settings.osx_dmg_background.as_deref()
     }
 }
 
