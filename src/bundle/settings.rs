@@ -142,6 +142,14 @@ struct BundleSettings {
     /// Mirrors `osx_localizations` shape: `[linux_localizations.fr] Name = "…"`.
     /// Wrapped as [`LinuxDesktopLocalizations`] via [`Settings::linux_localizations`].
     linux_localizations: Option<HashMap<String, LinuxDesktopLocale>>,
+    /// Local path to a type-2 AppImage runtime ELF (offline / pinned builds).
+    appimage_runtime_path: Option<String>,
+    /// Override URL used to download the type-2 AppImage runtime.
+    appimage_runtime_url: Option<String>,
+    /// Path to an AppStream metainfo XML file to bundle in the AppImage.
+    appimage_metainfo_path: Option<String>,
+    /// SquashFS compression codec: `"gzip"` (default) or `"zstd"`.
+    appimage_compression: Option<String>,
     /// `StartupWMClass` value for the `.desktop` entry (Linux, all formats).
     linux_startup_wm_class: Option<String>,
     /// Named desktop actions emitted as `[Desktop Action <id>]` groups.
@@ -603,6 +611,31 @@ impl Settings {
         self.bundle_settings.linux_exec_args.as_deref()
     }
 
+    /// Optional local path to a type-2 AppImage runtime binary. When set,
+    /// `cargo-bundle` will not download a runtime from the network.
+    pub fn appimage_runtime_path(&self) -> Option<&Path> {
+        self.bundle_settings
+            .appimage_runtime_path
+            .as_deref()
+            .map(Path::new)
+    }
+
+    /// Optional override URL for downloading the type-2 AppImage runtime.
+    /// Defaults to the official AppImage continuous release for the target arch.
+    pub fn appimage_runtime_url(&self) -> Option<&str> {
+        self.bundle_settings.appimage_runtime_url.as_deref()
+    }
+
+    /// Path to an AppStream metainfo XML to bundle in the AppImage.
+    pub fn appimage_metainfo_path(&self) -> Option<&str> {
+        self.bundle_settings.appimage_metainfo_path.as_deref()
+    }
+
+    /// SquashFS compression codec: `"gzip"` (default) or `"zstd"`.
+    pub fn appimage_compression(&self) -> Option<&str> {
+        self.bundle_settings.appimage_compression.as_deref()
+    }
+
     /// `StartupWMClass` for the `.desktop` entry.
     pub fn linux_startup_wm_class(&self) -> Option<&str> {
         self.bundle_settings.linux_startup_wm_class.as_deref()
@@ -913,5 +946,58 @@ mod tests {
         assert_eq!(locs["pt_BR"].name.as_deref(), Some("Meu App"));
         assert!(locs["pt_BR"].generic_name.is_none());
         assert!(locs["pt_BR"].keywords.is_none());
+    }
+
+    #[test]
+    fn parse_appimage_runtime_settings() {
+        let toml_str = "\
+            name = \"AppImage App\"\n\
+            identifier = \"com.example.appimage\"\n\
+            appimage_runtime_path = \"/opt/runtimes/runtime-x86_64\"\n\
+            appimage_runtime_url = \"https://example.com/runtime-x86_64\"\n";
+        let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            bundle.appimage_runtime_path.as_deref(),
+            Some("/opt/runtimes/runtime-x86_64")
+        );
+        assert_eq!(
+            bundle.appimage_runtime_url.as_deref(),
+            Some("https://example.com/runtime-x86_64")
+        );
+    }
+
+    #[test]
+    fn parse_appimage_feature_settings() {
+        let toml_str = r#"
+            name = "AppImage App"
+            identifier = "com.example.appimage"
+            appimage_metainfo_path = "assets/metainfo.xml"
+            appimage_compression = "zstd"
+            linux_startup_wm_class = "myapp"
+
+            [linux_desktop_actions.new-window]
+            Name = "New Window"
+            Exec = "myapp --new-window"
+
+            [linux_desktop_actions.new-window.NameLocalized]
+            fr = "Nouvelle fenetre"
+        "#;
+        let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            bundle.appimage_metainfo_path.as_deref(),
+            Some("assets/metainfo.xml")
+        );
+        assert_eq!(bundle.appimage_compression.as_deref(), Some("zstd"));
+        assert_eq!(bundle.linux_startup_wm_class.as_deref(), Some("myapp"));
+
+        let actions = bundle.linux_desktop_actions.unwrap();
+        let action = &actions["new-window"];
+        assert_eq!(action.name, "New Window");
+        assert_eq!(action.exec.as_deref(), Some("myapp --new-window"));
+        assert!(action.icon.is_none());
+        assert_eq!(
+            action.name_localized.as_ref().unwrap()["fr"],
+            "Nouvelle fenetre"
+        );
     }
 }
