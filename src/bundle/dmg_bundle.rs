@@ -15,85 +15,177 @@ use super::common;
 use crate::Settings;
 use crate::bundle::osx_bundle;
 use anyhow::Context;
+use core::str::from_utf8;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const MINIMUM_BUNDLE_SIZE_BYTES: u64 = 52_428_800; // 50 MiB
+
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
-    const BUNDLE_MINIMUM: u64 = 52_428_800;
+    let disk_image_name = format!("{}.dmg", settings.bundle_name());
+    common::print_bundling(&disk_image_name)?;
 
-    let dmg_name = format!("{}.dmg", settings.bundle_name());
-    common::print_bundling(&dmg_name)?;
+    let base_directory = prepare_base_directory(settings)?;
 
-    let base_dir = settings.project_out_directory().join("bundle/dmg");
-    fs::create_dir_all(&base_dir)
-        .with_context(|| format!("Failed to create bundle directory {base_dir:?}"))?;
+    let application_bundle_path = build_application_bundle(settings, &base_directory)?;
+    let final_disk_image_path = base_directory.join(&disk_image_name);
 
-    // Build the .app bundle into the DMG staging directory.
-    let app_bundle_name = format!("{}.app", settings.bundle_name());
-    let app_bundle_path = base_dir.join(&app_bundle_name);
-    if app_bundle_path.exists() {
-        fs::remove_dir_all(&app_bundle_path)
-            .with_context(|| format!("Failed to remove existing {app_bundle_name}"))?;
-    }
+    clear_existing_path(final_disk_image_path.as_path())?;
 
-    osx_bundle::bundle_project_at(settings, &base_dir)
-        .with_context(|| "Failed to create app bundle for DMG")?;
+    let temporary_directory = tempfile::tempdir()
+        .context("Failed to create temporary directory for staging disk image")?;
+    let staging_disk_image_path = temporary_directory.path().join("staging.dmg");
 
-    let dmg_path = base_dir.join(&dmg_name);
-    if dmg_path.exists() {
-        fs::remove_file(&dmg_path)
-            .with_context(|| format!("Failed to remove existing {dmg_name}"))?;
-    }
+    create_staging_disk_image(
+        &application_bundle_path,
+        &staging_disk_image_path,
+        settings.bundle_name(),
+    )?;
+    populate_disk_image(settings, &staging_disk_image_path, &application_bundle_path)?;
+    compress_disk_image(&staging_disk_image_path, &final_disk_image_path)?;
 
-    // Determine the size of the app bundle and add a generous overhead.
-    let bundle_size = dir_size(&app_bundle_path)?;
-    let image_size_bytes = bundle_size + BUNDLE_MINIMUM; // at least 50 MiB
+    Ok(vec![final_disk_image_path])
+}
 
-    let temp_dir = tempfile::tempdir()
-        .with_context(|| "Failed to create temporary directory for DMG staging")?;
+/// Sets up the base directory where the bundle will be staged.
+fn prepare_base_directory(settings: &Settings) -> crate::Result<PathBuf> {
+    let base_directory = settings.project_out_directory().join("bundle/dmg");
+    fs::create_dir_all(&base_directory)
+        .with_context(|| format!("Failed to create bundle directory {base_directory:?}"))?;
+    Ok(base_directory)
+}
 
-    let staging_dmg = temp_dir.path().join("staging.dmg");
+/// Builds the .app bundle and ensures any old builds are cleared out first.
+fn build_application_bundle(settings: &Settings, base_directory: &Path) -> crate::Result<PathBuf> {
+    let application_bundle_name = format!("{}.app", settings.bundle_name());
+    let application_bundle_path = base_directory.join(&application_bundle_name);
 
-    // Create a writable HFS+ disk image large enough for the bundle.
-    let status = Command::new("hdiutil")
-        .args([
-            "create",
-            staging_dmg.to_str().unwrap(),
-            "-ov",
-            "-fs",
-            "HFS+",
-            "-size",
-            &image_size_bytes.to_string(),
-            "-volname",
-            settings.bundle_name(),
-        ])
-        .status()
-        .with_context(|| "Failed to run hdiutil create (macOS only)")?;
+    clear_existing_path(application_bundle_path.as_path())?;
 
-    if !status.success() {
-        anyhow::bail!("hdiutil create failed");
-    }
+    osx_bundle::bundle_project_at(settings, base_directory)
+        .context("Failed to create application bundle for disk image")?;
 
-    // Mount the writable image.
-    let output = Command::new("hdiutil")
-        .args([
-            "attach",
-            staging_dmg.to_str().unwrap(),
-            "-nobrowse",
-            "-noverify",
-            "-noautoopen",
-            "-noautofsck",
-        ])
+    Ok(application_bundle_path)
+}
+
+/// Provisions a writable HFS+ disk image with enough capacity for the app.
+fn create_staging_disk_image(
+    application_bundle_path: &Path,
+    staging_disk_image_path: &Path,
+    volume_name: &str,
+) -> crate::Result<()> {
+    let bundle_size_bytes = calculate_directory_size(application_bundle_path)?;
+    let image_size_bytes = bundle_size_bytes + MINIMUM_BUNDLE_SIZE_BYTES;
+
+    let mut command = Command::new("hdiutil");
+    command
+        .arg("create")
+        .arg(staging_disk_image_path)
+        .arg("-ov")
+        .arg("-fs")
+        .arg("HFS+")
+        .arg("-size")
+        .arg(image_size_bytes.to_string())
+        .arg("-volname")
+        .arg(volume_name);
+
+    command
         .output()
-        .with_context(|| "Failed to mount staging DMG")?;
+        .with_context(|| format!("Failed to spawn process: {:?}", command.get_program()))?;
 
-    if !output.status.success() {
-        anyhow::bail!("hdiutil attach failed");
+    Ok(())
+}
+
+/// Mounts the staging image, copies assets over, and guarantees unmounting via RAII Drop.
+fn populate_disk_image(
+    settings: &Settings,
+    staging_disk_image_path: &Path,
+    application_bundle_path: &Path,
+) -> crate::Result<()> {
+    let mount_guard = mount_disk_image(staging_disk_image_path)?;
+    let mount_point = mount_guard.mount_point();
+
+    let application_name = application_bundle_path
+        .file_name()
+        .context("Application bundle path is missing a file name")?;
+
+    common::copy_dir(application_bundle_path, &mount_point.join(application_name))?;
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink("/Applications", mount_point.join("Applications"))
+            .context("Failed to create /Applications symbolic link")?;
+
+        super::dmg_layout::decorate_volume(settings, mount_point, application_name)?;
     }
 
-    let mount_point = parse_mount_point(&output.stdout)
-        .with_context(|| "Could not determine DMG mount point from hdiutil output")?;
+    Ok(())
+}
+
+/// Converts the writable staging image into a read-only, compressed UDZO image.
+fn compress_disk_image(
+    staging_disk_image_path: &Path,
+    final_disk_image_path: &Path,
+) -> crate::Result<()> {
+    let mut command = Command::new("hdiutil");
+    command
+        .arg("convert")
+        .arg(staging_disk_image_path)
+        .arg("-ov")
+        .arg("-format")
+        .arg("UDZO")
+        .arg("-imagekey")
+        .arg("zlib-level=9")
+        .arg("-o")
+        .arg(final_disk_image_path);
+
+    command
+        .output()
+        .with_context(|| format!("Failed to spawn process: {:?}", command.get_program()))?;
+
+    Ok(())
+}
+
+/// Utility guard that ensures the attached disk image is detached when dropped.
+struct DiskImageMountGuard {
+    mount_point: PathBuf,
+}
+
+impl DiskImageMountGuard {
+    fn mount_point(&self) -> &Path {
+        self.mount_point.as_path()
+    }
+}
+
+impl Drop for DiskImageMountGuard {
+    fn drop(&mut self) {
+        let _ = Command::new("hdiutil")
+            .arg("detach")
+            .arg(&self.mount_point)
+            .status();
+    }
+}
+
+/// Attaches the disk image and returns the RAII guard containing the mount path.
+fn mount_disk_image(disk_image_path: &Path) -> crate::Result<DiskImageMountGuard> {
+    let mut command = Command::new("hdiutil");
+    command
+        .arg("attach")
+        .arg(disk_image_path)
+        .arg("-nobrowse")
+        .arg("-noverify")
+        .arg("-noautoopen")
+        .arg("-noautofsck");
+
+    let output = command
+        .output()
+        .with_context(|| format!("Failed to spawn process: {:?}", command.get_program()))?;
+
+    let mount_point = parse_mount_point(&output.stdout)?;
+
+    Ok(DiskImageMountGuard { mount_point })
+}
 
 /// Parses standard output from hdiutil attach to locate the /Volumes/ mount path.
 fn parse_mount_point(standard_output: &[u8]) -> crate::Result<PathBuf> {
@@ -106,35 +198,36 @@ fn parse_mount_point(standard_output: &[u8]) -> crate::Result<PathBuf> {
             .filter(|path| path.starts_with("/Volumes/"))
     });
 
-    Ok(vec![dmg_path])
+    match mount_point {
+        Some(path) => Ok(PathBuf::from(path)),
+        None => anyhow::bail!("Could not find a /Volumes/… mount point in hdiutil standard output"),
+    }
 }
 
-/// Walk a directory and sum the sizes of all contained files.
-fn dir_size(dir: &std::path::Path) -> crate::Result<u64> {
-    let mut total: u64 = 0;
-    for entry in walkdir::WalkDir::new(dir) {
+/// Recursively sums the file sizes within a directory.
+fn calculate_directory_size(directory: &Path) -> crate::Result<u64> {
+    let mut total_size_bytes: u64 = 0;
+
+    for entry in walkdir::WalkDir::new(directory) {
         let entry = entry?;
         if entry.file_type().is_file() {
-            total += entry.metadata()?.len();
+            total_size_bytes += entry.metadata()?.len();
         }
     }
-    Ok(total)
+
+    Ok(total_size_bytes)
 }
 
-fn parse_mount_point(stdout: &[u8]) -> crate::Result<PathBuf> {
-    let text = std::str::from_utf8(stdout)?;
-
-    // hdiutil attach prints a tab-separated line whose last field is the mount
-    // point, e.g.:  /dev/disk2s1   Apple_HFS  /Volumes/MyApp
-    for line in text.lines().rev() {
-        let parts: Vec<&str> = line.split('\t').collect();
-        if let Some(path) = parts.last() {
-            let path = path.trim();
-            if path.starts_with("/Volumes/") {
-                return Ok(PathBuf::from(path));
-            }
-        }
+/// Safely removes a file or directory if it exists, abstracting away duplicate logic.
+fn clear_existing_path(path: &Path) -> crate::Result<()> {
+    if !path.exists() {
+        return Ok(());
     }
 
-    anyhow::bail!("Could not find a /Volumes/… mount point in hdiutil output")
+    if path.is_dir() {
+        fs::remove_dir_all(path)
+            .with_context(|| format!("Failed to remove existing directory at {path:?}"))
+    } else {
+        fs::remove_file(path).with_context(|| format!("Failed to remove existing file at {path:?}"))
+    }
 }
