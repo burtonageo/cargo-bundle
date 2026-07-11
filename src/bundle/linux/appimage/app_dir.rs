@@ -45,8 +45,9 @@ impl<'a> AppDirectory<'a> {
         common::copy_file(self.settings.binary_path(), &binary_absolute_destination)?;
         set_executable_permissions(&binary_absolute_destination)?;
 
-        // Feature 4: warn about non-excluded linked libraries.
-        check_linked_libraries(&binary_absolute_destination);
+        // Bundle shared libraries alongside the executable.
+        let usr_lib_directory = self.path.join("usr/lib");
+        bundle_shared_libraries(&binary_absolute_destination, &usr_lib_directory)?;
 
         Ok(())
     }
@@ -227,81 +228,132 @@ impl<'a> AppDirectory<'a> {
     }
 }
 
-/// Feature 4: inspect the staged binary's ELF dynamic dependencies and warn
-/// about any libraries not in the well-known always-available-on-host
-/// excludelist. Uses the pure-Rust `goblin` crate (no external `ldd` call).
+/// Lines from the AppImage community excludelist of libraries assumed present on all hosts.
 #[cfg(target_os = "linux")]
-fn check_linked_libraries(binary: &Path) {
-    const EXCLUDED_PREFIXES: &[&str] = &[
-        "ld-linux",
-        "libc",
-        "libm",
-        "libdl",
-        "libpthread",
-        "librt",
-        "libgcc_s",
-        "libstdc++",
-        "libGL",
-        "libEGL",
-        "libX",
-        "libxcb",
-        "libwayland",
-        "libfontconfig",
-        "libfreetype",
-        "libharfbuzz",
-        "libglib",
-        "libgobject",
-        "libgio",
-        "libgtk",
-        "libgdk",
-        "libdbus",
-        "libsystemd",
-        "libudev",
-        "libasound",
-        "libpulse",
-        "libz",
-        "libzstd",
-        "liblzma",
-        "libbz2",
-        "libexpat",
-        "libuuid",
-        "libcrypt",
-        "libnss",
-        "libresolv",
-    ];
+const APPIMAGE_EXCLUDELIST: &str = include_str!("appimage-excludelist");
 
-    let Ok(bytes) = std::fs::read(binary) else {
-        return; // can't read the binary
-    };
-    let Ok(elf) = goblin::elf::Elf::parse(&bytes) else {
-        return; // not an ELF we can parse
+/// Walk the ELF dynamic-link graph starting from `executable`, resolve every
+/// soname to a real path via `/etc/ld.so.cache`, skip sonames that appear in
+/// the excludelist, and copy each resolved library flat into `destination_directory`.
+///
+/// If `/etc/ld.so.cache` cannot be read (e.g. building on macOS) a warning is
+/// logged and the function returns successfully so cross-compilation builds are
+/// not broken.
+#[cfg(target_os = "linux")]
+fn bundle_shared_libraries(executable: &Path, destination_directory: &Path) -> crate::Result<()> {
+    use std::collections::{HashMap, HashSet};
+
+    let cache_bytes = match fs::read("/etc/ld.so.cache") {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = common::print_warning(&format!(
+                "Could not read /etc/ld.so.cache ({error}); shared libraries will not be bundled."
+            ));
+            return Ok(());
+        }
     };
 
-    let is_always_available = |library: &str| {
-        // Strip the version suffix for prefix matching ("libfoo.so.1" → "libfoo").
-        let base = library.split('.').next().unwrap_or(library);
-        EXCLUDED_PREFIXES
-            .iter()
-            .any(|prefix| base.starts_with(prefix))
-    };
+    let parsed_cache =
+        ld_so_cache::parsers::parse_ld_cache(&cache_bytes).map_err(anyhow::Error::msg)?;
+    let cache_entries = parsed_cache.get_entries().map_err(anyhow::Error::msg)?;
 
-    let unbundled_libraries: Vec<&str> = elf
-        .libraries
-        .into_iter()
-        .filter(|library| !is_always_available(library))
+    let excluded_sonames: Vec<&str> = APPIMAGE_EXCLUDELIST
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .collect();
 
-    if !unbundled_libraries.is_empty() {
-        let list = unbundled_libraries.join(", ");
-        let _ = common::print_warning(&format!(
-            "The binary links against libraries that may not be available on all target systems: {list}. \
-             Consider bundling them under usr/lib/ in the AppDir or using a statically linked build."
-        ));
+    fs::create_dir_all(destination_directory).with_context(|| {
+        format!(
+            "Failed to create shared-library directory {}",
+            destination_directory.display()
+        )
+    })?;
+
+    // Work queue of ELF files whose DT_NEEDED entries we still need to process.
+    let mut pending: Vec<PathBuf> = vec![executable.to_owned()];
+    // Absolute paths of libraries already scheduled for copying (avoids cycles).
+    let mut resolved: HashSet<PathBuf> = HashSet::new();
+    // Sonames that appeared in DT_NEEDED but had no entry in the cache.
+    let mut unresolved: HashMap<String, Vec<PathBuf>> = HashMap::new();
+
+    while let Some(elf_path) = pending.pop() {
+        for soname in elf_dynamic_dependencies(&elf_path)? {
+            if excluded_sonames.contains(&soname.as_str()) {
+                continue;
+            }
+
+            let Some(cache_entry) = cache_entries
+                .iter()
+                .find(|entry| entry.library_name == soname)
+            else {
+                unresolved.entry(soname).or_default().push(elf_path.clone());
+                continue;
+            };
+
+            let library_path = PathBuf::from(&cache_entry.library_path);
+            if resolved.insert(library_path.clone()) {
+                pending.push(library_path);
+            }
+        }
     }
+
+    if !unresolved.is_empty() {
+        for (soname, required_by) in &unresolved {
+            let _ = common::print_warning(&format!(
+                "Shared library '{soname}' not found in ld.so.cache (required by: {}).",
+                required_by
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        let _ = common::print_warning(
+            "The above libraries could not be resolved; the AppImage bundle may be incomplete.",
+        );
+    }
+
+    for library_path in &resolved {
+        let filename = library_path
+            .file_name()
+            .with_context(|| format!("Library path has no filename: {}", library_path.display()))?;
+        let destination = destination_directory.join(filename);
+        fs::copy(library_path, &destination).with_context(|| {
+            format!(
+                "Failed to copy shared library {} to {}",
+                library_path.display(),
+                destination.display()
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
+/// Return the list of sonames (DT_NEEDED entries) from an ELF file's dynamic
+/// section. Returns an empty list if the file is not ELF or has no dynamic section.
+#[cfg(target_os = "linux")]
+fn elf_dynamic_dependencies(elf_path: &Path) -> crate::Result<Vec<String>> {
+    let bytes = fs::read(elf_path)
+        .with_context(|| format!("Failed to read ELF file {}", elf_path.display()))?;
+
+    let elf = match goblin::elf::Elf::parse(&bytes) {
+        Ok(elf) => elf,
+        Err(_) => return Ok(vec![]),
+    };
+
+    Ok(elf
+        .libraries
+        .iter()
+        .map(|soname| soname.to_string())
+        .collect())
 }
 
 #[cfg(not(target_os = "linux"))]
-fn check_linked_libraries(_binary: &Path) {}
+fn bundle_shared_libraries(_executable: &Path, _destination_directory: &Path) -> crate::Result<()> {
+    Ok(())
+}
 
 fn parse_icon_directory_area(name: &str) -> Option<u64> {
     let base_name = name.split('@').next().unwrap_or(name);

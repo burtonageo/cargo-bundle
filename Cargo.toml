@@ -33,6 +33,8 @@ a title bar.  It serves as an example of an application that
 can be bundled with cargo-bundle, as well as a test-case for
 cargo-bundle's support for bundling crate examples.
 """
+[workspace]
+
 [dependencies]
 anyhow = "1.0.102"
 ar = "0.9.0"
@@ -45,6 +47,7 @@ dirs = "6.0.0"
 ds_parser = "0.2.1"
 glob = "0.3.3"
 goblin = "0.10"
+ld-so-cache = "0.1.0"
 icns = "0.4.0"
 image = { version = "0.25.10", features = ["png"] }
 libflate = "2.2.1"
