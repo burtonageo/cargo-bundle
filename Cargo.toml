@@ -19,6 +19,15 @@ long_description = """
 A simple command-line application that demonstrates bundling a Rust binary
 with PNG icons using cargo-bundle.
 """
+appimage_metainfo_path = "examples/goodbye/goodbye.metainfo.xml"
+
+[package.metadata.bundle.example.goodbye.linux_localizations.fr]
+Name = "Au revoir"
+Comment = "Une application CLI d'exemple montrant l'empaquetage d'icônes PNG"
+
+[package.metadata.bundle.example.goodbye.linux_localizations.de]
+Name = "Auf Wiedersehen"
+Comment = "Eine Beispiel-CLI-Anwendung für das Bündeln von PNG-Symbolen"
 
 [package.metadata.bundle.example.hello]
 name = "hello"
