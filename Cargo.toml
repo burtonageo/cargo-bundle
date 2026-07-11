@@ -24,6 +24,7 @@ with PNG icons using cargo-bundle.
 name = "hello"
 identifier = "io.github.burtonageo.cargo-bundle.hello"
 icon = ["examples/hello/icon.svg", "examples/hello/icon*.png"]
+osx_dmg_background = "examples/hello/dmg-background.svg"
 category = "Utility"
 short_description = "An example of a bundled application"
 long_description = """

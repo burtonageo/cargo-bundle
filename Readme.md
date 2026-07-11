@@ -24,7 +24,10 @@ To build a bundle for the OS you're on, simply run `cargo bundle` in your
 project's directory (where the `Cargo.toml` is placed).  If you would like to
 bundle a release build, you must add the `--release` flag to your call.  To
 cross-compile and bundle an application for another OS, add an appropriate
-`--target` flag, just as you would for `cargo build`.
+`--target` flag, just as you would for `cargo build`.  On macOS the
+`--target` flag may be repeated to build every architecture and combine them
+into a single universal binary with `lipo`, e.g.
+`cargo bundle -t aarch64-apple-darwin -t x86_64-apple-darwin`.
 
 ## Flags
   ```plaintext
@@ -33,7 +36,7 @@ cross-compile and bundle an application for another OS, add an appropriate
   -f, --format <FORMAT>      Which bundle format to produce [possible values: deb, ios, msi, wxsmsi, osx, rpm, appimage]
   -r, --release              Build a bundle from a target built in release mode
       --profile <NAME>       Build a bundle from a target build using the given profile
-  -t, --target <TRIPLE>      Build a bundle for the target triple
+  -t, --target <TRIPLE>      Build a bundle for the target triple. May be repeated to combine several architectures into a universal binary (macOS only)
       --features <FEATURES>  Set crate features for the bundle. Eg: `--features "f1 f2"`
       --all-features         Build a bundle with all crate features
       --no-default-features  Build a bundle without the default crate features
@@ -143,6 +146,12 @@ These settings are used only when bundling `osx` packages.
   `Info.plist`. It reads each file in that path, and blindly appends its
   contents into the `Info.plist` file, after cargo-bundle has generated its
   keys but before it closes the `<dict>` and `<plist>`.
+* `osx_dmg_background`: A path string pointing to an SVG that becomes the
+  Finder window background of the DMG bundle.  The SVG must contain elements
+  with ids `app` and `applications`; the center of each element becomes the
+  icon position of the application bundle and of the `/Applications` symlink
+  respectively.  The image is rendered at 2x resolution so it stays crisp on
+  Retina displays.  See `examples/hello/dmg-background.svg` for an example.
 
 * note: Github Actions and Bitbucket Pipelines both have Apple MacOS build runners/containers available to use for free 
 
