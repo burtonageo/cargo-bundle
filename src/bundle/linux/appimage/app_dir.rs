@@ -4,8 +4,11 @@ use super::context::AppImageContext;
 use super::set_executable_permissions;
 use crate::bundle::linux::desktop::{DesktopFileOptions, generate_desktop_file};
 use crate::bundle::linux::icons::generate_icon_files;
+use crate::bundle::localization::LinuxDesktopLocalizations;
 use crate::bundle::{Settings, common};
 use anyhow::Context;
+use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::{Reader, Writer};
 use resvg::{
     tiny_skia::{Pixmap, Transform},
     usvg::{Options, Tree},
@@ -64,24 +67,36 @@ impl<'a> AppDirectory<'a> {
         Ok(())
     }
 
-    /// Feature 3: copy AppStream metainfo XML into the AppDir (or warn if absent).
+    /// Copy AppStream metainfo XML into the AppDir, injecting `xml:lang` sibling
+    /// elements for any element marked with a `trkey` attribute.
+    ///
+    /// When `linux_localizations` are configured, elements tagged with
+    /// `trkey="Name"`, `trkey="Comment"`, or `trkey="GenericName"` get additional
+    /// `<element xml:lang="…">…</element>` siblings for each locale that provides
+    /// a non-empty translation.  The `trkey` attribute itself is stripped from the
+    /// output so the final XML is valid AppStream.
     fn copy_metainfo(&self) -> crate::Result<()> {
-        if let Some(src) = self.settings.appimage_metainfo_path() {
-            let dest_dir = self.path.join("usr/share/metainfo");
-            fs::create_dir_all(&dest_dir).with_context(|| {
-                format!("Failed to create metainfo directory {}", dest_dir.display())
-            })?;
-            let dest = dest_dir.join(format!("{}.appdata.xml", self.settings.bundle_identifier()));
-            fs::copy(src, &dest).with_context(|| {
-                format!("Failed to copy metainfo from {src:?} to {}", dest.display())
-            })?;
-        } else {
+        let Some(source_path) = self.settings.appimage_metainfo_path() else {
             let _ = common::print_warning(
                 "No appimage_metainfo_path set. AppStream metainfo is recommended for \
                  discoverability in software centers.",
             );
-        }
-        Ok(())
+            return Ok(());
+        };
+
+        let dest_dir = self.path.join("usr/share/metainfo");
+        fs::create_dir_all(&dest_dir).with_context(|| {
+            format!("Failed to create metainfo directory {}", dest_dir.display())
+        })?;
+        let destination =
+            dest_dir.join(format!("{}.appdata.xml", self.settings.bundle_identifier()));
+
+        let localizations = self.settings.linux_localizations();
+        copy_metainfo_with_localizations(
+            Path::new(source_path),
+            &destination,
+            localizations.as_ref(),
+        )
     }
 
     fn binary_relative_path(&self) -> PathBuf {
@@ -228,6 +243,200 @@ impl<'a> AppDirectory<'a> {
     }
 }
 
+/// Read an AppStream metainfo XML from `source`, optionally inject `xml:lang`
+/// sibling elements for translatable tags (those carrying a `trkey` attribute),
+/// and write the result to `destination`.
+///
+/// The `trkey` attribute value names a field in [`LinuxDesktopLocale`]
+/// (`"Name"`, `"Comment"`, or `"GenericName"`).  For each locale that provides
+/// a non-empty value for that field an additional element is emitted immediately
+/// after the base element with `xml:lang="<locale>"`.  The `trkey` attribute is
+/// stripped from the output so the produced file is valid AppStream XML.
+///
+/// When no localizations are configured the function falls back to a plain copy.
+fn copy_metainfo_with_localizations(
+    source: &Path,
+    destination: &Path,
+    localizations: Option<&LinuxDesktopLocalizations<'_>>,
+) -> crate::Result<()> {
+    let xml_source = fs::read_to_string(source)
+        .with_context(|| format!("Failed to read metainfo file {}", source.display()))?;
+
+    let mut reader = Reader::from_str(&xml_source);
+    reader.config_mut().trim_text(false);
+
+    let destination_file = common::create_file(destination)?;
+    let mut writer = Writer::new_with_indent(destination_file, b' ', 2);
+
+    // Stack tracking how deeply nested we are inside an element that had a
+    // `trkey` attribute.  We suppress writing those elements' own content and
+    // instead re-emit localized copies after the closing tag.
+    struct PendingElement {
+        tag: Vec<u8>,
+        /// Reconstructed opening tag bytes (without the trkey attribute) for
+        /// the base (unlocalized) element.
+        opening_bytes: Vec<u8>,
+        /// Content accumulated between the opening and closing tags.
+        inner_text: String,
+        /// The trkey value identifying which locale field to look up.
+        translation_key: String,
+        /// How many levels of nesting are inside this element.
+        depth: u32,
+    }
+
+    let mut pending: Option<PendingElement> = None;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Eof) => break,
+            Err(error) => {
+                return Err(anyhow::Error::msg(format!(
+                    "XML parse error in {}: {error}",
+                    source.display()
+                )));
+            }
+
+            Ok(Event::Start(element)) => {
+                if let Some(ref mut pending_element) = pending {
+                    // We are inside a trkey element — just accumulate depth.
+                    pending_element.depth += 1;
+                    continue;
+                }
+
+                // Check for a trkey attribute.
+                let mut translation_key: Option<String> = None;
+                let mut filtered_attributes: Vec<quick_xml::events::attributes::Attribute<'_>> =
+                    Vec::new();
+                for attribute_result in element.attributes() {
+                    let attribute = attribute_result.with_context(|| {
+                        format!("Invalid XML attribute in {}", source.display())
+                    })?;
+                    if attribute.key.as_ref() == b"trkey" {
+                        translation_key =
+                            Some(String::from_utf8_lossy(&attribute.value).into_owned());
+                    } else {
+                        filtered_attributes.push(attribute);
+                    }
+                }
+
+                if let Some(key) = translation_key {
+                    // Build the opening tag bytes without trkey for later replay.
+                    let mut opening = BytesStart::new(
+                        String::from_utf8_lossy(element.name().as_ref()).into_owned(),
+                    );
+                    for attribute in &filtered_attributes {
+                        opening.push_attribute((attribute.key.as_ref(), attribute.value.as_ref()));
+                    }
+                    let mut opening_bytes = Vec::new();
+                    {
+                        let mut temp = Writer::new(&mut opening_bytes);
+                        temp.write_event(Event::Start(opening))
+                            .map_err(anyhow::Error::msg)?;
+                    }
+                    pending = Some(PendingElement {
+                        tag: element.name().as_ref().to_owned(),
+                        opening_bytes,
+                        inner_text: String::new(),
+                        translation_key: key,
+                        depth: 0,
+                    });
+                } else {
+                    // Ordinary element — pass through as-is.
+                    let mut passthrough = BytesStart::new(
+                        String::from_utf8_lossy(element.name().as_ref()).into_owned(),
+                    );
+                    for attribute in &filtered_attributes {
+                        passthrough
+                            .push_attribute((attribute.key.as_ref(), attribute.value.as_ref()));
+                    }
+                    writer
+                        .write_event(Event::Start(passthrough))
+                        .map_err(anyhow::Error::msg)?;
+                }
+            }
+
+            Ok(Event::End(element)) => {
+                if let Some(ref mut pending_element) = pending {
+                    if pending_element.depth > 0 {
+                        pending_element.depth -= 1;
+                        continue;
+                    }
+                    // Closing the trkey element — emit base + localized copies.
+                    let tag_name = String::from_utf8_lossy(&pending_element.tag).into_owned();
+                    let inner_text = pending_element.inner_text.clone();
+                    let translation_key = pending_element.translation_key.clone();
+                    let opening_bytes = pending_element.opening_bytes.clone();
+                    pending = None;
+
+                    // Emit the base (unlocalized) element.
+                    writer
+                        .get_mut()
+                        .write_all(&opening_bytes)
+                        .map_err(anyhow::Error::msg)?;
+                    writer
+                        .write_event(Event::Text(BytesText::new(&inner_text)))
+                        .map_err(anyhow::Error::msg)?;
+                    writer
+                        .write_event(Event::End(BytesEnd::new(tag_name.clone())))
+                        .map_err(anyhow::Error::msg)?;
+
+                    // Emit one localized sibling per locale.
+                    if let Some(locs) = localizations {
+                        for (locale, locale_entry) in locs.sorted_locales() {
+                            let translation = match translation_key.as_str() {
+                                "Name" => locale_entry.name.as_deref(),
+                                "Comment" => locale_entry.comment.as_deref(),
+                                "GenericName" => locale_entry.generic_name.as_deref(),
+                                _ => None,
+                            };
+                            let Some(text) = translation.filter(|t| !t.is_empty()) else {
+                                continue;
+                            };
+                            let mut localized_start = BytesStart::new(tag_name.clone());
+                            localized_start.push_attribute(("xml:lang", locale));
+                            writer
+                                .write_event(Event::Start(localized_start))
+                                .map_err(anyhow::Error::msg)?;
+                            writer
+                                .write_event(Event::Text(BytesText::new(text)))
+                                .map_err(anyhow::Error::msg)?;
+                            writer
+                                .write_event(Event::End(BytesEnd::new(tag_name.clone())))
+                                .map_err(anyhow::Error::msg)?;
+                        }
+                    }
+                } else {
+                    writer
+                        .write_event(Event::End(element))
+                        .map_err(anyhow::Error::msg)?;
+                }
+            }
+
+            Ok(Event::Text(text)) => {
+                if let Some(ref mut pending_element) = pending {
+                    pending_element
+                        .inner_text
+                        .push_str(&String::from_utf8_lossy(&text));
+                } else {
+                    writer
+                        .write_event(Event::Text(text))
+                        .map_err(anyhow::Error::msg)?;
+                }
+            }
+
+            Ok(other_event) => {
+                if pending.is_none() {
+                    writer
+                        .write_event(other_event)
+                        .map_err(anyhow::Error::msg)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Lines from the AppImage community excludelist of libraries assumed present on all hosts.
 #[cfg(target_os = "linux")]
 const APPIMAGE_EXCLUDELIST: &str = include_str!("appimage-excludelist");
@@ -365,12 +574,68 @@ fn parse_icon_directory_area(name: &str) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_icon_directory_area;
+    use super::{copy_metainfo_with_localizations, parse_icon_directory_area};
+    use crate::bundle::localization::{LinuxDesktopLocale, LinuxDesktopLocalizations};
+    use std::collections::HashMap;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn parse_icon_dir_area_basic() {
         assert_eq!(parse_icon_directory_area("256x256"), Some(65536));
         assert_eq!(parse_icon_directory_area("128x128@2x"), Some(16384));
         assert_eq!(parse_icon_directory_area("scalable"), None);
+    }
+
+    #[test]
+    fn metainfo_passthrough_without_localizations() {
+        let source = NamedTempFile::new().unwrap();
+        std::fs::write(
+            source.path(),
+            r#"<?xml version="1.0"?><component><name>My App</name></component>"#,
+        )
+        .unwrap();
+        let destination = NamedTempFile::new().unwrap();
+        copy_metainfo_with_localizations(source.path(), destination.path(), None).unwrap();
+        let output = std::fs::read_to_string(destination.path()).unwrap();
+        assert!(output.contains("<name>My App</name>"));
+    }
+
+    #[test]
+    fn metainfo_injects_xml_lang_siblings() {
+        let source = NamedTempFile::new().unwrap();
+        std::fs::write(
+            source.path(),
+            r#"<?xml version="1.0"?><component><name trkey="Name">My App</name></component>"#,
+        )
+        .unwrap();
+        let destination = NamedTempFile::new().unwrap();
+
+        let mut locale_map = HashMap::new();
+        locale_map.insert(
+            "fr".to_string(),
+            LinuxDesktopLocale {
+                name: Some("Mon App".to_string()),
+                comment: None,
+                generic_name: None,
+                keywords: None,
+                icon: None,
+            },
+        );
+        let localizations = LinuxDesktopLocalizations::new(&locale_map);
+        copy_metainfo_with_localizations(source.path(), destination.path(), Some(&localizations))
+            .unwrap();
+
+        let output = std::fs::read_to_string(destination.path()).unwrap();
+        // Base element is present without trkey.
+        assert!(
+            output.contains("<name>My App</name>")
+                || output.contains("<name>\nMy App\n</name>")
+                || output.contains("My App")
+        );
+        // Localized sibling is present.
+        assert!(output.contains("xml:lang=\"fr\""));
+        assert!(output.contains("Mon App"));
+        // trkey attribute must not appear in output.
+        assert!(!output.contains("trkey"));
     }
 }
