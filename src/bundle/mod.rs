@@ -2,7 +2,7 @@ mod category;
 mod common;
 mod dmg_bundle;
 #[cfg(unix)]
-mod dmg_layout;
+mod dmg_finder;
 mod ios_bundle;
 mod linux;
 mod msi_bundle;

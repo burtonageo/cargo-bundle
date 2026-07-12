@@ -117,7 +117,7 @@ fn populate_disk_image(
         std::os::unix::fs::symlink("/Applications", mount_point.join("Applications"))
             .context("Failed to create /Applications symbolic link")?;
 
-        super::dmg_layout::decorate_volume(settings, mount_point, application_name)?;
+        super::dmg_finder::decorate_volume(settings, mount_point, application_name)?;
     }
 
     Ok(())
@@ -193,7 +193,7 @@ fn parse_mount_point(standard_output: &[u8]) -> crate::Result<PathBuf> {
 
     let mount_point = text_output.lines().rev().find_map(|line| {
         line.split('\t')
-            .last()
+            .next_back()
             .map(str::trim)
             .filter(|path| path.starts_with("/Volumes/"))
     });
