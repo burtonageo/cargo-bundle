@@ -101,16 +101,15 @@ impl<'a> LinuxDesktopLocalizations<'a> {
                 .is_some_and(|name| !name.is_empty())
         });
 
-        if has_localized_generic {
-            if let Some(fallback_name) =
+        if has_localized_generic
+            && let Some(fallback_name) =
                 self.fallback_string(|locale_data| locale_data.generic_name.as_deref())
-            {
-                let _ = writeln!(
-                    output_buffer,
-                    "GenericName={}",
-                    escape_desktop_value(fallback_name)
-                );
-            }
+        {
+            let _ = writeln!(
+                output_buffer,
+                "GenericName={}",
+                escape_desktop_value(fallback_name)
+            );
         }
     }
 
@@ -120,14 +119,12 @@ impl<'a> LinuxDesktopLocalizations<'a> {
             .values()
             .any(|locale_data| locale_data.keywords.is_some());
 
-        if has_localized_keywords {
-            if let Some(fallback_keywords) = self.fallback_keywords() {
-                let _ = writeln!(
-                    output_buffer,
-                    "Keywords={}",
-                    format_keywords_value(fallback_keywords)
-                );
-            }
+        if has_localized_keywords && let Some(fallback_keywords) = self.fallback_keywords() {
+            let _ = writeln!(
+                output_buffer,
+                "Keywords={}",
+                format_keywords_value(fallback_keywords)
+            );
         }
     }
 
