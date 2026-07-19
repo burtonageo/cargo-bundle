@@ -105,6 +105,59 @@ These settings are used only when bundling Linux compatible packages (currently 
   `linux_exec_args = "%f"` then the Exec filed will be `Exec=my_program %f`. Find out more from the
   [specification](https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#exec-variables)
 * `linux_use_terminal`: A boolean variable indicating the app is a console app or a gui app, default it's set to false.
+* `linux_localizations`: Per-locale translations for FreeDesktop `.desktop` entry fields.
+  Mirrors the shape of `osx_localizations`: each sub-table is a locale code
+  (`fr`, `de`, `pt_BR`, `zh_CN`, …) containing optional FreeDesktop
+  [localestring](https://specifications.freedesktop.org/desktop-entry-spec/latest/recognized-keys.html)
+  keys. Supported keys:
+
+  * `Name` -- translated application name (`Name[fr]=…`)
+  * `GenericName` -- generic type name, e.g. “Web Browser”
+  * `Comment` -- short description / tooltip
+  * `Keywords` -- search keywords; either a semicolon-separated string
+    (`"outil;utilitaire"`) or a TOML list (`["outil", "utilitaire"]`), both
+    emitted with a trailing `;` per the Desktop Entry Spec
+  * `Icon` — locale-specific icon name (`Icon[locale]=…`; rarely needed)
+
+  Locale codes may include an encoding part (`fr.UTF-8`); it is stripped when
+  rendering, since desktop files are always UTF-8.
+
+  Unlocalized `Name` and `Comment` still come from `name` / `short_description`
+  (or the package description). If only localized `GenericName` / `Keywords`
+  are provided, the unlocalized base value is taken from the `C` or `en`
+  locale when present, otherwise from the first locale in sorted order
+  (FreeDesktop requires an unlocalized key whenever any `Key[locale]` is
+  present).
+
+  Example:
+
+  ```toml
+  [package.metadata.bundle.linux_localizations.fr]
+  Name = "Mon App"
+  Comment = "Une description"
+  GenericName = "Utilitaire"
+  Keywords = ["outil", "utilitaire"]
+
+  [package.metadata.bundle.linux_localizations.de]
+  Name = "Meine App"
+  Comment = "Eine Beschreibung"
+  Keywords = "werkzeug;dienstprogramm"
+  ```
+* `linux_startup_wm_class`: [OPTIONAL] Value for the `StartupWMClass` key of the `.desktop`
+  file, used by desktop environments to match running windows to the launcher entry.
+* `linux_desktop_actions`: [OPTIONAL] Additional application actions (e.g. "New Window")
+  shown in launcher context menus, emitted as `[Desktop Action <id>]` groups. Each sub-table
+  key is an action id; `Name` is required, `Exec` defaults to the app binary, `Icon` and
+  per-locale `NameLocalized` are optional:
+
+  ```toml
+  [package.metadata.bundle.linux_desktop_actions.new-window]
+  Name = "New Window"
+  Exec = "myapp --new-window"
+
+  [package.metadata.bundle.linux_desktop_actions.new-window.NameLocalized]
+  fr = "Nouvelle fenêtre"
+  ```
 
 ### Debian-specific settings
 

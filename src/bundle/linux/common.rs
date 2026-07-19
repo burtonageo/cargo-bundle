@@ -1,55 +1,13 @@
-use crate::bundle::{Settings, common};
-use image::GenericImageView;
+//! Shared Linux packaging utilities (archives, checksums, small file helpers).
+
+use crate::bundle::common;
 use libflate::gzip;
 use md5::Digest;
-use std::collections::BTreeSet;
-use std::ffi::OsStr;
 use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-
-/// Generate the application desktop file and store it under the `data_dir`.
-pub fn generate_desktop_file(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
-    let bin_name = settings.binary_name();
-    let desktop_file_name = format!("{bin_name}.desktop");
-    let desktop_file_path = data_dir
-        .join("usr/share/applications")
-        .join(desktop_file_name);
-    let file = &mut common::create_file(&desktop_file_path)?;
-    let mime_types = settings
-        .linux_mime_types()
-        .iter()
-        .fold("".to_owned(), |acc, s| format!("{acc}{s};"));
-    // For more information about the format of this file, see
-    // https://developer.gnome.org/integration-guide/stable/desktop-files.html.en
-    writeln!(file, "[Desktop Entry]")?;
-    writeln!(file, "Encoding=UTF-8")?;
-    if let Some(category) = settings.app_category() {
-        writeln!(file, "Categories={}", category.gnome_desktop_categories())?;
-    }
-    if !settings.short_description().is_empty() {
-        writeln!(file, "Comment={}", settings.short_description())?;
-    }
-    let exec = match settings.linux_exec_args() {
-        Some(args) => format!("{bin_name} {args}"),
-        None => bin_name.to_owned(),
-    };
-    writeln!(file, "Exec={exec}")?;
-    writeln!(file, "Icon={bin_name}")?;
-    writeln!(file, "Name={}", settings.bundle_name())?;
-    writeln!(
-        file,
-        "Terminal={}",
-        settings.linux_use_terminal().unwrap_or(false)
-    )?;
-    writeln!(file, "Type=Application")?;
-    writeln!(file, "MimeType={mime_types}")?;
-    // The `Version` field is omitted on pupose. See `generate_control_file` for specifying
-    // the application version.
-    Ok(())
-}
 
 /// Creates a `.tar.gz` file from the given directory (placing the new file
 /// within the given directory's parent directory), then deletes the original
@@ -104,120 +62,6 @@ pub fn total_dir_size(dir: &Path) -> crate::Result<u64> {
         total += entry?.metadata()?.len();
     }
     Ok(total)
-}
-
-fn get_dest_path<'a>(
-    width: u32,
-    height: u32,
-    is_high_density: bool,
-    base_dir: &'a Path,
-    binary_name: &'a str,
-) -> PathBuf {
-    Path::join(
-        base_dir,
-        format!(
-            "{}x{}{}/apps/{}.png",
-            width,
-            height,
-            if is_high_density { "@2x" } else { "" },
-            binary_name
-        ),
-    )
-}
-
-fn generate_icon_files_png(
-    icon_path: &PathBuf,
-    base_dir: &Path,
-    binary_name: &str,
-    mut sizes: BTreeSet<(u32, u32, bool)>,
-) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
-    let img = image::ImageReader::open(icon_path)?
-        .with_guessed_format()?
-        .decode()?;
-    let (width, height) = img.dimensions();
-    let is_high_density = common::is_retina(icon_path);
-
-    if !sizes.contains(&(width, height, is_high_density)) {
-        sizes.insert((width, height, is_high_density));
-        let dest_path = get_dest_path(width, height, is_high_density, base_dir, binary_name);
-        common::copy_file(icon_path, &dest_path)?;
-    }
-
-    Ok(sizes.to_owned())
-}
-
-fn generate_icon_files_non_png(
-    icon_path: &PathBuf,
-    base_dir: &Path,
-    binary_name: &str,
-    mut sizes: BTreeSet<(u32, u32, bool)>,
-) -> crate::Result<BTreeSet<(u32, u32, bool)>> {
-    if icon_path.extension() == Some(OsStr::new("icns")) {
-        let icon_family = icns::IconFamily::read(File::open(icon_path)?)?;
-        for icon_type in icon_family.available_icons() {
-            let width = icon_type.screen_width();
-            let height = icon_type.screen_height();
-            let is_high_density = icon_type.pixel_density() > 1;
-
-            if !sizes.contains(&(width, height, is_high_density)) {
-                sizes.insert((width, height, is_high_density));
-                let icon = icon_family.get_icon_with_type(icon_type)?;
-                let dest_path =
-                    get_dest_path(width, height, is_high_density, base_dir, binary_name);
-                icon.write_png(common::create_file(&dest_path)?)?;
-            }
-        }
-    } else {
-        let icon = image::open(icon_path)?;
-        let (width, height) = icon.dimensions();
-        let is_high_density = common::is_retina(icon_path);
-
-        if !sizes.contains(&(width, height, is_high_density)) {
-            sizes.insert((width, height, is_high_density));
-            let dest_path = get_dest_path(width, height, is_high_density, base_dir, binary_name);
-            let mut file = common::create_file(&dest_path)?;
-            icon.write_to(&mut file, image::ImageFormat::Png)?;
-        }
-    }
-
-    Ok(sizes.to_owned())
-}
-
-/// Generate the icon files and store them under the `data_dir`.
-pub fn generate_icon_files(settings: &Settings, data_dir: &Path) -> crate::Result<()> {
-    let base_dir = data_dir.join("usr/share/icons/hicolor");
-
-    let mut sizes: BTreeSet<(u32, u32, bool)> = BTreeSet::new();
-
-    for icon_path in settings.icon_files() {
-        let icon_path = icon_path?;
-        if icon_path.extension() == Some(OsStr::new("svg")) {
-            let scalable_dir = base_dir.join("scalable/apps");
-            std::fs::create_dir_all(&scalable_dir)?;
-            let dest_path = scalable_dir.join(format!("{}.svg", settings.binary_name()));
-            common::copy_file(&icon_path, &dest_path)?;
-        } else if icon_path.extension() == Some(OsStr::new("png")) {
-            let new_sizes = generate_icon_files_png(
-                &icon_path,
-                &base_dir,
-                settings.binary_name(),
-                sizes.clone(),
-            )
-            .unwrap();
-            sizes.append(&mut new_sizes.to_owned())
-        } else {
-            let new_sizes = generate_icon_files_non_png(
-                &icon_path,
-                &base_dir,
-                settings.binary_name(),
-                sizes.clone(),
-            )
-            .unwrap();
-            sizes.append(&mut new_sizes.to_owned())
-        }
-    }
-
-    Ok(())
 }
 
 /// Compute the md5 hash of the given file.

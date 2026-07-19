@@ -3,6 +3,7 @@ mod common;
 mod dmg_bundle;
 mod ios_bundle;
 mod linux;
+mod localization;
 mod msi_bundle;
 mod osx_bundle;
 mod settings;
