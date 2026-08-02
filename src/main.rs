@@ -53,9 +53,10 @@ pub struct Cli {
     #[arg(long, value_name = "NAME", conflicts_with = "release")]
     pub profile: Option<String>,
 
-    /// Build a bundle for the target triple
+    /// Build a bundle for the target triple. May be repeated to combine
+    /// several architectures into a universal binary (macOS only).
     #[arg(short, long, value_name = "TRIPLE")]
-    pub target: Option<String>,
+    pub target: Vec<String>,
 
     /// Set crate features for the bundle. Eg: `--features "f1 f2"`
     #[arg(long, value_name = "FEATURES")]
@@ -75,15 +76,31 @@ pub struct Cli {
 }
 
 /// Runs `cargo build` to make sure the binary file is up-to-date.
+///
+/// When several target triples were requested, builds each one and then
+/// combines the resulting binaries into a universal binary with `lipo`.
 fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
     if std::env::var("CARGO_BUNDLE_SKIP_BUILD").is_ok() {
         return Ok(());
     }
 
+    let mut triples: Vec<Option<&str>> = settings.target_triples().map(Some).collect();
+    if triples.is_empty() {
+        triples.push(None);
+    }
+    for triple in triples {
+        build_target(settings, triple)?;
+    }
+    combine_universal_binary(settings)?;
+    Ok(())
+}
+
+/// Runs a single `cargo build`, optionally for an explicit target triple.
+fn build_target(settings: &Settings, triple: Option<&str>) -> crate::Result<()> {
     let mut cargo =
         process::Command::new(env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo")));
     cargo.arg("build");
-    if let Some(triple) = settings.target_triple() {
+    if let Some(triple) = triple {
         cargo.arg(format!("--target={triple}"));
     }
     if let Some(features) = settings.features() {
@@ -120,6 +137,32 @@ fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
             "Result of `cargo build` operation was unsuccessful: {}",
             status
         );
+    }
+    Ok(())
+}
+
+/// Merges the per-target binaries into one universal binary with `lipo`.
+/// Does nothing when fewer than two target triples were requested.
+fn combine_universal_binary(settings: &Settings) -> crate::Result<()> {
+    let input_binary_paths = settings.universal_input_binary_paths();
+    if input_binary_paths.is_empty() {
+        return Ok(());
+    }
+    let output_binary_path = settings.binary_path();
+    if let Some(parent) = output_binary_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let status = process::Command::new("lipo")
+        .arg("-create")
+        .arg("-output")
+        .arg(output_binary_path)
+        .args(input_binary_paths)
+        .status()
+        .map_err(|error| {
+            anyhow::anyhow!("Failed to run `lipo` (universal binaries require macOS): {error}")
+        })?;
+    if !status.success() {
+        anyhow::bail!("Result of `lipo` operation was unsuccessful: {}", status);
     }
     Ok(())
 }

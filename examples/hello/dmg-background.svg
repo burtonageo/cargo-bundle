@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300">
+  <rect width="500" height="300" fill="#e8ecf4"/>
+  <text x="250" y="60" text-anchor="middle" font-family="Helvetica" font-size="24" fill="#333">
+    Drag hello into Applications
+  </text>
+  <rect id="app" x="80" y="120" width="96" height="96" fill="none"/>
+  <rect id="applications" x="320" y="120" width="96" height="96" fill="none"/>
+  <path d="M200 168 h80 m-16 -12 l16 12 l-16 12" stroke="#666" stroke-width="4" fill="none"/>
+</svg>
