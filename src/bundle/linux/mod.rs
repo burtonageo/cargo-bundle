@@ -1,4 +1,4 @@
-pub(crate) mod appimage_bundle;
+pub(crate) mod appimage;
 mod common;
 pub(crate) mod deb_bundle;
 mod desktop;

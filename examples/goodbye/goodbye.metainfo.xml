@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>io.github.burtonageo.cargo-bundle.goodbye</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name trkey="Name">Goodbye</name>
+  <summary trkey="Comment">An example CLI application showing PNG icon bundling</summary>
+  <description>
+    <p>
+      A simple command-line application that demonstrates bundling a Rust
+      binary with cargo-bundle, including localized AppStream metadata.
+    </p>
+  </description>
+  <provides>
+    <binary>goodbye</binary>
+  </provides>
+</component>

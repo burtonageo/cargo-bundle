@@ -19,6 +19,15 @@ long_description = """
 A simple command-line application that demonstrates bundling a Rust binary
 with PNG icons using cargo-bundle.
 """
+appimage_metainfo_path = "examples/goodbye/goodbye.metainfo.xml"
+
+[package.metadata.bundle.example.goodbye.linux_localizations.fr]
+Name = "Au revoir"
+Comment = "Une application CLI d'exemple montrant l'empaquetage d'icônes PNG"
+
+[package.metadata.bundle.example.goodbye.linux_localizations.de]
+Name = "Auf Wiedersehen"
+Comment = "Eine Beispiel-CLI-Anwendung für das Bündeln von PNG-Symbolen"
 
 [package.metadata.bundle.example.hello]
 name = "hello"
@@ -33,9 +42,12 @@ a title bar.  It serves as an example of an application that
 can be bundled with cargo-bundle, as well as a test-case for
 cargo-bundle's support for bundling crate examples.
 """
+[workspace]
+
 [dependencies]
 anyhow = "1.0.102"
 ar = "0.9.0"
+backhand = { version = "0.25", default-features = false, features = ["gzip"] }
 cab = "0.6.0"
 cargo_metadata = "0.23.1"
 chrono = "0.4.44"
@@ -44,6 +56,7 @@ dirs = "6.0.0"
 ds_parser = "0.2.1"
 glob = "0.3.3"
 goblin = "0.10"
+ld-so-cache = "0.1.0"
 icns = "0.4.0"
 image = { version = "0.25.10", features = ["png"] }
 libflate = "2.2.1"
