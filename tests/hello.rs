@@ -75,3 +75,39 @@ fn deb() {
         svg_path
     );
 }
+
+#[test]
+fn deb_uses_prebuilt_binary_without_running_cargo_build() {
+    common::setup_example_binary("hello");
+
+    let root = common::project_root();
+    let binary = root.join("target/debug/examples/hello");
+    let output = Command::new(common::cargo_bundle_bin())
+        .args([
+            "bundle",
+            "--example",
+            "hello",
+            "--format",
+            "deb",
+            // This target is valid package metadata, but is not installed on
+            // the test host. A cargo build would fail before packaging.
+            "--target",
+            "aarch64-unknown-linux-gnu",
+            "--binary-path",
+        ])
+        .arg(&binary)
+        .current_dir(&root)
+        .output()
+        .expect("Failed to execute cargo-bundle");
+
+    assert!(
+        output.status.success(),
+        "cargo-bundle failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bundle_paths = common::parse_bundle_paths(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(bundle_paths.len(), 1, "Expected exactly one bundle path");
+    assert!(bundle_paths[0].exists(), "Debian package was not created");
+}

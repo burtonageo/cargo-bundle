@@ -122,7 +122,55 @@ pub struct DesktopAction {
     pub name_localized: Option<HashMap<String, String>>, // local code to translation
 }
 
+/// Windows Authenticode signing configuration. This is available only with
+/// cargo-bundle's `windows-signing` feature because its implementation links
+/// GPL-3.0-or-later code.
+#[derive(Clone, Debug, serde::Deserialize)]
+#[cfg_attr(not(feature = "windows-signing"), allow(dead_code))]
+pub struct WindowsSigningSettings {
+    /// Path to a PKCS#12 (`.p12`/`.pfx`) signing certificate.
+    pub certificate_path: PathBuf,
+    /// Name of the environment variable containing the certificate password.
+    #[serde(default)]
+    pub certificate_password_env: Option<String>,
+    /// Optional RFC 3161 timestamp service URL.
+    #[serde(default)]
+    pub timestamp_url: Option<String>,
+}
+
+/// Keyless Sigstore configuration for Linux release artifacts.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct LinuxSigningSettings {
+    /// Environment variable containing an OIDC token minted for the
+    /// `sigstore` audience.
+    pub identity_token_env: String,
+}
+
 #[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LinuxSettings {
+    mime_types: Option<Vec<String>>,
+    exec_args: Option<String>,
+    use_terminal: Option<bool>,
+    localizations: Option<HashMap<String, LinuxDesktopLocale>>,
+    startup_wm_class: Option<String>,
+    desktop_actions: Option<HashMap<String, DesktopAction>>,
+}
+
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OsxSettings {
+    frameworks: Option<Vec<String>>,
+    plugins: Option<Vec<String>>,
+    minimum_system_version: Option<String>,
+    url_schemes: Option<Vec<String>>,
+    info_plist_exts: Option<Vec<String>>,
+    localizations: Option<HashMap<String, HashMap<String, String>>>,
+    dmg_background: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct BundleSettings {
     // General settings:
     name: Option<String>,
@@ -134,36 +182,31 @@ struct BundleSettings {
     category: Option<AppCategory>,
     short_description: Option<String>,
     long_description: Option<String>,
-    // OS-specific settings:
-    linux_mime_types: Option<Vec<String>>,
-    linux_exec_args: Option<String>,
-    linux_use_terminal: Option<bool>,
-    /// Locale code → FreeDesktop localizable strings for `.desktop` files.
-    /// Mirrors `osx_localizations` shape: `[linux_localizations.fr] Name = "…"`.
-    /// Wrapped as [`LinuxDesktopLocalizations`] via [`Settings::linux_localizations`].
-    linux_localizations: Option<HashMap<String, LinuxDesktopLocale>>,
-    /// Local path to a type-2 AppImage runtime ELF (offline / pinned builds).
-    appimage_runtime_path: Option<String>,
-    /// Override URL used to download the type-2 AppImage runtime.
-    appimage_runtime_url: Option<String>,
     /// Path to an AppStream metainfo XML file to bundle in the AppImage.
     appimage_metainfo_path: Option<String>,
-    /// SquashFS compression codec: `"gzip"` (default) or `"zstd"`.
+    /// SquashFS compression codec: `"gzip"` (default), `"lz4"`, `"lzo"`, or `"none"`.
     appimage_compression: Option<String>,
-    /// `StartupWMClass` value for the `.desktop` entry (Linux, all formats).
-    linux_startup_wm_class: Option<String>,
-    /// Named desktop actions emitted as `[Desktop Action <id>]` groups.
-    linux_desktop_actions: Option<HashMap<String, DesktopAction>>,
     deb_depends: Option<Vec<String>>,
-    osx_frameworks: Option<Vec<String>>,
-    osx_plugins: Option<Vec<String>>,
-    osx_minimum_system_version: Option<String>,
-    osx_url_schemes: Option<Vec<String>>,
-    osx_info_plist_exts: Option<Vec<String>>,
-    /// Locale code → InfoPlist key/value strings for macOS `.lproj` files.
-    /// Wrapped as [`OsxLocalizations`] via [`Settings::osx_localizations`].
-    osx_localizations: Option<HashMap<String, HashMap<String, String>>>,
-    osx_dmg_background: Option<PathBuf>,
+    /// Linux-only packaging configuration.
+    linux: Option<LinuxSettings>,
+    /// macOS-only packaging configuration.
+    #[serde(alias = "macos")]
+    osx: Option<OsxSettings>,
+    /// PKCS#12 certificate used by the pure-Rust Apple signing backend.
+    /// The bundle is left unsigned when this is not configured.
+    apple_signing_p12: Option<PathBuf>,
+    /// Environment variable containing the PKCS#12 certificate password.
+    apple_signing_password_env: Option<String>,
+    /// Optional RFC 3161 timestamp service URL for Apple code signatures.
+    apple_signing_timestamp_url: Option<String>,
+    /// Optional entitlements plist embedded in Apple code signatures.
+    apple_signing_entitlements: Option<PathBuf>,
+    /// Enable the hardened runtime in Apple code signatures.
+    apple_signing_hardened_runtime: Option<bool>,
+    /// Optional Authenticode configuration for `.exe` and `.msi` output.
+    windows_signing: Option<WindowsSigningSettings>,
+    /// Optional keyless Sigstore configuration for Linux release artifacts.
+    linux_signing: Option<LinuxSigningSettings>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -182,6 +225,7 @@ pub struct Settings {
     profile: String,
     all_features: bool,
     no_default_features: bool,
+    prebuilt_binary: bool,
     binary_path: PathBuf,
     /// Per-target binaries that `lipo` combines into `binary_path` when more
     /// than one target triple was requested; empty otherwise.
@@ -229,7 +273,7 @@ impl Settings {
         let cargo_settings = load_metadata(&current_dir)?;
         let package = Settings::find_bundle_package(cli.package.as_deref(), &cargo_settings)?;
         let bundle_settings = Settings::bundle_settings_of_package(package)?;
-        let workspace_dir = Settings::get_workspace_dir(current_dir);
+        let workspace_dir = Settings::get_workspace_dir(current_dir.clone());
         // With multiple targets the per-target binaries are combined into a
         // universal binary living under its own `universal` directory.
         let target_dir_name = match targets.as_slice() {
@@ -267,8 +311,24 @@ impl Settings {
             _ => "",
         };
         binary_name += binary_extension;
-        let binary_path = target_dir.join(&binary_name);
-        let universal_input_binary_paths = if targets.len() > 1 {
+        let prebuilt_binary = cli.binary_path.is_some();
+        let binary_path = if let Some(path) = &cli.binary_path {
+            let path = if path.is_absolute() {
+                path.clone()
+            } else {
+                current_dir.join(path)
+            };
+            let metadata = std::fs::metadata(&path).map_err(|error| {
+                anyhow::anyhow!("Failed to read prebuilt binary {path:?}: {error}")
+            })?;
+            if !metadata.is_file() {
+                anyhow::bail!("Prebuilt binary path is not a file: {path:?}");
+            }
+            path
+        } else {
+            target_dir.join(&binary_name)
+        };
+        let universal_input_binary_paths = if !prebuilt_binary && targets.len() > 1 {
             targets
                 .iter()
                 .map(|(triple, _)| {
@@ -293,6 +353,7 @@ impl Settings {
             profile,
             all_features,
             no_default_features,
+            prebuilt_binary,
             project_out_directory: target_dir,
             binary_path,
             universal_input_binary_paths,
@@ -420,6 +481,12 @@ impl Settings {
     /// Returns the path to the binary being bundled.
     pub fn binary_path(&self) -> &Path {
         &self.binary_path
+    }
+
+    /// Whether the executable was supplied with `--binary-path` rather than
+    /// being produced by cargo-bundle's own `cargo build` invocation.
+    pub fn uses_prebuilt_binary(&self) -> bool {
+        self.prebuilt_binary
     }
 
     /// If a specific package type was specified by the command-line, returns
@@ -597,33 +664,25 @@ impl Settings {
     }
 
     pub fn linux_mime_types(&self) -> &[String] {
-        match self.bundle_settings.linux_mime_types {
-            Some(ref mime_types) => mime_types.as_slice(),
-            None => &[],
-        }
+        self.bundle_settings
+            .linux
+            .as_ref()
+            .and_then(|linux| linux.mime_types.as_deref())
+            .unwrap_or_default()
     }
 
     pub fn linux_use_terminal(&self) -> Option<bool> {
-        self.bundle_settings.linux_use_terminal
+        self.bundle_settings
+            .linux
+            .as_ref()
+            .and_then(|linux| linux.use_terminal)
     }
 
     pub fn linux_exec_args(&self) -> Option<&str> {
-        self.bundle_settings.linux_exec_args.as_deref()
-    }
-
-    /// Optional local path to a type-2 AppImage runtime binary. When set,
-    /// `cargo-bundle` will not download a runtime from the network.
-    pub fn appimage_runtime_path(&self) -> Option<&Path> {
         self.bundle_settings
-            .appimage_runtime_path
-            .as_deref()
-            .map(Path::new)
-    }
-
-    /// Optional override URL for downloading the type-2 AppImage runtime.
-    /// Defaults to the official AppImage continuous release for the target arch.
-    pub fn appimage_runtime_url(&self) -> Option<&str> {
-        self.bundle_settings.appimage_runtime_url.as_deref()
+            .linux
+            .as_ref()
+            .and_then(|linux| linux.exec_args.as_deref())
     }
 
     /// Path to an AppStream metainfo XML to bundle in the AppImage.
@@ -631,52 +690,68 @@ impl Settings {
         self.bundle_settings.appimage_metainfo_path.as_deref()
     }
 
-    /// SquashFS compression codec: `"gzip"` (default) or `"zstd"`.
+    /// SquashFS compression codec: `"gzip"` (default), `"lz4"`, `"lzo"`, or `"none"`.
     pub fn appimage_compression(&self) -> Option<&str> {
         self.bundle_settings.appimage_compression.as_deref()
     }
 
     /// `StartupWMClass` for the `.desktop` entry.
     pub fn linux_startup_wm_class(&self) -> Option<&str> {
-        self.bundle_settings.linux_startup_wm_class.as_deref()
+        self.bundle_settings
+            .linux
+            .as_ref()
+            .and_then(|linux| linux.startup_wm_class.as_deref())
     }
 
     /// Desktop actions to emit as `[Desktop Action <id>]` groups.
     pub fn linux_desktop_actions(&self) -> Option<&HashMap<String, DesktopAction>> {
-        self.bundle_settings.linux_desktop_actions.as_ref()
+        self.bundle_settings
+            .linux
+            .as_ref()
+            .and_then(|linux| linux.desktop_actions.as_ref())
     }
 
     pub fn osx_frameworks(&self) -> &[String] {
-        match self.bundle_settings.osx_frameworks {
-            Some(ref frameworks) => frameworks.as_slice(),
-            None => &[],
-        }
+        self.bundle_settings
+            .osx
+            .as_ref()
+            .and_then(|osx| osx.frameworks.as_deref())
+            .unwrap_or_default()
     }
 
     pub fn osx_plugins(&self) -> &[String] {
-        match self.bundle_settings.osx_plugins {
-            Some(ref plugins) => plugins.as_slice(),
-            None => &[],
-        }
+        self.bundle_settings
+            .osx
+            .as_ref()
+            .and_then(|osx| osx.plugins.as_deref())
+            .unwrap_or_default()
     }
 
     pub fn osx_minimum_system_version(&self) -> Option<&str> {
-        self.bundle_settings.osx_minimum_system_version.as_deref()
+        self.bundle_settings
+            .osx
+            .as_ref()
+            .and_then(|osx| osx.minimum_system_version.as_deref())
     }
 
     pub fn osx_url_schemes(&self) -> &[String] {
-        match self.bundle_settings.osx_url_schemes {
-            Some(ref urlosx_url_schemes) => urlosx_url_schemes.as_slice(),
-            None => &[],
-        }
+        self.bundle_settings
+            .osx
+            .as_ref()
+            .and_then(|osx| osx.url_schemes.as_deref())
+            .unwrap_or_default()
     }
 
     /// Returns an iterator over the plist files for this bundle
     pub fn osx_info_plist_exts(&self) -> ResourcePaths<'_> {
-        match self.bundle_settings.osx_info_plist_exts {
-            Some(ref paths) => ResourcePaths::new(paths.as_slice(), false),
-            None => ResourcePaths::new(&[], false),
-        }
+        ResourcePaths::new(
+            self.bundle_settings
+                .osx
+                .as_ref()
+                .and_then(|osx| osx.info_plist_exts.as_deref())
+                .unwrap_or_default(),
+            false,
+        )
     }
 
     /// macOS localizations as an [`OsxLocalizations`] wrapper.
@@ -684,8 +759,9 @@ impl Settings {
     /// Writes `*.lproj/InfoPlist.strings` under the Resources directory.
     pub fn osx_localizations(&self) -> Option<OsxLocalizations<'_>> {
         self.bundle_settings
-            .osx_localizations
+            .osx
             .as_ref()
+            .and_then(|osx| osx.localizations.as_ref())
             .map(OsxLocalizations::new)
     }
 
@@ -696,8 +772,9 @@ impl Settings {
     /// [`bundle_name`](Self::bundle_name) / [`short_description`](Self::short_description).
     pub fn linux_localizations(&self) -> Option<LinuxDesktopLocalizations<'_>> {
         self.bundle_settings
-            .linux_localizations
+            .linux
             .as_ref()
+            .and_then(|linux| linux.localizations.as_ref())
             .map(LinuxDesktopLocalizations::new)
     }
 
@@ -705,7 +782,47 @@ impl Settings {
     /// contain elements with ids `app` and `applications`, whose centers
     /// become the icon positions.
     pub fn osx_dmg_background(&self) -> Option<&Path> {
-        self.bundle_settings.osx_dmg_background.as_deref()
+        self.bundle_settings
+            .osx
+            .as_ref()
+            .and_then(|osx| osx.dmg_background.as_deref())
+    }
+
+    /// PKCS#12 certificate used by the pure-Rust Apple signing backend.
+    pub fn apple_signing_p12(&self) -> Option<&Path> {
+        self.bundle_settings.apple_signing_p12.as_deref()
+    }
+
+    /// Environment variable containing the Apple PKCS#12 certificate password.
+    pub fn apple_signing_password_env(&self) -> Option<&str> {
+        self.bundle_settings.apple_signing_password_env.as_deref()
+    }
+
+    /// Optional RFC 3161 timestamp service URL for Apple code signatures.
+    pub fn apple_signing_timestamp_url(&self) -> Option<&str> {
+        self.bundle_settings.apple_signing_timestamp_url.as_deref()
+    }
+
+    /// Entitlements plist embedded in Apple code signatures.
+    pub fn apple_signing_entitlements(&self) -> Option<&Path> {
+        self.bundle_settings.apple_signing_entitlements.as_deref()
+    }
+
+    /// Whether to enable the hardened runtime during Apple code signing.
+    pub fn apple_signing_hardened_runtime(&self) -> bool {
+        self.bundle_settings
+            .apple_signing_hardened_runtime
+            .unwrap_or(false)
+    }
+
+    /// Authenticode configuration, when Windows signing has been requested.
+    pub fn windows_signing(&self) -> Option<&WindowsSigningSettings> {
+        self.bundle_settings.windows_signing.as_ref()
+    }
+
+    /// Keyless Sigstore configuration for Linux release artifacts.
+    pub fn linux_signing(&self) -> Option<&LinuxSigningSettings> {
+        self.bundle_settings.linux_signing.as_ref()
     }
 }
 
@@ -797,6 +914,7 @@ impl Iterator for ResourcePaths<'_> {
 mod tests {
     use super::{AppCategory, BundleSettings};
     use crate::bundle::localization::DesktopKeywords;
+    use std::path::PathBuf;
 
     #[test]
     fn parse_cargo_toml() {
@@ -826,6 +944,67 @@ mod tests {
                          simple application.\n"
                     .to_string()
             )
+        );
+    }
+
+    #[test]
+    fn platform_tables_are_typed() {
+        let bundle: BundleSettings = toml::from_str(
+            r#"
+                name = "Cross-platform name"
+                identifier = "com.example.shared"
+                resources = ["shared"]
+
+                [osx]
+                frameworks = ["WebKit.framework"]
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(bundle.name.as_deref(), Some("Cross-platform name"));
+        assert_eq!(
+            bundle.osx.unwrap().frameworks,
+            Some(vec!["WebKit.framework".into()])
+        );
+        assert!(toml::from_str::<BundleSettings>("frameworks = [\"WebKit.framework\"]").is_err());
+        assert!(
+            toml::from_str::<BundleSettings>("osx_frameworks = [\"WebKit.framework\"]").is_err()
+        );
+    }
+
+    #[test]
+    fn parses_signing_configuration() {
+        let bundle: BundleSettings = toml::from_str(
+            r#"
+                apple_signing_p12 = "certs/apple.p12"
+                apple_signing_password_env = "APPLE_SIGNING_PASSWORD"
+
+                [windows_signing]
+                certificate_path = "certs/windows.p12"
+                certificate_password_env = "WINDOWS_SIGNING_PASSWORD"
+
+                [linux_signing]
+                identity_token_env = "SIGSTORE_ID_TOKEN"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            bundle.apple_signing_p12,
+            Some(PathBuf::from("certs/apple.p12"))
+        );
+        assert_eq!(
+            bundle
+                .windows_signing
+                .as_ref()
+                .unwrap()
+                .certificate_password_env
+                .as_deref(),
+            Some("WINDOWS_SIGNING_PASSWORD")
+        );
+        assert_eq!(
+            bundle.linux_signing.as_ref().unwrap().identity_token_env,
+            "SIGSTORE_ID_TOKEN"
         );
     }
 
@@ -894,14 +1073,14 @@ mod tests {
     #[test]
     fn osx_localizations_parses_from_toml() {
         let toml_str = r#"
-            [osx_localizations.fr]
+            [osx.localizations.fr]
             CFBundleDisplayName = "Mon Application"
 
-            [osx_localizations.de]
+            [osx.localizations.de]
             CFBundleDisplayName = "Meine Anwendung"
         "#;
         let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
-        let locs = bundle.osx_localizations.unwrap();
+        let locs = bundle.osx.unwrap().localizations.unwrap();
         assert_eq!(locs["fr"]["CFBundleDisplayName"], "Mon Application");
         assert_eq!(locs["de"]["CFBundleDisplayName"], "Meine Anwendung");
     }
@@ -909,23 +1088,23 @@ mod tests {
     #[test]
     fn linux_localizations_parses_from_toml() {
         let toml_str = r#"
-            [linux_localizations.fr]
+            [linux.localizations.fr]
             Name = "Mon App"
             Comment = "Une description"
             GenericName = "Utilitaire"
             Keywords = ["outil", "utilitaire"]
 
-            [linux_localizations.de]
+            [linux.localizations.de]
             Name = "Meine App"
             Comment = "Eine Beschreibung"
             Keywords = "werkzeug;dienstprogramm"
 
-            [linux_localizations.pt_BR]
+            [linux.localizations.pt_BR]
             Name = "Meu App"
             Comment = "Uma descrição"
         "#;
         let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
-        let locs = bundle.linux_localizations.unwrap();
+        let locs = bundle.linux.unwrap().localizations.unwrap();
 
         assert_eq!(locs["fr"].name.as_deref(), Some("Mon App"));
         assert_eq!(locs["fr"].comment.as_deref(), Some("Une description"));
@@ -949,37 +1128,21 @@ mod tests {
     }
 
     #[test]
-    fn parse_appimage_runtime_settings() {
-        let toml_str = "\
-            name = \"AppImage App\"\n\
-            identifier = \"com.example.appimage\"\n\
-            appimage_runtime_path = \"/opt/runtimes/runtime-x86_64\"\n\
-            appimage_runtime_url = \"https://example.com/runtime-x86_64\"\n";
-        let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
-        assert_eq!(
-            bundle.appimage_runtime_path.as_deref(),
-            Some("/opt/runtimes/runtime-x86_64")
-        );
-        assert_eq!(
-            bundle.appimage_runtime_url.as_deref(),
-            Some("https://example.com/runtime-x86_64")
-        );
-    }
-
-    #[test]
     fn parse_appimage_feature_settings() {
         let toml_str = r#"
             name = "AppImage App"
             identifier = "com.example.appimage"
             appimage_metainfo_path = "assets/metainfo.xml"
-            appimage_compression = "zstd"
-            linux_startup_wm_class = "myapp"
+            appimage_compression = "lz4"
 
-            [linux_desktop_actions.new-window]
+            [linux]
+            startup_wm_class = "myapp"
+
+            [linux.desktop_actions.new-window]
             Name = "New Window"
             Exec = "myapp --new-window"
 
-            [linux_desktop_actions.new-window.NameLocalized]
+            [linux.desktop_actions.new-window.NameLocalized]
             fr = "Nouvelle fenetre"
         "#;
         let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
@@ -987,10 +1150,13 @@ mod tests {
             bundle.appimage_metainfo_path.as_deref(),
             Some("assets/metainfo.xml")
         );
-        assert_eq!(bundle.appimage_compression.as_deref(), Some("zstd"));
-        assert_eq!(bundle.linux_startup_wm_class.as_deref(), Some("myapp"));
+        assert_eq!(bundle.appimage_compression.as_deref(), Some("lz4"));
+        assert_eq!(
+            bundle.linux.as_ref().unwrap().startup_wm_class.as_deref(),
+            Some("myapp")
+        );
 
-        let actions = bundle.linux_desktop_actions.unwrap();
+        let actions = bundle.linux.unwrap().desktop_actions.unwrap();
         let action = &actions["new-window"];
         assert_eq!(action.name, "New Window");
         assert_eq!(action.exec.as_deref(), Some("myapp --new-window"));

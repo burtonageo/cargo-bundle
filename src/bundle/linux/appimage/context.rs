@@ -8,7 +8,6 @@ use std::path::PathBuf;
 
 /// Encapsulates all derived paths and configuration for the current build.
 pub(super) struct AppImageContext {
-    pub(super) architecture: &'static str,
     pub(super) package_directory: PathBuf,
     pub(super) package_path: PathBuf,
     pub(super) app_directory_path: PathBuf,
@@ -31,7 +30,6 @@ impl AppImageContext {
         let app_directory_path = package_directory.join("AppDir");
 
         Ok(Self {
-            architecture,
             package_directory,
             package_path,
             app_directory_path,

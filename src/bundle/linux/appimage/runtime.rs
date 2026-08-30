@@ -1,6 +1,6 @@
-//! Type-2 AppImage runtime fetch, validation, and disk cache.
+//! Type-2 AppImage runtime fetching, validation, and disk caching.
 
-use crate::bundle::{Settings, common};
+use crate::bundle::common;
 use anyhow::Context;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,20 +9,13 @@ use std::path::{Path, PathBuf};
 const DEFAULT_RUNTIME_URL_BASE: &str =
     "https://github.com/AppImage/type2-runtime/releases/download/continuous";
 
-/// ELF magic used to sanity-check downloaded / provided runtimes.
+/// ELF magic used to sanity-check downloaded runtimes.
 const ELF_MAGIC: &[u8; 4] = b"\x7fELF";
 
 /// Minimum plausible runtime size (bytes). Real type2 runtimes are ~700KB+.
 const MINIMUM_RUNTIME_SIZE: u64 = 64 * 1024;
 
-pub(super) fn fetch(settings: &Settings, architecture: &str) -> crate::Result<Vec<u8>> {
-    if let Some(path) = settings.appimage_runtime_path() {
-        let data = fs::read(path)
-            .with_context(|| format!("Failed to read appimage_runtime_path {path:?}"))?;
-        validate_bytes(&data, &path.display().to_string())?;
-        return Ok(data);
-    }
-
+pub(super) fn read(architecture: &str) -> crate::Result<Vec<u8>> {
     let cache_path = cache_path(architecture)?;
     if let Ok(data) = fs::read(&cache_path)
         && validate_bytes(&data, &cache_path.display().to_string()).is_ok()
@@ -31,23 +24,15 @@ pub(super) fn fetch(settings: &Settings, architecture: &str) -> crate::Result<Ve
     }
     let _ = fs::remove_file(&cache_path);
 
-    let url = settings
-        .appimage_runtime_url()
-        .map(String::from)
-        .unwrap_or_else(|| format!("{DEFAULT_RUNTIME_URL_BASE}/runtime-{architecture}"));
-
+    let url = format!("{DEFAULT_RUNTIME_URL_BASE}/runtime-{architecture}");
     let response = reqwest::blocking::get(&url)
         .with_context(|| format!("Failed to download AppImage type-2 runtime from {url}"))?;
-
     if !response.status().is_success() {
         anyhow::bail!(
-            "Failed to download runtime from {url}: HTTP {}. \
-             Check your network connection, or set appimage_runtime_path \
-             for offline builds.",
+            "Failed to download runtime from {url}: HTTP {}. Check your network connection.",
             response.status()
         );
     }
-
     let data = response
         .bytes()
         .with_context(|| format!("Failed to read runtime response from {url}"))?
@@ -55,7 +40,6 @@ pub(super) fn fetch(settings: &Settings, architecture: &str) -> crate::Result<Ve
 
     validate_bytes(&data, &url)?;
     cache_bytes(&cache_path, &data);
-
     Ok(data)
 }
 

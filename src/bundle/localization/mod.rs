@@ -3,10 +3,10 @@
 //! Cargo.toml stores locale tables as:
 //!
 //! ```toml
-//! [package.metadata.bundle.osx_localizations.fr]
+//! [package.metadata.bundle.osx.localizations.fr]
 //! CFBundleDisplayName = "Mon Application"
 //!
-//! [package.metadata.bundle.linux_localizations.fr]
+//! [package.metadata.bundle.linux.localizations.fr]
 //! Name = "Mon App"
 //! Comment = "Une description"
 //! ```

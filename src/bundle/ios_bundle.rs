@@ -9,6 +9,7 @@
 // explanation.
 
 use super::common;
+use super::signing;
 use crate::Settings;
 use anyhow::Context;
 use image::{self, GenericImageView};
@@ -48,6 +49,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let bin_path = bundle_dir.join(settings.binary_name());
     common::copy_file(settings.binary_path(), &bin_path)
         .with_context(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
+    signing::sign_apple_path(settings, &bundle_dir)?;
     Ok(vec![bundle_dir])
 }
 
