@@ -98,19 +98,36 @@ These settings apply to bundles for all (or most) OSes.
 
 note: `description` is also **required** in the `[package]` section.
 
+### Platform-specific settings
+
+Platform-specific settings belong in their platform sub-table. This keeps the
+metadata typed: for example, macOS frameworks cannot be declared in the main
+bundle table.
+
+```toml
+[package.metadata.bundle]
+name = "Example"
+identifier = "com.example.app"
+
+[package.metadata.bundle.osx]
+frameworks = ["WebKit.framework"]
+```
+
 ### Linux-specific settings
 
 These settings are used when bundling Linux packages (`deb`, `rpm`, `appimage`).
 
-* `linux_mime_types`: A list of strings which represent mime types. If present, these are assigned
+Declare these in `[package.metadata.bundle.linux]` using the concise names below.
+
+* `mime_types`: A list of strings which represent mime types. If present, these are assigned
   to the `MimeType` field of the .desktop file.
-* `linux_exec_args`: A single string which is inserted after the name of the binary in the `Exec`
+* `exec_args`: A single string which is inserted after the name of the binary in the `Exec`
   field in the `.desktop` file. For example if the binary is called `my_program` and
-  `linux_exec_args = "%f"` then the Exec filed will be `Exec=my_program %f`. Find out more from the
+  `exec_args = "%f"` then the Exec filed will be `Exec=my_program %f`. Find out more from the
   [specification](https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#exec-variables)
-* `linux_use_terminal`: A boolean variable indicating the app is a console app or a gui app, default it's set to false.
-* `linux_localizations`: Per-locale translations for FreeDesktop `.desktop` entry fields.
-  Mirrors the shape of `osx_localizations`: each sub-table is a locale code
+* `use_terminal`: A boolean variable indicating the app is a console app or a gui app, default it's set to false.
+* `localizations`: Per-locale translations for FreeDesktop `.desktop` entry fields.
+  Mirrors the shape of `osx.localizations`: each sub-table is a locale code
   (`fr`, `de`, `pt_BR`, `zh_CN`, …) containing optional FreeDesktop
   [localestring](https://specifications.freedesktop.org/desktop-entry-spec/latest/recognized-keys.html)
   keys. Supported keys:
@@ -136,30 +153,30 @@ These settings are used when bundling Linux packages (`deb`, `rpm`, `appimage`).
   Example:
 
   ```toml
-  [package.metadata.bundle.linux_localizations.fr]
+  [package.metadata.bundle.linux.localizations.fr]
   Name = "Mon App"
   Comment = "Une description"
   GenericName = "Utilitaire"
   Keywords = ["outil", "utilitaire"]
 
-  [package.metadata.bundle.linux_localizations.de]
+  [package.metadata.bundle.linux.localizations.de]
   Name = "Meine App"
   Comment = "Eine Beschreibung"
   Keywords = "werkzeug;dienstprogramm"
   ```
-* `linux_startup_wm_class`: [OPTIONAL] Value for the `StartupWMClass` key of the `.desktop`
+* `startup_wm_class`: [OPTIONAL] Value for the `StartupWMClass` key of the `.desktop`
   file, used by desktop environments to match running windows to the launcher entry.
-* `linux_desktop_actions`: [OPTIONAL] Additional application actions (e.g. "New Window")
+* `desktop_actions`: [OPTIONAL] Additional application actions (e.g. "New Window")
   shown in launcher context menus, emitted as `[Desktop Action <id>]` groups. Each sub-table
   key is an action id; `Name` is required, `Exec` defaults to the app binary, `Icon` and
   per-locale `NameLocalized` are optional:
 
   ```toml
-  [package.metadata.bundle.linux_desktop_actions.new-window]
+  [package.metadata.bundle.linux.desktop_actions.new-window]
   Name = "New Window"
   Exec = "myapp --new-window"
 
-  [package.metadata.bundle.linux_desktop_actions.new-window.NameLocalized]
+  [package.metadata.bundle.linux.desktop_actions.new-window.NameLocalized]
   fr = "Nouvelle fenêtre"
   ```
 
@@ -167,17 +184,15 @@ These settings are used when bundling Linux packages (`deb`, `rpm`, `appimage`).
 
 These settings are used only when bundling `appimage` packages.
 
-* `appimage_runtime_path`: [OPTIONAL] Path to a local type-2 AppImage runtime ELF. When set,
-  `cargo-bundle` will not download a runtime (useful for offline CI or pinning a known-good
-  runtime). The file must be a valid ELF binary.
-* `appimage_runtime_url`: [OPTIONAL] Override URL used to download the type-2 runtime. Defaults
-  to the official continuous release for the target architecture from
-  [AppImage/type2-runtime](https://github.com/AppImage/type2-runtime).
+* `appimage_runtime_path`: Path to the local type-2 AppImage runtime ELF. `cargo-bundle` never
+  downloads runtimes; this makes AppImage builds reproducible and usable in offline CI. The file
+  must be a valid ELF binary.
 * `appimage_metainfo_path`: [OPTIONAL] Path to an
   [AppStream metainfo](https://www.freedesktop.org/software/appstream/docs/) XML file, copied to
   `usr/share/metainfo/<identifier>.appdata.xml` inside the AppDir. A warning is printed when
   absent — software centers increasingly expect metainfo.
-* `appimage_compression`: [OPTIONAL] SquashFS codec, `"gzip"` (default, maximally compatible)
+* `appimage_compression`: [OPTIONAL] SquashFS codec, `"gzip"` (default, maximally compatible),
+  `"lz4"`, `"lzo"`, or `"none"`.
 
 **Limitations:** Shared libraries are **not** auto-collected (unlike tools that wrap
 `linuxdeploy` / `appimagetool`). Dynamically linked GUI apps may need matching system libraries
@@ -193,9 +208,10 @@ These settings are used only when bundling `deb` packages.
 
 ### Mac OS X-specific settings
 
-These settings are used only when bundling `osx` packages.
+These settings are used only when bundling `osx` packages and belong in
+`[package.metadata.bundle.osx]`.
 
-* `osx_frameworks`: A list of strings indicating any Mac OS X frameworks that
+* `frameworks`: A list of strings indicating any Mac OS X frameworks that
   need to be bundled with the app.  Each string can either be the name of a
   framework (without the `.framework` extension, e.g. `"SDL2"`), in which case
   `cargo-bundle` will search for that framework in the standard install
@@ -209,18 +225,18 @@ These settings are used only when bundling `osx` packages.
   `build.rs` script), and (2) embedding the correct rpath in your binary
   (e.g. by running `install_name_tool -add_rpath
   "@executable_path/../Frameworks" path/to/binary` after compiling).
-* `osx_minimum_system_version`: A version string indicating the minimum Mac OS
+* `minimum_system_version`: A version string indicating the minimum Mac OS
   X version that the bundled app supports (e.g. `"10.11"`).  If you are using
   this config field, you may also want have your `build.rs` script emit
   `cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=10.11` (or whatever version number
   you want) to ensure that the compiled binary has the same minimum version.
-* `osx_url_schemes`: A list of strings indicating the URL schemes that the app
+* `url_schemes`: A list of strings indicating the URL schemes that the app
   handles.
-* `osx_info_plist_exts`: A list of path strings that contain extra values for
+* `info_plist_exts`: A list of path strings that contain extra values for
   `Info.plist`. It reads each file in that path, and blindly appends its
   contents into the `Info.plist` file, after cargo-bundle has generated its
   keys but before it closes the `<dict>` and `<plist>`.
-* `osx_dmg_background`: A path string pointing to an SVG that becomes the
+* `dmg_background`: A path string pointing to an SVG that becomes the
   Finder window background of the DMG bundle.  The SVG must contain elements
   with ids `app` and `applications`; the center of each element becomes the
   icon position of the application bundle and of the `/Applications` symlink
@@ -271,8 +287,10 @@ enim ad minim veniam, quis nostrud exercitation ullamco laboris
 nisi ut aliquip ex ea commodo consequat.
 """
 deb_depends = ["libgl1-mesa-glx", "libsdl2-2.0-0 (>= 2.0.5)"]
-osx_frameworks = ["SDL2"]
-osx_url_schemes = ["com.doe.exampleapplication"]
+
+[package.metadata.bundle.osx]
+frameworks = ["SDL2"]
+url_schemes = ["com.doe.exampleapplication"]
 ```
 
 ## Contributing
