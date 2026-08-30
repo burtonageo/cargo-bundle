@@ -4,6 +4,7 @@
 
 use crate::Settings;
 use crate::bundle::common;
+use crate::bundle::signing;
 use anyhow::Context;
 use std::ffi::OsStr;
 use std::fs;
@@ -56,7 +57,7 @@ const TRANSLATION_ENTRY_ENGLISH_US_UNICODE: [u8; 4] = [0x09, 0x04, 0xB0, 0x04];
 const WINDOWS_VERSION_COMPONENT_COUNT: usize = 4;
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
-    let exe_name = format!("{}.exe", settings.binary_name());
+    let exe_name = windows_executable_name(settings.binary_name());
     common::print_bundling(&exe_name)?;
 
     let base_dir = settings.project_out_directory().join("bundle/exe");
@@ -73,6 +74,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .find(|path| path.extension() == Some(OsStr::new("svg")));
 
     embed_resources(settings, &output_exe, svg_icon_path.as_deref())?;
+    signing::sign_windows_artifact(settings, &output_exe)?;
 
     Ok(vec![output_exe])
 }
@@ -146,7 +148,7 @@ fn embed_version_info(
         ("InternalName", settings.binary_name().to_owned()),
         (
             "OriginalFilename",
-            format!("{}.exe", settings.binary_name()),
+            windows_executable_name(settings.binary_name()),
         ),
     ];
 
@@ -166,6 +168,14 @@ fn embed_version_info(
         .with_context(|| "Failed to update version info resource")?;
 
     Ok(())
+}
+
+fn windows_executable_name(binary_name: &str) -> String {
+    if binary_name.ends_with(".exe") {
+        binary_name.to_owned()
+    } else {
+        format!("{binary_name}.exe")
+    }
 }
 
 #[cfg(target_os = "windows")]
