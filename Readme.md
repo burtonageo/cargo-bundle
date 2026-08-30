@@ -30,6 +30,23 @@ cross-compile and bundle an application for another OS, add an appropriate
 into a single universal binary with `lipo`, e.g.
 `cargo bundle -t aarch64-apple-darwin -t x86_64-apple-darwin`.
 
+If the executable has already been built, and you'd like to avoid rebuilding,
+or perhaps maintain a change you made against it, pass it with `--binary-path` to
+package it without running `cargo build` again. This is useful when a CI build
+and packaging step are separate, or when another build system produced the
+executable. Cargo metadata is still read for the bundle manifest and selected
+`--bin`/`--example`; `--release`, `--profile`, and `--target` still select the
+bundle output directory and target metadata, but do not rebuild the supplied
+file.
+
+```bash
+cargo build --release --bin my-app
+cargo bundle --release --bin my-app --binary-path target/release/my-app
+```
+
+The supplied path must be a regular file. It is copied into the generated
+bundle; the input binary is not modified.
+
 ## Flags
   ```plaintext
   -b, --bin <NAME>           Bundle the specified binary
@@ -37,6 +54,7 @@ into a single universal binary with `lipo`, e.g.
   -f, --format <FORMAT>      Which bundle format to produce [possible values: deb, ios, msi, wxsmsi, osx, rpm, appimage]
   -r, --release              Build a bundle from a target built in release mode
       --profile <NAME>       Build a bundle from a target build using the given profile
+      --binary-path <PATH>   Bundle this already-built executable instead of running `cargo build`
   -t, --target <TRIPLE>      Build a bundle for the target triple. May be repeated to combine several architectures into a universal binary (macOS only)
       --features <FEATURES>  Set crate features for the bundle. Eg: `--features "f1 f2"`
       --all-features         Build a bundle with all crate features
