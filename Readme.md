@@ -202,9 +202,8 @@ Declare these in `[package.metadata.bundle.linux]` using the concise names below
 
 These settings are used only when bundling `appimage` packages.
 
-* `appimage_runtime_path`: Path to the local type-2 AppImage runtime ELF. `cargo-bundle` never
-  downloads runtimes; this makes AppImage builds reproducible and usable in offline CI. The file
-  must be a valid ELF binary.
+The type-2 AppImage runtime is downloaded from the official continuous release for the target
+architecture and cached under the user cache directory.
 * `appimage_metainfo_path`: [OPTIONAL] Path to an
   [AppStream metainfo](https://www.freedesktop.org/software/appstream/docs/) XML file, copied to
   `usr/share/metainfo/<identifier>.appdata.xml` inside the AppDir. A warning is printed when
