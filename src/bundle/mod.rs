@@ -9,6 +9,7 @@ mod localization;
 mod msi_bundle;
 mod osx_bundle;
 mod settings;
+mod signing;
 mod windows;
 mod wxsmsi_bundle;
 
