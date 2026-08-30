@@ -243,6 +243,78 @@ These settings are used only when bundling `osx` packages and belong in
   respectively.  The image is rendered at 2x resolution so it stays crisp on
   Retina displays.  See `examples/hello/dmg-background.svg` for an example.
 
+### Code signing
+
+Apple application bundles and DMGs are signed in-process with the pure-Rust
+[`apple-codesign`](https://crates.io/crates/apple-codesign) library. Export the
+Developer ID certificate and private key from Keychain Access as a `.p12` file,
+then configure it by path. The password is read from an environment variable;
+optional entitlements, hardened runtime, and an RFC 3161 timestamp are also
+supported:
+
+```toml
+[package.metadata.bundle]
+apple_signing_p12 = "secrets/developer-id.p12"
+apple_signing_password_env = "APPLE_SIGNING_PASSWORD"
+apple_signing_entitlements = "packaging/entitlements.plist"
+apple_signing_hardened_runtime = true
+apple_signing_timestamp_url = "https://timestamp.example.com"
+```
+
+The same implementation works on Linux, Windows, and macOS; no `codesign` or
+other signing executable is spawned. It signs the finished `.app` before DMG
+creation, and then signs the final DMG itself. It does not notarize artifacts.
+Do not modify a signed app or DMG afterwards: changing an executable,
+framework, plugin, resource, or disk image invalidates its signature. Keep the
+`.p12` file and its password in CI secrets, never in version control.
+
+Windows `.exe` and `.msi` artifacts can be Authenticode-signed with a PKCS#12
+certificate. This support is **not enabled by default** because it links the
+vendored `osslsigncode` implementation, which is GPL-3.0-or-later (with an
+OpenSSL linking exception). Build or install cargo-bundle with the explicit
+feature only if those terms are acceptable for the binary you distribute:
+
+```bash
+cargo install cargo-bundle --features windows-signing
+```
+
+Then keep the certificate password out of `Cargo.toml` and configure signing
+through an environment variable:
+
+```toml
+[package.metadata.bundle.windows_signing]
+certificate_path = "secrets/publisher.p12"
+certificate_password_env = "WINDOWS_CERTIFICATE_PASSWORD"
+timestamp_url = "https://timestamp.example.com"
+```
+
+`timestamp_url` is optional and is sent as an RFC 3161 timestamp request. When
+`certificate_password_env` is omitted, the signing backend prompts on the
+terminal. Supplying Windows signing metadata to a cargo-bundle executable that
+was not built with `windows-signing` is an error rather than silently emitting
+an unsigned artifact. In CI, protect the certificate and password as secrets;
+never commit either one. Signatures are applied to the final generated `.exe`
+or `.msi`, so later changes invalidate them.
+
+Linux artifacts use keyless [Sigstore](https://www.sigstore.dev/) signing when configured.
+
+Configure the environment variable holding an OIDC identity token whose
+audience is `sigstore`:
+
+```toml
+[package.metadata.bundle.linux_signing]
+identity_token_env = "SIGSTORE_ID_TOKEN"
+```
+
+Every generated `.deb`, `.rpm`, or `.AppImage` then receives an adjacent
+`<artifact>.sigstore.json` Sigstore bundle containing the signature,
+certificate, and transparency-log proof. The original artifact is unchanged;
+publish the sidecar bundle with it. This is keyless signing: the token must be
+fresh and normally comes from your CI provider's OIDC integration. For a
+release that signs both Linux and Windows outputs, install with
+`--features windows-signing`; enabling `windows-signing` still has the
+GPL-3.0-or-later consequence described above.
+
 * note: Github Actions and Bitbucket Pipelines both have Apple MacOS build runners/containers available to use for free 
 
 ### Settings for specified binary
