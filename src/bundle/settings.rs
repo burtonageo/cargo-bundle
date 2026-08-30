@@ -122,6 +122,30 @@ pub struct DesktopAction {
     pub name_localized: Option<HashMap<String, String>>, // local code to translation
 }
 
+/// Windows Authenticode signing configuration. This is available only with
+/// cargo-bundle's `windows-signing` feature because its implementation links
+/// GPL-3.0-or-later code.
+#[derive(Clone, Debug, serde::Deserialize)]
+#[cfg_attr(not(feature = "windows-signing"), allow(dead_code))]
+pub struct WindowsSigningSettings {
+    /// Path to a PKCS#12 (`.p12`/`.pfx`) signing certificate.
+    pub certificate_path: PathBuf,
+    /// Name of the environment variable containing the certificate password.
+    #[serde(default)]
+    pub certificate_password_env: Option<String>,
+    /// Optional RFC 3161 timestamp service URL.
+    #[serde(default)]
+    pub timestamp_url: Option<String>,
+}
+
+/// Keyless Sigstore configuration for Linux release artifacts.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct LinuxSigningSettings {
+    /// Environment variable containing an OIDC token minted for the
+    /// `sigstore` audience.
+    pub identity_token_env: String,
+}
+
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LinuxSettings {
@@ -170,6 +194,21 @@ struct BundleSettings {
     /// macOS-only packaging configuration.
     #[serde(alias = "macos")]
     osx: Option<OsxSettings>,
+    /// PKCS#12 certificate used by the pure-Rust Apple signing backend.
+    /// The bundle is left unsigned when this is not configured.
+    apple_signing_p12: Option<PathBuf>,
+    /// Environment variable containing the PKCS#12 certificate password.
+    apple_signing_password_env: Option<String>,
+    /// Optional RFC 3161 timestamp service URL for Apple code signatures.
+    apple_signing_timestamp_url: Option<String>,
+    /// Optional entitlements plist embedded in Apple code signatures.
+    apple_signing_entitlements: Option<PathBuf>,
+    /// Enable the hardened runtime in Apple code signatures.
+    apple_signing_hardened_runtime: Option<bool>,
+    /// Optional Authenticode configuration for `.exe` and `.msi` output.
+    windows_signing: Option<WindowsSigningSettings>,
+    /// Optional keyless Sigstore configuration for Linux release artifacts.
+    linux_signing: Option<LinuxSigningSettings>,
     // Bundles for other binaries/examples:
     bin: Option<HashMap<String, BundleSettings>>,
     example: Option<HashMap<String, BundleSettings>>,
@@ -758,6 +797,43 @@ impl Settings {
             .as_ref()
             .and_then(|osx| osx.dmg_background.as_deref())
     }
+
+    /// PKCS#12 certificate used by the pure-Rust Apple signing backend.
+    pub fn apple_signing_p12(&self) -> Option<&Path> {
+        self.bundle_settings.apple_signing_p12.as_deref()
+    }
+
+    /// Environment variable containing the Apple PKCS#12 certificate password.
+    pub fn apple_signing_password_env(&self) -> Option<&str> {
+        self.bundle_settings.apple_signing_password_env.as_deref()
+    }
+
+    /// Optional RFC 3161 timestamp service URL for Apple code signatures.
+    pub fn apple_signing_timestamp_url(&self) -> Option<&str> {
+        self.bundle_settings.apple_signing_timestamp_url.as_deref()
+    }
+
+    /// Entitlements plist embedded in Apple code signatures.
+    pub fn apple_signing_entitlements(&self) -> Option<&Path> {
+        self.bundle_settings.apple_signing_entitlements.as_deref()
+    }
+
+    /// Whether to enable the hardened runtime during Apple code signing.
+    pub fn apple_signing_hardened_runtime(&self) -> bool {
+        self.bundle_settings
+            .apple_signing_hardened_runtime
+            .unwrap_or(false)
+    }
+
+    /// Authenticode configuration, when Windows signing has been requested.
+    pub fn windows_signing(&self) -> Option<&WindowsSigningSettings> {
+        self.bundle_settings.windows_signing.as_ref()
+    }
+
+    /// Keyless Sigstore configuration for Linux release artifacts.
+    pub fn linux_signing(&self) -> Option<&LinuxSigningSettings> {
+        self.bundle_settings.linux_signing.as_ref()
+    }
 }
 
 fn bundle_settings_from_table(
@@ -848,6 +924,7 @@ impl Iterator for ResourcePaths<'_> {
 mod tests {
     use super::{AppCategory, BundleSettings};
     use crate::bundle::localization::DesktopKeywords;
+    use std::path::PathBuf;
 
     #[test]
     fn parse_cargo_toml() {
@@ -902,6 +979,42 @@ mod tests {
         assert!(toml::from_str::<BundleSettings>("frameworks = [\"WebKit.framework\"]").is_err());
         assert!(
             toml::from_str::<BundleSettings>("osx_frameworks = [\"WebKit.framework\"]").is_err()
+        );
+    }
+
+    #[test]
+    fn parses_signing_configuration() {
+        let bundle: BundleSettings = toml::from_str(
+            r#"
+                apple_signing_p12 = "certs/apple.p12"
+                apple_signing_password_env = "APPLE_SIGNING_PASSWORD"
+
+                [windows_signing]
+                certificate_path = "certs/windows.p12"
+                certificate_password_env = "WINDOWS_SIGNING_PASSWORD"
+
+                [linux_signing]
+                identity_token_env = "SIGSTORE_ID_TOKEN"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            bundle.apple_signing_p12,
+            Some(PathBuf::from("certs/apple.p12"))
+        );
+        assert_eq!(
+            bundle
+                .windows_signing
+                .as_ref()
+                .unwrap()
+                .certificate_password_env
+                .as_deref(),
+            Some("WINDOWS_SIGNING_PASSWORD")
+        );
+        assert_eq!(
+            bundle.linux_signing.as_ref().unwrap().identity_token_env,
+            "SIGSTORE_ID_TOKEN"
         );
     }
 
