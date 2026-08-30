@@ -188,6 +188,7 @@ pub struct Settings {
     profile: String,
     all_features: bool,
     no_default_features: bool,
+    prebuilt_binary: bool,
     binary_path: PathBuf,
     /// Per-target binaries that `lipo` combines into `binary_path` when more
     /// than one target triple was requested; empty otherwise.
@@ -235,7 +236,7 @@ impl Settings {
         let cargo_settings = load_metadata(&current_dir)?;
         let package = Settings::find_bundle_package(cli.package.as_deref(), &cargo_settings)?;
         let bundle_settings = Settings::bundle_settings_of_package(package)?;
-        let workspace_dir = Settings::get_workspace_dir(current_dir);
+        let workspace_dir = Settings::get_workspace_dir(current_dir.clone());
         // With multiple targets the per-target binaries are combined into a
         // universal binary living under its own `universal` directory.
         let target_dir_name = match targets.as_slice() {
@@ -273,8 +274,24 @@ impl Settings {
             _ => "",
         };
         binary_name += binary_extension;
-        let binary_path = target_dir.join(&binary_name);
-        let universal_input_binary_paths = if targets.len() > 1 {
+        let prebuilt_binary = cli.binary_path.is_some();
+        let binary_path = if let Some(path) = &cli.binary_path {
+            let path = if path.is_absolute() {
+                path.clone()
+            } else {
+                current_dir.join(path)
+            };
+            let metadata = std::fs::metadata(&path).map_err(|error| {
+                anyhow::anyhow!("Failed to read prebuilt binary {path:?}: {error}")
+            })?;
+            if !metadata.is_file() {
+                anyhow::bail!("Prebuilt binary path is not a file: {path:?}");
+            }
+            path
+        } else {
+            target_dir.join(&binary_name)
+        };
+        let universal_input_binary_paths = if !prebuilt_binary && targets.len() > 1 {
             targets
                 .iter()
                 .map(|(triple, _)| {
@@ -299,6 +316,7 @@ impl Settings {
             profile,
             all_features,
             no_default_features,
+            prebuilt_binary,
             project_out_directory: target_dir,
             binary_path,
             universal_input_binary_paths,

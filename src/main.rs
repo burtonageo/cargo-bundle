@@ -5,6 +5,7 @@ use anyhow::Result;
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use std::env;
 use std::ffi::OsString;
+use std::path::PathBuf;
 use std::process;
 
 #[macro_export]
@@ -53,6 +54,10 @@ pub struct Cli {
     #[arg(long, value_name = "NAME", conflicts_with = "release")]
     pub profile: Option<String>,
 
+    /// Bundle this already-built executable instead of running `cargo build`
+    #[arg(long, value_name = "PATH")]
+    pub binary_path: Option<PathBuf>,
+
     /// Build a bundle for the target triple. May be repeated to combine
     /// several architectures into a universal binary (macOS only).
     #[arg(short, long, value_name = "TRIPLE")]
@@ -80,6 +85,9 @@ pub struct Cli {
 /// When several target triples were requested, builds each one and then
 /// combines the resulting binaries into a universal binary with `lipo`.
 fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
+    if settings.uses_prebuilt_binary() {
+        return Ok(());
+    }
     if std::env::var("CARGO_BUNDLE_SKIP_BUILD").is_ok() {
         return Ok(());
     }
