@@ -446,6 +446,12 @@ impl Settings {
         &self.binary_path
     }
 
+    /// Whether the executable was supplied with `--binary-path` rather than
+    /// being produced by cargo-bundle's own `cargo build` invocation.
+    pub fn uses_prebuilt_binary(&self) -> bool {
+        self.prebuilt_binary
+    }
+
     /// If a specific package type was specified by the command-line, returns
     /// that package type; otherwise, if a target triple was specified by the
     /// command-line, returns the native package type(s) for that target;
