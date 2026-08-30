@@ -182,8 +182,6 @@ struct BundleSettings {
     category: Option<AppCategory>,
     short_description: Option<String>,
     long_description: Option<String>,
-    /// Local path to the type-2 AppImage runtime ELF used to assemble the image.
-    appimage_runtime_path: Option<String>,
     /// Path to an AppStream metainfo XML file to bundle in the AppImage.
     appimage_metainfo_path: Option<String>,
     /// SquashFS compression codec: `"gzip"` (default), `"lz4"`, `"lzo"`, or `"none"`.
@@ -685,14 +683,6 @@ impl Settings {
             .linux
             .as_ref()
             .and_then(|linux| linux.exec_args.as_deref())
-    }
-
-    /// Local path to the type-2 AppImage runtime binary used to assemble the image.
-    pub fn appimage_runtime_path(&self) -> Option<&Path> {
-        self.bundle_settings
-            .appimage_runtime_path
-            .as_deref()
-            .map(Path::new)
     }
 
     /// Path to an AppStream metainfo XML to bundle in the AppImage.

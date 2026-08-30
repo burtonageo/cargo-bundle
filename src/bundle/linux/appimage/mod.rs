@@ -13,7 +13,8 @@
 //! # SquashFS strategy
 //!
 //! SquashFS images are assembled by the pure-Rust [`appimage`] crate. No
-//! external `mksquashfs` binary or network runtime download is required.
+//! external `mksquashfs` binary is required; the official runtime is downloaded
+//! and cached automatically for the target architecture.
 //!
 //! # Layout
 //!
@@ -54,7 +55,8 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     context.clean_previous_build()?;
 
     let app_directory = AppDirectory::build(settings, &context)?;
-    let runtime_bytes = runtime::read(settings)?;
+    let architecture = arch::determine_appimage_architecture(settings.binary_arch())?;
+    let runtime_bytes = runtime::read(architecture)?;
     appimage::AppImage::pack(&app_directory.path)
         .runtime(runtime_bytes)
         .compression(compression(settings)?)
