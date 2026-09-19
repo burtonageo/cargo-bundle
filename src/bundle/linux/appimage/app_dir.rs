@@ -70,7 +70,7 @@ impl<'a> AppDirectory<'a> {
     /// Copy AppStream metainfo XML into the AppDir, injecting `xml:lang` sibling
     /// elements for any element marked with a `trkey` attribute.
     ///
-    /// When `linux_localizations` are configured, elements tagged with
+    /// When `linux.localizations` are configured, elements tagged with
     /// `trkey="Name"`, `trkey="Comment"`, or `trkey="GenericName"` get additional
     /// `<element xml:lang="…">…</element>` siblings for each locale that provides
     /// a non-empty translation.  The `trkey` attribute itself is stripped from the

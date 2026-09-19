@@ -14,7 +14,7 @@ use std::path::Path;
 /// Mirrors the Cargo.toml shape:
 ///
 /// ```toml
-/// [package.metadata.bundle.osx_localizations.fr]
+/// [package.metadata.bundle.osx.localizations.fr]
 /// CFBundleDisplayName = "Mon Application"
 /// ```
 #[derive(Clone, Copy, Debug)]

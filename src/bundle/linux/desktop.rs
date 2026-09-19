@@ -36,7 +36,7 @@ struct DesktopEntryInput<'a> {
 
 /// Render a FreeDesktop `.desktop` Application entry as a string.
 fn render_desktop_entry(input: &DesktopEntryInput<'_>) -> String {
-    use std::fmt::Write as _;
+    use std::fmt::Write;
 
     let mut out = String::new();
 

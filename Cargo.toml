@@ -21,11 +21,11 @@ with PNG icons using cargo-bundle.
 """
 appimage_metainfo_path = "examples/goodbye/goodbye.metainfo.xml"
 
-[package.metadata.bundle.example.goodbye.linux_localizations.fr]
+[package.metadata.bundle.example.goodbye.linux.localizations.fr]
 Name = "Au revoir"
 Comment = "Une application CLI d'exemple montrant l'empaquetage d'icônes PNG"
 
-[package.metadata.bundle.example.goodbye.linux_localizations.de]
+[package.metadata.bundle.example.goodbye.linux.localizations.de]
 Name = "Auf Wiedersehen"
 Comment = "Eine Beispiel-CLI-Anwendung für das Bündeln von PNG-Symbolen"
 
@@ -33,7 +33,6 @@ Comment = "Eine Beispiel-CLI-Anwendung für das Bündeln von PNG-Symbolen"
 name = "hello"
 identifier = "io.github.burtonageo.cargo-bundle.hello"
 icon = ["examples/hello/icon.svg", "examples/hello/icon*.png"]
-osx_dmg_background = "examples/hello/dmg-background.svg"
 category = "Utility"
 short_description = "An example of a bundled application"
 long_description = """
@@ -42,18 +41,20 @@ a title bar.  It serves as an example of an application that
 can be bundled with cargo-bundle, as well as a test-case for
 cargo-bundle's support for bundling crate examples.
 """
+
+[package.metadata.bundle.example.hello.osx]
+dmg_background = "examples/hello/dmg-background.svg"
 [workspace]
 
 [dependencies]
 anyhow = "1.0.102"
 ar = "0.9.0"
-backhand = { version = "0.25", default-features = false, features = ["gzip"] }
 cab = "0.6.0"
 cargo_metadata = "0.23.1"
 chrono = "0.4.44"
 clap = { version = "4.5.60", features = ["derive", "wrap_help", "cargo"] }
 dirs = "6.0.0"
-ds_parser = "0.2.1"
+ds_parser = "0.3.0"
 glob = "0.3.3"
 goblin = "0.10"
 ld-so-cache = "0.1.0"
@@ -64,10 +65,6 @@ md5 = "0.8.0"
 msi = "0.10.0"
 plist = "1.10.0"
 quick-xml = { version = "0.39.2", features = ["serialize"] }
-reqwest = { version = "0.13.2", features = [
-    "blocking",
-    "native-tls",
-], default-features = false }
 tempfile = "3.27.0"
 resvg = "0.45"
 serde = "1.0.228"
@@ -81,7 +78,8 @@ tiff = "0.11.3"
 toml = "0.9.8"
 uuid = { version = "1.22.0", features = ["v5"] }
 walkdir = "2.5.0"
-dmg_layout = "0.1.0"
+alias_record = "0.3.0"
+appimage = { package = "appimage-rs", version = "0.1.0" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 resvg = "0.45"

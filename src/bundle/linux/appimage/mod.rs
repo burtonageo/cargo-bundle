@@ -12,9 +12,8 @@
 //!
 //! # SquashFS strategy
 //!
-//! SquashFS images are written with the pure-Rust [`backhand`] crate (gzip by
-//! default, zstd when `appimage_compression = "zstd"`). No external `mksquashfs`
-//! binary is required.
+//! SquashFS images are assembled by the pure-Rust [`appimage`] crate. No
+//! external `mksquashfs` binary or network runtime download is required.
 //!
 //! # Layout
 //!
@@ -35,9 +34,9 @@ mod app_dir;
 mod arch;
 mod context;
 mod runtime;
-mod squashfs;
 
 use crate::bundle::{Settings, common};
+use anyhow::Context;
 use app_dir::AppDirectory;
 use context::AppImageContext;
 use std::path::PathBuf;
@@ -55,18 +54,27 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     context.clean_previous_build()?;
 
     let app_directory = AppDirectory::build(settings, &context)?;
-    let runtime_bytes = runtime::fetch(settings, context.architecture)?;
-
-    squashfs::create_and_assemble(
-        settings,
-        &app_directory.path,
-        &runtime_bytes,
-        &context.package_path,
-    )?;
-
-    set_executable_permissions(&context.package_path)?;
+    let runtime_bytes = runtime::read(settings)?;
+    appimage::AppImage::pack(&app_directory.path)
+        .runtime(runtime_bytes)
+        .compression(compression(settings)?)
+        .write_to(&context.package_path)
+        .map_err(anyhow::Error::from)
+        .with_context(|| format!("Failed to assemble {}", context.package_path.display()))?;
 
     Ok(vec![context.package_path.clone()])
+}
+
+fn compression(settings: &Settings) -> crate::Result<appimage::Compression> {
+    match settings.appimage_compression().unwrap_or("gzip") {
+        "gzip" => Ok(appimage::Compression::Gzip),
+        "lz4" => Ok(appimage::Compression::Lz4),
+        "lzo" => Ok(appimage::Compression::Lzo),
+        "none" => Ok(appimage::Compression::None),
+        other => anyhow::bail!(
+            "appimage_compression must be \"gzip\", \"lz4\", \"lzo\", or \"none\", got {other:?}"
+        ),
+    }
 }
 
 fn set_executable_permissions(path: &std::path::Path) -> crate::Result<()> {

@@ -3,7 +3,7 @@
 use super::{FALLBACK_LOCALE_PREFERENCE, sorted_locales};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt::Write as _;
+use std::fmt::Write;
 
 /// Keywords for a FreeDesktop `.desktop` entry (`localestring(s)`).
 ///
