@@ -1,5 +1,6 @@
 use super::common;
 use super::settings::Settings;
+use super::signing;
 use anyhow::Context;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsStr;
@@ -135,6 +136,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     )?;
 
     package.flush()?;
+    signing::sign_windows_artifact(settings, &msi_path)?;
     Ok(vec![msi_path])
 }
 

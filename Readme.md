@@ -30,6 +30,23 @@ cross-compile and bundle an application for another OS, add an appropriate
 into a single universal binary with `lipo`, e.g.
 `cargo bundle -t aarch64-apple-darwin -t x86_64-apple-darwin`.
 
+If the executable has already been built, and you'd like to avoid rebuilding,
+or perhaps maintain a change you made against it, pass it with `--binary-path` to
+package it without running `cargo build` again. This is useful when a CI build
+and packaging step are separate, or when another build system produced the
+executable. Cargo metadata is still read for the bundle manifest and selected
+`--bin`/`--example`; `--release`, `--profile`, and `--target` still select the
+bundle output directory and target metadata, but do not rebuild the supplied
+file.
+
+```bash
+cargo build --release --bin my-app
+cargo bundle --release --bin my-app --binary-path target/release/my-app
+```
+
+The supplied path must be a regular file. It is copied into the generated
+bundle; the input binary is not modified.
+
 ## Flags
   ```plaintext
   -b, --bin <NAME>           Bundle the specified binary
@@ -37,6 +54,7 @@ into a single universal binary with `lipo`, e.g.
   -f, --format <FORMAT>      Which bundle format to produce [possible values: deb, ios, msi, wxsmsi, osx, rpm, appimage]
   -r, --release              Build a bundle from a target built in release mode
       --profile <NAME>       Build a bundle from a target build using the given profile
+      --binary-path <PATH>   Bundle this already-built executable instead of running `cargo build`
   -t, --target <TRIPLE>      Build a bundle for the target triple. May be repeated to combine several architectures into a universal binary (macOS only)
       --features <FEATURES>  Set crate features for the bundle. Eg: `--features "f1 f2"`
       --all-features         Build a bundle with all crate features
@@ -184,9 +202,8 @@ Declare these in `[package.metadata.bundle.linux]` using the concise names below
 
 These settings are used only when bundling `appimage` packages.
 
-* `appimage_runtime_path`: Path to the local type-2 AppImage runtime ELF. `cargo-bundle` never
-  downloads runtimes; this makes AppImage builds reproducible and usable in offline CI. The file
-  must be a valid ELF binary.
+The type-2 AppImage runtime is downloaded from the official continuous release for the target
+architecture and cached under the user cache directory.
 * `appimage_metainfo_path`: [OPTIONAL] Path to an
   [AppStream metainfo](https://www.freedesktop.org/software/appstream/docs/) XML file, copied to
   `usr/share/metainfo/<identifier>.appdata.xml` inside the AppDir. A warning is printed when
@@ -242,6 +259,78 @@ These settings are used only when bundling `osx` packages and belong in
   icon position of the application bundle and of the `/Applications` symlink
   respectively.  The image is rendered at 2x resolution so it stays crisp on
   Retina displays.  See `examples/hello/dmg-background.svg` for an example.
+
+### Code signing
+
+Apple application bundles and DMGs are signed in-process with the pure-Rust
+[`apple-codesign`](https://crates.io/crates/apple-codesign) library. Export the
+Developer ID certificate and private key from Keychain Access as a `.p12` file,
+then configure it by path. The password is read from an environment variable;
+optional entitlements, hardened runtime, and an RFC 3161 timestamp are also
+supported:
+
+```toml
+[package.metadata.bundle]
+apple_signing_p12 = "secrets/developer-id.p12"
+apple_signing_password_env = "APPLE_SIGNING_PASSWORD"
+apple_signing_entitlements = "packaging/entitlements.plist"
+apple_signing_hardened_runtime = true
+apple_signing_timestamp_url = "https://timestamp.example.com"
+```
+
+The same implementation works on Linux, Windows, and macOS; no `codesign` or
+other signing executable is spawned. It signs the finished `.app` before DMG
+creation, and then signs the final DMG itself. It does not notarize artifacts.
+Do not modify a signed app or DMG afterwards: changing an executable,
+framework, plugin, resource, or disk image invalidates its signature. Keep the
+`.p12` file and its password in CI secrets, never in version control.
+
+Windows `.exe` and `.msi` artifacts can be Authenticode-signed with a PKCS#12
+certificate. This support is **not enabled by default** because it links the
+vendored `osslsigncode` implementation, which is GPL-3.0-or-later (with an
+OpenSSL linking exception). Build or install cargo-bundle with the explicit
+feature only if those terms are acceptable for the binary you distribute:
+
+```bash
+cargo install cargo-bundle --features windows-signing
+```
+
+Then keep the certificate password out of `Cargo.toml` and configure signing
+through an environment variable:
+
+```toml
+[package.metadata.bundle.windows_signing]
+certificate_path = "secrets/publisher.p12"
+certificate_password_env = "WINDOWS_CERTIFICATE_PASSWORD"
+timestamp_url = "https://timestamp.example.com"
+```
+
+`timestamp_url` is optional and is sent as an RFC 3161 timestamp request. When
+`certificate_password_env` is omitted, the signing backend prompts on the
+terminal. Supplying Windows signing metadata to a cargo-bundle executable that
+was not built with `windows-signing` is an error rather than silently emitting
+an unsigned artifact. In CI, protect the certificate and password as secrets;
+never commit either one. Signatures are applied to the final generated `.exe`
+or `.msi`, so later changes invalidate them.
+
+Linux artifacts use keyless [Sigstore](https://www.sigstore.dev/) signing when configured.
+
+Configure the environment variable holding an OIDC identity token whose
+audience is `sigstore`:
+
+```toml
+[package.metadata.bundle.linux_signing]
+identity_token_env = "SIGSTORE_ID_TOKEN"
+```
+
+Every generated `.deb`, `.rpm`, or `.AppImage` then receives an adjacent
+`<artifact>.sigstore.json` Sigstore bundle containing the signature,
+certificate, and transparency-log proof. The original artifact is unchanged;
+publish the sidecar bundle with it. This is keyless signing: the token must be
+fresh and normally comes from your CI provider's OIDC integration. For a
+release that signs both Linux and Windows outputs, install with
+`--features windows-signing`; enabling `windows-signing` still has the
+GPL-3.0-or-later consequence described above.
 
 * note: Github Actions and Bitbucket Pipelines both have Apple MacOS build runners/containers available to use for free 
 

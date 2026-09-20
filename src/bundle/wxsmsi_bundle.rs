@@ -1,4 +1,5 @@
 use super::settings::Settings;
+use super::signing;
 use quick_xml::se::Serializer;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -54,6 +55,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .join("bin")
         .join(configuration)
         .join(format!("{output_name}.msi"));
+    signing::sign_windows_artifact(settings, &msi_path)?;
     Ok(vec![msi_path])
 }
 

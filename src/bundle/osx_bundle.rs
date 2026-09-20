@@ -19,6 +19,7 @@
 // files into the `Contents` directory of the bundle.
 
 use super::common::{self, read_file};
+use super::signing;
 use crate::Settings;
 use anyhow::Context;
 use image::imageops::FilterType::Lanczos3;
@@ -84,6 +85,8 @@ pub fn bundle_project_at(settings: &Settings, output_dir: &Path) -> crate::Resul
     if copied > 0 {
         add_rpath(&bundle_directory, settings)?;
     }
+
+    signing::sign_apple_path(settings, &app_bundle_path)?;
 
     Ok(app_bundle_path)
 }
