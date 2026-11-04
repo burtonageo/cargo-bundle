@@ -9,15 +9,17 @@ use std::{
     process::{Command, Output},
 };
 
-/// Writes `Cargo.toml` and returns a runner for `cargo bundle` in `dir`.
-fn project(dir: &Path, metadata: &str) -> impl Fn(&[&str], &Path) -> Output {
+/// Writes a package whose `[package.metadata.bundle]` table holds `bundle`,
+/// and returns a runner for `cargo bundle` in `dir`.
+fn project(dir: &Path, bundle: &str) -> impl Fn(&[&str], &Path) -> Output {
     fs::create_dir_all(dir.join("src")).unwrap();
     fs::write(dir.join("src/main.rs"), "fn main() {}\n").unwrap();
     fs::write(
         dir.join("Cargo.toml"),
         format!(
             "[package]\nname = \"postcard\"\nversion = \"1.2.3\"\nedition = \"2024\"\n\
-             [package.metadata.bundle]\nname = \"Post Card\"\nidentifier = \"com.example.postcard\"\n{metadata}"
+             [package.metadata.bundle]\nname = \"Post Card\"\nidentifier = \"com.example.postcard\"\n\
+             {bundle}"
         ),
     )
     .unwrap();
@@ -252,4 +254,170 @@ fn ipa_requires_an_ios_device_target() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("iOS device target"), "{target:?}: {stderr}");
     }
+}
+
+fn stderr(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+fn png(path: &Path, size: u32) -> Vec<u8> {
+    image::RgbaImage::new(size, size).save(path).unwrap();
+    fs::read(path).unwrap()
+}
+
+const ANDROID_LIBRARY: &[u8] = include_bytes!("fixtures/android/libpostcard.so");
+const ANDROID_ARGS: [&str; 4] = ["--format", "apk", "--target", "aarch64-linux-android"];
+
+#[test]
+fn apk_is_signed_and_carries_manifest_assets_library_and_largest_icon() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path();
+    let run = project(
+        dir,
+        "resources = [\"greeting.txt\"]\nicon = [\"small.png\", \"large.png\"]\n\
+         [package.metadata.bundle.android]\nversion_code = 7\nmin_sdk = 24\ntarget_sdk = 35\n\
+         permissions = [\"android.permission.INTERNET\"]\nsigning_key = \"test.pem\"\n",
+    );
+    fs::write(dir.join("greeting.txt"), "hello Android").unwrap();
+    fs::write(
+        dir.join("test.pem"),
+        include_bytes!("fixtures/android/test-only.pem"),
+    )
+    .unwrap();
+    png(&dir.join("small.png"), 48);
+    let large = png(&dir.join("large.png"), 192);
+    let library = dir.join("libpostcard.so");
+    fs::write(&library, ANDROID_LIBRARY).unwrap();
+    succeeded(&run(&ANDROID_ARGS, &library));
+
+    let output = dir.join("target/aarch64-linux-android/debug/bundle/apk/Post Card.apk");
+    assert!(
+        apk::sign::verify(&output)
+            .unwrap()
+            .schemes
+            .contains(apk::sign::Schemes::V2)
+    );
+    let mut archive = apk::Apk::open(&output).unwrap();
+    assert_eq!(
+        archive.read("assets/greeting.txt").unwrap(),
+        b"hello Android"
+    );
+    assert_eq!(
+        archive.read("lib/arm64-v8a/libpostcard.so").unwrap(),
+        ANDROID_LIBRARY
+    );
+    let icons: Vec<_> = archive
+        .entries()
+        .filter(|name| name.starts_with("res/") && name.ends_with(".png"))
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(icons.len(), 1, "{icons:?}");
+    assert_eq!(archive.read(&icons[0]).unwrap(), large);
+    assert_eq!(archive.label().unwrap().as_deref(), Some("Post Card"));
+    let manifest = archive.manifest().unwrap();
+    assert_eq!(manifest.package(), Some("com.example.postcard"));
+    assert_eq!(manifest.version_code(), Some(7));
+    assert_eq!(manifest.version_name(), Some("1.2.3"));
+    assert_eq!(manifest.min_sdk().api_level().unwrap().get(), 24);
+    assert_eq!(
+        manifest.target_sdk().unwrap().api_level().unwrap().get(),
+        35
+    );
+    assert!(
+        manifest
+            .permissions()
+            .any(|name| name == "android.permission.INTERNET")
+    );
+    assert!(matches!(
+        manifest.native_activity_library(),
+        Some(Ok("postcard"))
+    ));
+    drop(archive);
+
+    // A failed rebuild must not clobber the previous APK.
+    let before = fs::read(&output).unwrap();
+    fs::write(&library, b"not an ELF").unwrap();
+    assert!(!run(&ANDROID_ARGS, &library).status.success());
+    assert_eq!(fs::read(&output).unwrap(), before);
+}
+
+#[test]
+fn apk_without_a_signing_key_is_unsigned_and_says_so() {
+    let temp = tempfile::tempdir().unwrap();
+    let run = project(temp.path(), "");
+    let library = temp.path().join("libpostcard.so");
+    fs::write(&library, ANDROID_LIBRARY).unwrap();
+    let built = run(&ANDROID_ARGS, &library);
+    succeeded(&built);
+    assert!(stderr(&built).contains("unsigned"), "{}", stderr(&built));
+
+    let output = temp
+        .path()
+        .join("target/aarch64-linux-android/debug/bundle/apk/Post Card.apk");
+    assert!(apk::sign::verify(&output).is_err());
+    let manifest = apk::Apk::open(&output).unwrap().manifest().unwrap();
+    assert_eq!(manifest.version_code(), Some(1));
+}
+
+#[test]
+fn apk_rejects_invalid_settings_with_the_offending_key() {
+    let cases = [
+        (
+            "[package.metadata.bundle.android]\nversion_code = 0\n",
+            "android.version_code",
+        ),
+        (
+            "[package.metadata.bundle.android]\nmin_sdk = 0\n",
+            "android.min_sdk",
+        ),
+        (
+            "[package.metadata.bundle.android]\npermissions = [\"not a permission\"]\n",
+            "permission",
+        ),
+        (
+            "[package.metadata.bundle.android]\nsigning_key = \"missing.pem\"\n",
+            "missing.pem",
+        ),
+    ];
+    for (bundle, expected) in cases {
+        let temp = tempfile::tempdir().unwrap();
+        let run = project(temp.path(), bundle);
+        let library = temp.path().join("libpostcard.so");
+        fs::write(&library, ANDROID_LIBRARY).unwrap();
+        let output = run(&ANDROID_ARGS, &library);
+        assert!(!output.status.success(), "{bundle}");
+        assert!(
+            stderr(&output).contains(expected),
+            "{bundle}: {}",
+            stderr(&output)
+        );
+    }
+
+    // Android package names cannot contain hyphens, which bundle identifiers may.
+    let temp = tempfile::tempdir().unwrap();
+    let run = project(temp.path(), "");
+    let manifest = temp.path().join("Cargo.toml");
+    let text = fs::read_to_string(&manifest).unwrap();
+    fs::write(
+        &manifest,
+        text.replace("com.example.postcard", "com.example.my-app"),
+    )
+    .unwrap();
+    let library = temp.path().join("libpostcard.so");
+    fs::write(&library, ANDROID_LIBRARY).unwrap();
+    let output = run(&ANDROID_ARGS, &library);
+    assert!(
+        stderr(&output).contains("Invalid Android package name"),
+        "{}",
+        stderr(&output)
+    );
+
+    let misnamed = temp.path().join("prebuilt");
+    fs::write(&misnamed, ANDROID_LIBRARY).unwrap();
+    let output = run(&ANDROID_ARGS, &misnamed);
+    assert!(
+        stderr(&output).contains("lib<name>.so"),
+        "{}",
+        stderr(&output)
+    );
 }

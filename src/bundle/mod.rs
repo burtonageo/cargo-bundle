@@ -1,3 +1,4 @@
+mod apk_bundle;
 mod category;
 mod common;
 mod dmg_bundle;
@@ -23,6 +24,7 @@ pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for package_type in settings.package_types()? {
         let mut package_paths = match package_type {
+            PackageType::AndroidApk => apk_bundle::bundle_project(&settings)?,
             PackageType::OsxBundle => osx_bundle::bundle_project(&settings)?,
             PackageType::OsxDmg => dmg_bundle::bundle_project(&settings)?,
             PackageType::IosBundle => ios_bundle::bundle_project(&settings)?,
