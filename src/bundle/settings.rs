@@ -15,6 +15,7 @@ pub enum PackageType {
     OsxBundle,
     OsxDmg,
     IosBundle,
+    IosIpa,
     WindowsMsi,
     WxsMsi,
     WindowsBundle,
@@ -63,6 +64,7 @@ impl PackageType {
         match name {
             "deb" => Some(PackageType::Deb),
             "ios" => Some(PackageType::IosBundle),
+            "ipa" => Some(PackageType::IosIpa),
             "msi" => Some(PackageType::WindowsMsi),
             "wxsmsi" => Some(PackageType::WxsMsi),
             "osx" => Some(PackageType::OsxBundle),
@@ -78,6 +80,7 @@ impl PackageType {
         match *self {
             PackageType::Deb => "deb",
             PackageType::IosBundle => "ios",
+            PackageType::IosIpa => "ipa",
             PackageType::WindowsMsi => "msi",
             PackageType::WxsMsi => "wxsmsi",
             PackageType::OsxBundle => "osx",
@@ -90,7 +93,7 @@ impl PackageType {
 
     pub const fn all() -> &'static [&'static str] {
         &[
-            "deb", "ios", "msi", "wxsmsi", "osx", "dmg", "rpm", "appimage", "exe",
+            "deb", "ios", "ipa", "msi", "wxsmsi", "osx", "dmg", "rpm", "appimage", "exe",
         ]
     }
 }
