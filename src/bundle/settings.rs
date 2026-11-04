@@ -203,6 +203,8 @@ struct BundleSettings {
     apple_signing_entitlements: Option<PathBuf>,
     /// Enable the hardened runtime in Apple code signatures.
     apple_signing_hardened_runtime: Option<bool>,
+    /// Provisioning profile copied unchanged into macOS and iOS bundles.
+    apple_provisioning_profile: Option<PathBuf>,
     /// Optional Authenticode configuration for `.exe` and `.msi` output.
     windows_signing: Option<WindowsSigningSettings>,
     /// Optional keyless Sigstore configuration for Linux release artifacts.
@@ -815,6 +817,11 @@ impl Settings {
             .unwrap_or(false)
     }
 
+    /// Provisioning profile embedded in macOS and iOS bundles before signing.
+    pub fn apple_provisioning_profile(&self) -> Option<&Path> {
+        self.bundle_settings.apple_provisioning_profile.as_deref()
+    }
+
     /// Authenticode configuration, when Windows signing has been requested.
     pub fn windows_signing(&self) -> Option<&WindowsSigningSettings> {
         self.bundle_settings.windows_signing.as_ref()
@@ -978,6 +985,7 @@ mod tests {
             r#"
                 apple_signing_p12 = "certs/apple.p12"
                 apple_signing_password_env = "APPLE_SIGNING_PASSWORD"
+                apple_provisioning_profile = "profiles/app.profile"
 
                 [windows_signing]
                 certificate_path = "certs/windows.p12"
@@ -992,6 +1000,10 @@ mod tests {
         assert_eq!(
             bundle.apple_signing_p12,
             Some(PathBuf::from("certs/apple.p12"))
+        );
+        assert_eq!(
+            bundle.apple_provisioning_profile,
+            Some(PathBuf::from("profiles/app.profile"))
         );
         assert_eq!(
             bundle

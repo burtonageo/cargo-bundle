@@ -39,11 +39,8 @@ pub fn sign_apple_path(settings: &Settings, path: &Path) -> crate::Result<()> {
             .map_err(|error| anyhow::anyhow!("Invalid Apple signing timestamp URL: {error}"))?;
     }
     if let Some(entitlements_path) = settings.apple_signing_entitlements() {
-        let entitlements = std::fs::read_to_string(entitlements_path).with_context(|| {
-            format!("Failed to read Apple signing entitlements {entitlements_path:?}")
-        })?;
         signing_settings
-            .set_entitlements_xml(SettingsScope::Main, entitlements)
+            .set_entitlements_xml(SettingsScope::Main, entitlements_xml(entitlements_path)?)
             .map_err(|error| anyhow::anyhow!("Invalid Apple signing entitlements: {error}"))?;
     }
     if settings.apple_signing_hardened_runtime() {
@@ -53,6 +50,33 @@ pub fn sign_apple_path(settings: &Settings, path: &Path) -> crate::Result<()> {
     UnifiedSigner::new(signing_settings)
         .sign_path_in_place(path)
         .map_err(|error| anyhow::anyhow!("Apple code signing failed: {error}"))
+}
+
+/// Read an entitlements dictionary stored as an XML or binary plist and
+/// return it as the XML that Apple code signatures embed.
+fn entitlements_xml(path: &Path) -> crate::Result<String> {
+    let entitlements = plist::Value::from_file(path)
+        .with_context(|| format!("Failed to read Apple signing entitlements {path:?}"))?;
+    anyhow::ensure!(
+        entitlements.as_dictionary().is_some(),
+        "Apple signing entitlements {path:?} must be a plist dictionary"
+    );
+    let mut xml = Vec::new();
+    entitlements.to_writer_xml(&mut xml)?;
+    Ok(String::from_utf8(xml)?)
+}
+
+/// Copy the configured provisioning profile to `destination` inside a bundle.
+/// Call this before signing so the code signature seals the profile.
+pub(super) fn embed_apple_provisioning_profile(
+    settings: &Settings,
+    destination: &Path,
+) -> crate::Result<()> {
+    let Some(profile) = settings.apple_provisioning_profile() else {
+        return Ok(());
+    };
+    super::common::copy_file(profile, destination)
+        .with_context(|| format!("Failed to embed provisioning profile {profile:?}"))
 }
 
 /// Sign a Windows executable or installer when configured.
@@ -186,4 +210,34 @@ async fn sign_linux_artifact(
     std::fs::write(&bundle_path, json)
         .with_context(|| format!("Failed to write Sigstore bundle {bundle_path:?}"))?;
     Ok(bundle_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use plist::{Dictionary, Value};
+
+    #[test]
+    fn entitlements_accept_xml_and_binary_dictionaries_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("claims.plist");
+        let claims = Value::Dictionary(Dictionary::from_iter([
+            ("flag", Value::Boolean(true)),
+            (
+                "groups",
+                Value::Array(vec![Value::String("group.app".into())]),
+            ),
+            ("data", Value::Data(vec![1, 2, 3])),
+        ]));
+        claims.to_file_xml(&path).unwrap();
+        let from_xml = entitlements_xml(&path).unwrap();
+        claims.to_file_binary(&path).unwrap();
+        assert_eq!(entitlements_xml(&path).unwrap(), from_xml);
+        assert_eq!(Value::from_reader_xml(from_xml.as_bytes()).unwrap(), claims);
+
+        Value::Array(vec![]).to_file_binary(&path).unwrap();
+        let error = entitlements_xml(&path).unwrap_err().to_string();
+        assert!(error.contains("must be a plist dictionary"), "{error}");
+        assert!(entitlements_xml(&temp.path().join("missing")).is_err());
+    }
 }

@@ -49,6 +49,10 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let bin_path = bundle_dir.join(settings.binary_name());
     common::copy_file(settings.binary_path(), &bin_path)
         .with_context(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
+    signing::embed_apple_provisioning_profile(
+        settings,
+        &bundle_dir.join("embedded.mobileprovision"),
+    )?;
     signing::sign_apple_path(settings, &bundle_dir)?;
     Ok(vec![bundle_dir])
 }

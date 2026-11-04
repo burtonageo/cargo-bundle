@@ -101,7 +101,9 @@ resvg = "0.45"
 winres-edit = "0.2.0"
 
 [dev-dependencies]
+p12 = "0.6.3"
 winit = "0.30.13"
+x509-certificate = "0.24.0"
 
 [[example]]
 name = "hello"
