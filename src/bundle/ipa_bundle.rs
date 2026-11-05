@@ -12,7 +12,7 @@ use crate::Settings;
 use anyhow::{Context, bail, ensure};
 use std::fs::{self, File};
 use std::io::{self, Seek, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use zip::{CompressionMethod, DateTime, ZipWriter, write::SimpleFileOptions};
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
@@ -73,12 +73,37 @@ fn write_archive(
                 options(if path == executable { 0o755 } else { 0o644 }),
             )?;
             io::copy(&mut File::open(path)?, &mut zip)?;
+        } else if entry.file_type().is_symlink() {
+            // Frameworks use links such as `Versions/Current`. They are kept as
+            // links, never followed, and may not point out of the app.
+            let target = fs::read_link(path)?;
+            check_link(path.strip_prefix(payload)?, &target)?;
+            let target = target
+                .to_str()
+                .context("IPA symlink targets must be UTF-8")?;
+            zip.add_symlink(name, target, options(0o777))?;
         } else {
-            // Links would need target validation to stay inside the app.
-            bail!("IPA cannot contain {path:?}: only files and directories are supported");
+            bail!("IPA cannot contain {path:?}: only files, directories and links are supported");
         }
     }
     zip.finish()?;
+    Ok(())
+}
+
+/// A link at `link` (relative to `Payload`, so starting with the app
+/// directory) may only point at something inside that app directory.
+fn check_link(link: &Path, target: &Path) -> crate::Result<()> {
+    let mut depth = link
+        .parent()
+        .map_or(0, |parent| parent.components().count());
+    for component in target.components() {
+        match component {
+            Component::Normal(_) => depth += 1,
+            Component::CurDir => {}
+            Component::ParentDir if depth > 1 => depth -= 1,
+            _ => bail!("IPA symlink {link:?} points outside the app: {target:?}"),
+        }
+    }
     Ok(())
 }
 
@@ -132,17 +157,40 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn rejects_symlinks_and_keeps_the_previous_ipa() {
+    fn links_stay_links_inside_the_app_and_escaping_ones_keep_the_previous_ipa() {
+        use std::os::unix::fs::symlink;
         let temp = tempfile::tempdir().unwrap();
         let (payload, executable) = app(temp.path());
-        let ipa = temp.path().join("Foo.ipa");
-        fs::write(&ipa, "previous").unwrap();
-        std::os::unix::fs::symlink("/etc/passwd", payload.join("Foo.app/link")).unwrap();
+        let app = payload.join("Foo.app");
+        symlink("foo", app.join("alias")).unwrap();
+        symlink("../Info.plist", app.join("res/up")).unwrap();
+        let mut bytes = Cursor::new(Vec::new());
+        write_archive(&mut bytes, &payload, &executable).unwrap();
+        let mut zip = zip::ZipArchive::new(bytes).unwrap();
+        for (name, target) in [("alias", "foo"), ("res/up", "../Info.plist")] {
+            let mut link = zip.by_name(&format!("Payload/Foo.app/{name}")).unwrap();
+            assert_eq!(link.unix_mode().unwrap() & 0o170000, 0o120000, "{name}");
+            let mut stored = String::new();
+            link.read_to_string(&mut stored).unwrap();
+            assert_eq!(stored, target);
+        }
+        drop(zip);
+        fs::remove_file(app.join("alias")).unwrap();
+        fs::remove_file(app.join("res/up")).unwrap();
 
-        let error = publish(&ipa, &payload, &executable).unwrap_err();
-        assert!(error.to_string().contains("link"), "{error}");
-        assert_eq!(fs::read_to_string(&ipa).unwrap(), "previous");
-        // No half-written file is left behind either.
-        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+        let ipa = temp.path().join("Foo.ipa");
+        for target in ["/etc/passwd", "../../outside", "../../../x"] {
+            fs::write(&ipa, "previous").unwrap();
+            symlink(target, app.join("link")).unwrap();
+            let error = publish(&ipa, &payload, &executable).unwrap_err();
+            assert!(
+                error.to_string().contains("outside the app"),
+                "{target}: {error}"
+            );
+            assert_eq!(fs::read_to_string(&ipa).unwrap(), "previous");
+            // No half-written file is left behind either.
+            assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+            fs::remove_file(app.join("link")).unwrap();
+        }
     }
 }
