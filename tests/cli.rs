@@ -102,3 +102,25 @@ fn unsafe_or_colliding_locale_codes_are_rejected_when_settings_load() {
         assert!(stderr.contains(message), "{table}: {stderr}");
     }
 }
+
+#[test]
+fn notarization_that_cannot_succeed_is_refused_before_anything_is_written() {
+    let temp = tempfile::tempdir().unwrap();
+    let bundle = project(
+        temp.path(),
+        "apple_notarization_api_key = \"notary.json\"\n",
+    );
+    let binary = temp.path().join("prebuilt");
+    fs::write(&binary, "binary").unwrap();
+
+    for format in ["osx", "dmg"] {
+        let output = bundle(&["--format", format], &binary);
+        assert!(!output.status.success(), "{format}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Apple notarization requires"), "{stderr}");
+    }
+    assert!(!temp.path().join("target").exists());
+
+    // The setting only concerns macOS output; other formats ignore it.
+    succeeded(&bundle(&["--format", "deb"], &binary));
+}

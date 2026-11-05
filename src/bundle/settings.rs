@@ -203,6 +203,10 @@ struct BundleSettings {
     apple_signing_hardened_runtime: Option<bool>,
     /// Provisioning profile copied unchanged into macOS and iOS bundles.
     apple_provisioning_profile: Option<PathBuf>,
+    /// App Store Connect API key used to notarize macOS apps and disk images.
+    apple_notarization_api_key: Option<PathBuf>,
+    /// Seconds to wait for Apple's verdict; defaults to 600.
+    apple_notarization_timeout: Option<u64>,
     /// Optional Authenticode configuration for `.exe` and `.msi` output.
     windows_signing: Option<WindowsSigningSettings>,
     /// Optional keyless Sigstore configuration for Linux release artifacts.
@@ -841,6 +845,18 @@ impl Settings {
         self.bundle_settings
             .apple_signing_hardened_runtime
             .unwrap_or(false)
+    }
+
+    /// App Store Connect API key for notarization; none means no notarization.
+    pub fn apple_notarization_api_key(&self) -> Option<&Path> {
+        self.bundle_settings.apple_notarization_api_key.as_deref()
+    }
+
+    /// How long to wait for Apple's verdict, in seconds.
+    pub fn apple_notarization_timeout(&self) -> u64 {
+        self.bundle_settings
+            .apple_notarization_timeout
+            .unwrap_or(600)
     }
 
     /// Provisioning profile embedded in macOS and iOS bundles before signing.

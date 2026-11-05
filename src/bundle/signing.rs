@@ -66,6 +66,58 @@ fn entitlements_xml(path: &Path) -> crate::Result<String> {
     Ok(String::from_utf8(xml)?)
 }
 
+/// Fail before any packaging if notarization is requested but cannot succeed.
+/// Apple only accepts hardened-runtime, timestamped, Developer ID-signed code.
+pub fn validate_apple_notarization(settings: &Settings) -> crate::Result<()> {
+    if settings.apple_notarization_api_key().is_none() {
+        return Ok(());
+    }
+    anyhow::ensure!(
+        settings.apple_signing_p12().is_some()
+            && settings.apple_signing_hardened_runtime()
+            && settings.apple_signing_timestamp_url().is_some(),
+        "Apple notarization requires apple_signing_p12, apple_signing_hardened_runtime = true \
+         and apple_signing_timestamp_url"
+    );
+    Ok(())
+}
+
+/// Submit a signed app or DMG to Apple, wait for the verdict, and staple the
+/// ticket so the result also works offline.
+pub fn notarize_apple_path(settings: &Settings, path: &Path) -> crate::Result<()> {
+    let Some(api_key) = settings.apple_notarization_api_key() else {
+        return Ok(());
+    };
+    notarize(settings, api_key, path)
+}
+
+fn notarize(settings: &Settings, api_key: &Path, path: &Path) -> crate::Result<()> {
+    use apple_codesign::{NotarizationUpload, Notarizer, stapling::Stapler};
+    use std::time::Duration;
+
+    let notarizer = Notarizer::from_api_key(api_key)
+        .map_err(|error| anyhow::anyhow!("Failed to load the notarization API key: {error}"))?;
+    let upload = notarizer
+        .notarize_path(path, None)
+        .map_err(|error| anyhow::anyhow!("Failed to submit {path:?} for notarization: {error}"))?;
+    if let NotarizationUpload::UploadId(id) = upload {
+        eprintln!("Apple notarization submission ID: {id}");
+        let timeout = Duration::from_secs(settings.apple_notarization_timeout());
+        let verdict = notarizer
+            .wait_on_notarization_and_fetch_log(&id, timeout)
+            .map_err(|error| anyhow::anyhow!("Notarization of {path:?} failed: {error}"))?;
+        verdict.into_result().map_err(|error| {
+            anyhow::anyhow!("Apple rejected {path:?} (submission {id}): {error}")
+        })?;
+    }
+    let stapler = Stapler::new()
+        .map_err(|error| anyhow::anyhow!("Failed to set up the ticket stapler: {error}"))?;
+    stapler
+        .staple_path(path)
+        .map_err(|error| anyhow::anyhow!("Failed to staple the ticket to {path:?}: {error}"))?;
+    Ok(())
+}
+
 /// Copy the configured provisioning profile to `destination` inside a bundle.
 /// Call this before signing so the code signature seals the profile.
 pub(super) fn embed_apple_provisioning_profile(
