@@ -30,9 +30,21 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .with_context(|| format!("Failed to create bundle directory {directory:?}"))?;
     let ipa = directory.join(format!("{}.ipa", settings.bundle_name()));
     common::print_bundling(&format!("{}.ipa", settings.bundle_name()))?;
-    let file = File::create(&ipa).with_context(|| format!("Failed to create {ipa:?}"))?;
-    write_archive(file, &payload, &app.join(settings.binary_name()))?;
+    publish(&ipa, &payload, &app.join(settings.binary_name()))?;
     Ok(vec![ipa])
+}
+
+/// Archives the payload beside `ipa` and moves it into place only once it is
+/// complete, so a failure never leaves a truncated file or loses the old one.
+fn publish(ipa: &Path, payload: &Path, executable: &Path) -> crate::Result<()> {
+    let directory = ipa.parent().context("IPA path has no parent")?;
+    let mut candidate = tempfile::NamedTempFile::new_in(directory)
+        .with_context(|| format!("Failed to create a file in {directory:?}"))?;
+    write_archive(candidate.as_file_mut(), payload, executable)?;
+    candidate
+        .persist(ipa)
+        .with_context(|| format!("Failed to write {ipa:?}"))?;
+    Ok(())
 }
 
 /// Archive `payload` (named `Payload` on disk) with `executable` marked executable.
@@ -120,11 +132,17 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn rejects_symlinks() {
+    fn rejects_symlinks_and_keeps_the_previous_ipa() {
         let temp = tempfile::tempdir().unwrap();
         let (payload, executable) = app(temp.path());
+        let ipa = temp.path().join("Foo.ipa");
+        fs::write(&ipa, "previous").unwrap();
         std::os::unix::fs::symlink("/etc/passwd", payload.join("Foo.app/link")).unwrap();
-        let error = write_archive(Cursor::new(Vec::new()), &payload, &executable).unwrap_err();
+
+        let error = publish(&ipa, &payload, &executable).unwrap_err();
         assert!(error.to_string().contains("link"), "{error}");
+        assert_eq!(fs::read_to_string(&ipa).unwrap(), "previous");
+        // No half-written file is left behind either.
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
     }
 }
