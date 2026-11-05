@@ -84,7 +84,9 @@ pub fn sign_windows_artifact(settings: &Settings, artifact_path: &Path) -> crate
                     "Windows signing certificate password environment variable `{variable}` is not set"
                 )
             })?),
-            None => Secret::Prompt,
+            // A passwordless P12 uses the empty password. Prompting would hang
+            // an unattended build.
+            None => Secret::value(String::new()),
         };
         let credential = Credential::pkcs12(&config.certificate_path, secret);
         let parent = artifact_path.parent().ok_or_else(|| {
@@ -126,56 +128,62 @@ pub fn sign_linux_artifacts(
     settings: &Settings,
     artifact_paths: &mut Vec<std::path::PathBuf>,
 ) -> crate::Result<()> {
+    use sigstore_sign::oidc::IdentityToken;
+
     let Some(config) = settings.linux_signing() else {
         return Ok(());
     };
+    let token = std::env::var(&config.identity_token_env).with_context(|| {
+        format!(
+            "Linux Sigstore identity token environment variable `{}` is not set",
+            config.identity_token_env
+        )
+    })?;
+    let token = IdentityToken::from_jwt(&token)
+        .map_err(|error| anyhow::anyhow!("Invalid Linux Sigstore identity token: {error}"))?;
 
-    {
-        use sigstore::{bundle::sign::SigningContext, oauth::IdentityToken};
-
-        let token = std::env::var(&config.identity_token_env).with_context(|| {
-            format!(
-                "Linux Sigstore identity token environment variable `{}` is not set",
-                config.identity_token_env
-            )
-        })?;
-        let token = IdentityToken::try_from(token.as_str())
-            .map_err(|error| anyhow::anyhow!("Invalid Linux Sigstore identity token: {error}"))?;
-        let context = SigningContext::production()
-            .map_err(|error| anyhow::anyhow!("Failed to initialize Sigstore: {error}"))?;
-        let signer = context.blocking_signer(token).map_err(|error| {
-            anyhow::anyhow!("Failed to create Sigstore signing session: {error}")
-        })?;
-
-        let signature_paths = artifact_paths
-            .iter()
-            .map(|artifact_path| sign_linux_artifact(&signer, artifact_path))
-            .collect::<crate::Result<Vec<_>>>()?;
-        artifact_paths.extend(signature_paths);
-        Ok(())
-    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("Failed to start the Sigstore runtime")?;
+    let bundles = runtime.block_on(sign_with_sigstore(token, artifact_paths))?;
+    artifact_paths.extend(bundles);
+    Ok(())
 }
 
-fn sign_linux_artifact(
-    signer: &sigstore::bundle::sign::blocking::SigningSession<'_>,
+async fn sign_with_sigstore(
+    token: sigstore_sign::oidc::IdentityToken,
+    artifact_paths: &[std::path::PathBuf],
+) -> crate::Result<Vec<std::path::PathBuf>> {
+    let context = sigstore_sign::SigningContext::production()
+        .await
+        .map_err(|error| anyhow::anyhow!("Failed to initialize Sigstore: {error}"))?;
+    let signer = context.signer(token);
+    let mut bundles = Vec::new();
+    for artifact_path in artifact_paths {
+        bundles.push(sign_linux_artifact(&signer, artifact_path).await?);
+    }
+    Ok(bundles)
+}
+
+async fn sign_linux_artifact(
+    signer: &sigstore_sign::Signer,
     artifact_path: &Path,
 ) -> crate::Result<std::path::PathBuf> {
     let artifact = std::fs::File::open(artifact_path)
         .with_context(|| format!("Failed to open Linux artifact {artifact_path:?} for signing"))?;
     let bundle = signer
-        .sign(artifact)
-        .map_err(|error| anyhow::anyhow!("Sigstore signing failed: {error}"))?
-        .to_bundle();
-    let bundle_path = artifact_path.with_file_name(format!(
-        "{}.sigstore.json",
-        artifact_path
-            .file_name()
-            .ok_or_else(|| anyhow::anyhow!("Linux artifact has no file name: {artifact_path:?}"))?
-            .to_string_lossy()
-    ));
-    let bundle_json = serde_json::to_vec_pretty(&bundle)
-        .with_context(|| "Failed to serialize Sigstore bundle")?;
-    std::fs::write(&bundle_path, bundle_json)
+        .sign_reader(artifact)
+        .await
+        .map_err(|error| anyhow::anyhow!("Sigstore signing failed: {error}"))?;
+
+    let mut bundle_path = artifact_path.as_os_str().to_owned();
+    bundle_path.push(".sigstore.json");
+    let bundle_path = std::path::PathBuf::from(bundle_path);
+    let json = bundle
+        .to_json_pretty()
+        .context("Failed to serialize Sigstore bundle")?;
+    std::fs::write(&bundle_path, json)
         .with_context(|| format!("Failed to write Sigstore bundle {bundle_path:?}"))?;
     Ok(bundle_path)
 }
