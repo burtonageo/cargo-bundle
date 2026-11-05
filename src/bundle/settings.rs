@@ -10,94 +10,37 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use target_build_utils::TargetInfo;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// A bundle format. The names double as the values of `--format`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
 pub enum PackageType {
+    #[value(name = "apk")]
     AndroidApk,
+    #[value(name = "osx")]
     OsxBundle,
+    #[value(name = "dmg")]
     OsxDmg,
+    #[value(name = "ios")]
     IosBundle,
+    #[value(name = "ipa")]
     IosIpa,
+    #[value(name = "msi")]
     WindowsMsi,
+    #[value(name = "wxsmsi")]
     WxsMsi,
+    #[value(name = "exe")]
     WindowsBundle,
+    #[value(name = "deb")]
     Deb,
+    #[value(name = "rpm")]
     Rpm,
+    #[value(name = "appimage")]
     AppImage,
-}
-
-impl std::str::FromStr for PackageType {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        PackageType::try_from(s)
-    }
 }
 
 impl std::fmt::Display for PackageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.short_name())
-    }
-}
-
-impl TryFrom<&str> for PackageType {
-    type Error = anyhow::Error;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        PackageType::from_short_name(s).ok_or_else(|| {
-            let all = PackageType::all()
-                .iter()
-                .map(|&s| s.to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            anyhow::anyhow!("Unsupported package type: '{s}'. Supported types are: {all}")
-        })
-    }
-}
-
-impl TryFrom<String> for PackageType {
-    type Error = anyhow::Error;
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        PackageType::try_from(s.as_str())
-    }
-}
-
-impl PackageType {
-    pub fn from_short_name(name: &str) -> Option<PackageType> {
-        // Other types we may eventually want to support: apk
-        match name {
-            "apk" => Some(PackageType::AndroidApk),
-            "deb" => Some(PackageType::Deb),
-            "ios" => Some(PackageType::IosBundle),
-            "ipa" => Some(PackageType::IosIpa),
-            "msi" => Some(PackageType::WindowsMsi),
-            "wxsmsi" => Some(PackageType::WxsMsi),
-            "osx" => Some(PackageType::OsxBundle),
-            "dmg" => Some(PackageType::OsxDmg),
-            "rpm" => Some(PackageType::Rpm),
-            "appimage" => Some(PackageType::AppImage),
-            "exe" => Some(PackageType::WindowsBundle),
-            _ => None,
-        }
-    }
-
-    pub const fn short_name(&self) -> &'static str {
-        match *self {
-            PackageType::AndroidApk => "apk",
-            PackageType::Deb => "deb",
-            PackageType::IosBundle => "ios",
-            PackageType::IosIpa => "ipa",
-            PackageType::WindowsMsi => "msi",
-            PackageType::WxsMsi => "wxsmsi",
-            PackageType::OsxBundle => "osx",
-            PackageType::OsxDmg => "dmg",
-            PackageType::Rpm => "rpm",
-            PackageType::AppImage => "appimage",
-            PackageType::WindowsBundle => "exe",
-        }
-    }
-
-    pub const fn all() -> &'static [&'static str] {
-        &[
-            "apk", "deb", "ios", "ipa", "msi", "wxsmsi", "osx", "dmg", "rpm", "appimage", "exe",
-        ]
+        let value = clap::ValueEnum::to_possible_value(self).expect("no variant is skipped");
+        f.write_str(value.get_name())
     }
 }
 
@@ -373,6 +316,8 @@ impl Settings {
         } else {
             Vec::new()
         };
+        let name = bundle_settings.name.as_ref().unwrap_or(&package.name);
+        super::common::validate_bundle_name(name)?;
         Ok(Settings {
             package: package.clone(),
             package_type,
@@ -503,6 +448,11 @@ impl Settings {
     }
 
     /// Returns the file name of the binary being bundled.
+    /// The Cargo package being bundled.
+    pub fn package_name(&self) -> &str {
+        &self.package.name
+    }
+
     pub fn binary_name(&self) -> &str {
         &self.binary_name
     }
@@ -1087,47 +1037,22 @@ mod tests {
     }
 
     #[test]
-    fn dmg_round_trip() {
+    fn every_format_round_trips_through_its_name() {
         use super::PackageType;
-
+        use clap::ValueEnum;
+        let names: Vec<_> = PackageType::value_variants()
+            .iter()
+            .map(PackageType::to_string)
+            .collect();
         assert_eq!(
-            PackageType::from_short_name("dmg"),
-            Some(PackageType::OsxDmg)
+            names,
+            [
+                "apk", "osx", "dmg", "ios", "ipa", "msi", "wxsmsi", "exe", "deb", "rpm", "appimage"
+            ]
         );
-
-        assert_eq!(PackageType::OsxDmg.short_name(), "dmg");
-        assert_eq!(PackageType::OsxDmg.to_string(), "dmg");
-    }
-
-    #[test]
-    fn exe_round_trip() {
-        use super::PackageType;
-
-        assert_eq!(
-            PackageType::from_short_name("exe"),
-            Some(PackageType::WindowsBundle)
-        );
-
-        assert_eq!(PackageType::WindowsBundle.short_name(), "exe");
-        assert_eq!(PackageType::WindowsBundle.to_string(), "exe");
-    }
-
-    #[test]
-    fn all_package_types_are_listed() {
-        use super::PackageType;
-        let all = PackageType::all();
-        assert!(all.contains(&"dmg"), "dmg missing from PackageType::all()");
-        assert!(all.contains(&"exe"), "exe missing from PackageType::all()");
-    }
-
-    #[test]
-    fn every_listed_package_type_round_trips() {
-        use super::PackageType;
-        for name in PackageType::all() {
-            let package_type = PackageType::from_short_name(name).unwrap();
-            assert_eq!(package_type.short_name(), *name);
+        for (variant, name) in PackageType::value_variants().iter().zip(&names) {
+            assert_eq!(PackageType::from_str(name, false), Ok(*variant));
         }
-        assert!(PackageType::all().contains(&"apk") && PackageType::all().contains(&"ipa"));
     }
 
     #[test]

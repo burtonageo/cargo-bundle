@@ -4,6 +4,20 @@ use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 
+/// Rejects names that cannot be used as one file name in every output
+/// directory: empty names, separators, `.` and `..`.
+pub fn validate_bundle_name(name: &str) -> crate::Result<()> {
+    let single_component = matches!(
+        Path::new(name).components().collect::<Vec<_>>().as_slice(),
+        [Component::Normal(_)]
+    );
+    anyhow::ensure!(
+        single_component && !name.contains(['/', '\\', '\0']),
+        "The bundle name {name:?} must be a single file name; set `name` in package.metadata.bundle"
+    );
+    Ok(())
+}
+
 /// Returns true if the path has a filename indicating that it is a high-desity
 /// "retina" icon.  Specifically, returns true the the file stem ends with
 /// "@2x" (a convention specified by the [Apple developer docs](
@@ -204,7 +218,9 @@ pub fn print_warning(message: &str) -> crate::Result<()> {
             output.fg(term::color::YELLOW)?;
         }
         write!(output, "warning:")?;
-        output.reset()?;
+        if output.supports_reset() {
+            output.reset()?;
+        }
         writeln!(output, " {message}")?;
         output.flush()?;
         Ok(())
@@ -256,10 +272,23 @@ pub fn print_error(error: &anyhow::Error) -> crate::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{copy_dir, create_file, is_retina, read_file, resource_relpath, symlink_file};
+    use super::{
+        copy_dir, create_file, is_retina, read_file, resource_relpath, symlink_file,
+        validate_bundle_name,
+    };
 
     use std::io::Write;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn bundle_names_are_single_file_names() {
+        for name in ["Post Card", "Café", "a.b", ".hidden"] {
+            assert!(validate_bundle_name(name).is_ok(), "{name}");
+        }
+        for name in ["", ".", "..", "../x", "a/b", "a\\b", "/abs", "x\0y"] {
+            assert!(validate_bundle_name(name).is_err(), "{name:?}");
+        }
+    }
 
     #[test]
     fn create_file_with_parent_dirs() {

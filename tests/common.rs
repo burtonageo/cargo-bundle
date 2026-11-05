@@ -62,6 +62,8 @@ pub fn project(dir: &Path, bundle: &str) -> impl Fn(&[&str], &Path) -> Output {
             .arg("--binary-path")
             .arg(binary)
             .current_dir(&dir)
+            // A terminal without colors or attributes must not break output.
+            .env("TERM", "dumb")
             .output()
             .unwrap()
     }
