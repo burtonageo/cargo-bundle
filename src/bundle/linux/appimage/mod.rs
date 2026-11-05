@@ -26,7 +26,7 @@ mod arch;
 mod context;
 mod runtime;
 
-use crate::bundle::{Settings, common};
+use crate::bundle::{Settings, common, settings::AppImageCompression};
 use anyhow::Context;
 use app_dir::AppDirectory;
 use context::AppImageContext;
@@ -34,9 +34,8 @@ use std::path::PathBuf;
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let context = AppImageContext::new(settings)?;
-    // Fail on a bad runtime or compression before any work is done.
+    // Fail on a bad runtime before any work is done.
     let runtime = runtime::read(settings, context.architecture)?;
-    let compression = compression(settings)?;
 
     let package_name = context
         .package_path
@@ -49,7 +48,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let app_directory = AppDirectory::build(settings, &context)?;
     let app_dir = appimage::AppDir::open(&app_directory.path)?;
     appimage::Packer::new(&app_dir, &runtime)
-        .compression(compression)
+        .compression(settings.appimage_compression().into())
         .existing(appimage::ExistingFiles::Replace)
         .write_to(&context.package_path)
         .with_context(|| format!("Failed to assemble {}", context.package_path.display()))?;
@@ -57,15 +56,14 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     Ok(vec![context.package_path.clone()])
 }
 
-fn compression(settings: &Settings) -> crate::Result<appimage::Compression> {
-    match settings.appimage_compression().unwrap_or("gzip") {
-        "gzip" => Ok(appimage::Compression::Gzip),
-        "lz4" => Ok(appimage::Compression::Lz4),
-        "lzo" => Ok(appimage::Compression::Lzo),
-        "none" => Ok(appimage::Compression::None),
-        other => anyhow::bail!(
-            "appimage_compression must be \"gzip\", \"lz4\", \"lzo\", or \"none\", got {other:?}"
-        ),
+impl From<AppImageCompression> for appimage::Compression {
+    fn from(compression: AppImageCompression) -> Self {
+        match compression {
+            AppImageCompression::Gzip => Self::Gzip,
+            AppImageCompression::Lz4 => Self::Lz4,
+            AppImageCompression::Lzo => Self::Lzo,
+            AppImageCompression::None => Self::None,
+        }
     }
 }
 

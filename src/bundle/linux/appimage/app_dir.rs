@@ -361,7 +361,7 @@ fn copy_metainfo_with_localizations(
 
                     // Emit one localized sibling per locale.
                     if let Some(locs) = localizations {
-                        for (locale, locale_entry) in locs.sorted_locales() {
+                        for (locale, locale_entry) in locs.locales() {
                             let translation = match translation_key.as_str() {
                                 "Name" => locale_entry.name.as_deref(),
                                 "Comment" => locale_entry.comment.as_deref(),
@@ -372,7 +372,8 @@ fn copy_metainfo_with_localizations(
                                 continue;
                             };
                             let mut localized_start = BytesStart::new(tag_name.clone());
-                            localized_start.push_attribute(("xml:lang", locale.as_str()));
+                            localized_start
+                                .push_attribute(("xml:lang", locale.to_string().as_str()));
                             writer
                                 .write_event(Event::Start(localized_start))
                                 .map_err(anyhow::Error::msg)?;
@@ -555,7 +556,6 @@ fn parse_icon_directory_area(name: &str) -> Option<u64> {
 mod tests {
     use super::{copy_metainfo_with_localizations, parse_icon_directory_area};
     use crate::bundle::localization::{LinuxDesktopLocale, LinuxDesktopLocalizations};
-    use std::collections::HashMap;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -589,9 +589,9 @@ mod tests {
         .unwrap();
         let destination = NamedTempFile::new().unwrap();
 
-        let mut locale_map = HashMap::new();
+        let mut locale_map = crate::bundle::localization::Locales::default();
         locale_map.insert(
-            "fr".to_string(),
+            "fr",
             LinuxDesktopLocale {
                 name: Some("Mon App".to_string()),
                 comment: None,

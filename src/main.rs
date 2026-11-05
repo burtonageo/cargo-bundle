@@ -128,7 +128,12 @@ fn build_command(settings: &Settings, triple: Option<&str>) -> process::Command 
         cargo.arg(format!("--features={features}"));
     }
     match settings.build_artifact() {
-        BuildArtifact::Main => {}
+        // An APK packages the package's library, not a binary.
+        BuildArtifact::Main => {
+            if settings.target_os() == bundle::TargetOs::Android {
+                cargo.arg("--lib");
+            }
+        }
         BuildArtifact::Bin(name) => {
             cargo.arg(format!("--bin={name}"));
         }

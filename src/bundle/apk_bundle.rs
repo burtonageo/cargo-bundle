@@ -7,7 +7,7 @@ use super::common;
 use crate::Settings;
 use anyhow::Context;
 use apk::{
-    Abi, ApiLevel, ApkBuilder, VersionCode,
+    Abi, ApiLevel, ApkBuilder, Manifest, VersionCode,
     res::Density,
     sign::{Signer, SigningIdentity},
 };
@@ -29,13 +29,27 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
         .context("Android bundling needs a cdylib: pass --binary-path <dir>/lib<name>.so")?;
     let android = settings.android();
 
-    let identifier = settings.bundle_identifier();
-    let mut apk = ApkBuilder::native_activity(
-        identifier
-            .parse()
-            .with_context(|| format!("Invalid Android package name {identifier:?}"))?,
-        library.parse()?,
-    );
+    let project = settings
+        .manifest_path()
+        .parent()
+        .context("The package manifest has no directory")?;
+    let mut apk = match &android.manifest {
+        Some(path) => {
+            let path = project.join(path);
+            let xml = fs::read_to_string(&path)
+                .with_context(|| format!("Failed to read android.manifest {path:?}"))?;
+            ApkBuilder::new(Manifest::parse(&xml).context("Invalid android.manifest")?)
+        }
+        None => {
+            let identifier = settings.bundle_identifier();
+            ApkBuilder::native_activity(
+                identifier
+                    .parse()
+                    .with_context(|| format!("Invalid Android package name {identifier:?}"))?,
+                library.parse()?,
+            )
+        }
+    };
     let version_code = android.version_code.unwrap_or(1);
     apk.label(settings.bundle_name()).version(
         VersionCode::try_from(version_code)
@@ -77,7 +91,8 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     }
     match &android.signing_key {
         Some(key) => {
-            let identity = SigningIdentity::from_pem_file(key)
+            let key = project.join(key);
+            let identity = SigningIdentity::from_pem_file(&key)
                 .with_context(|| format!("Failed to load Android signing key {key:?}"))?;
             apk.sign_with(Signer::new(identity));
         }
