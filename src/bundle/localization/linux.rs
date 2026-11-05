@@ -49,7 +49,7 @@ impl<'a> LinuxDesktopLocalizations<'a> {
     }
 
     /// Locales sorted by code for deterministic artifact output.
-    pub fn sorted_locales(&self) -> std::collections::BTreeMap<&'a str, &'a LinuxDesktopLocale> {
+    pub fn sorted_locales(&self) -> std::collections::BTreeMap<String, &'a LinuxDesktopLocale> {
         sorted_locales(self.locale_mapping)
     }
 
@@ -66,15 +66,18 @@ impl<'a> LinuxDesktopLocalizations<'a> {
         &self,
         extract_field: impl Fn(&'a LinuxDesktopLocale) -> Option<&'a T>,
     ) -> Option<&'a T> {
+        // Look in normalized codes so that `en.UTF-8` counts as `en`.
+        let locales = self.sorted_locales();
         FALLBACK_LOCALE_PREFERENCE
             .iter()
             .find_map(|preferred_locale| {
-                self.locale_mapping
+                locales
                     .get(*preferred_locale)
+                    .copied()
                     .and_then(&extract_field)
             })
-            .or_else(move || {
-                self.sorted_locales()
+            .or_else(|| {
+                locales
                     .values()
                     .find_map(|locale_data| extract_field(locale_data))
             })
@@ -133,19 +136,19 @@ impl<'a> LinuxDesktopLocalizations<'a> {
             self.append_single_localized_entry(
                 output_buffer,
                 "Name",
-                locale_code,
+                &locale_code,
                 locale_data.name.as_deref(),
             );
             self.append_single_localized_entry(
                 output_buffer,
                 "GenericName",
-                locale_code,
+                &locale_code,
                 locale_data.generic_name.as_deref(),
             );
             self.append_single_localized_entry(
                 output_buffer,
                 "Comment",
-                locale_code,
+                &locale_code,
                 locale_data.comment.as_deref(),
             );
 
@@ -160,7 +163,7 @@ impl<'a> LinuxDesktopLocalizations<'a> {
             self.append_single_localized_entry(
                 output_buffer,
                 "Icon",
-                locale_code,
+                &locale_code,
                 locale_data.icon.as_deref(),
             );
         }
@@ -305,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn fallback_prefers_en_over_first_sorted() {
+    fn fallback_prefers_en_even_with_an_encoding_suffix() {
         let mut locale_mapping = HashMap::new();
         locale_mapping.insert(
             "fr".to_string(),
@@ -316,10 +319,18 @@ mod tests {
             },
         );
         locale_mapping.insert(
-            "en".to_string(),
+            "en.UTF-8".to_string(),
             LinuxDesktopLocale {
                 icon: None,
                 generic_name: Some("Utility".into()),
+                ..Default::default()
+            },
+        );
+        // Sorted first, so it would win if `en.UTF-8` were not recognized as `en`.
+        locale_mapping.insert(
+            "de".to_string(),
+            LinuxDesktopLocale {
+                generic_name: Some("Dienstprogramm".into()),
                 ..Default::default()
             },
         );

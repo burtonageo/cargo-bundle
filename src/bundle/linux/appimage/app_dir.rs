@@ -393,7 +393,7 @@ fn copy_metainfo_with_localizations(
                                 continue;
                             };
                             let mut localized_start = BytesStart::new(tag_name.clone());
-                            localized_start.push_attribute(("xml:lang", locale));
+                            localized_start.push_attribute(("xml:lang", locale.as_str()));
                             writer
                                 .write_event(Event::Start(localized_start))
                                 .map_err(anyhow::Error::msg)?;

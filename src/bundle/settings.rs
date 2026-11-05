@@ -1,6 +1,9 @@
 use super::category::AppCategory;
 use super::common::print_warning;
-use super::localization::{LinuxDesktopLocale, LinuxDesktopLocalizations, OsxLocalizations};
+use super::localization::{
+    AppleLocalizations, LinuxDesktopLocale, LinuxDesktopLocalizations, validate_locale_codes,
+};
+use anyhow::Context;
 use cargo_metadata::{Metadata, MetadataCommand, Package, TargetKind};
 use serde_json::Value;
 use std::borrow::Cow;
@@ -132,6 +135,20 @@ pub struct AndroidSettings {
     /// PEM file with the private key and certificate used to sign the APK.
     /// The APK is left unsigned, and cannot be installed, without it.
     pub signing_key: Option<PathBuf>,
+}
+
+impl BundleSettings {
+    /// Locale codes become directory names and desktop-file keys, so they are
+    /// checked once here rather than by each bundler.
+    fn validate_localizations(&self) -> crate::Result<()> {
+        if let Some(locales) = self.linux.as_ref().and_then(|l| l.localizations.as_ref()) {
+            validate_locale_codes(locales).context("Invalid linux.localizations")?;
+        }
+        if let Some(locales) = self.osx.as_ref().and_then(|o| o.localizations.as_ref()) {
+            validate_locale_codes(locales).context("Invalid osx.localizations")?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize)]
@@ -318,6 +335,7 @@ impl Settings {
         };
         let name = bundle_settings.name.as_ref().unwrap_or(&package.name);
         super::common::validate_bundle_name(name)?;
+        bundle_settings.validate_localizations()?;
         Ok(Settings {
             package: package.clone(),
             package_type,
@@ -739,15 +757,15 @@ impl Settings {
         )
     }
 
-    /// macOS localizations as an [`OsxLocalizations`] wrapper.
+    /// macOS localizations as an [`AppleLocalizations`] wrapper.
     ///
     /// Writes `*.lproj/InfoPlist.strings` under the Resources directory.
-    pub fn osx_localizations(&self) -> Option<OsxLocalizations<'_>> {
+    pub fn osx_localizations(&self) -> Option<AppleLocalizations<'_>> {
         self.bundle_settings
             .osx
             .as_ref()
             .and_then(|osx| osx.localizations.as_ref())
-            .map(OsxLocalizations::new)
+            .map(AppleLocalizations::new)
     }
 
     /// Linux desktop localizations as a [`LinuxDesktopLocalizations`] wrapper.

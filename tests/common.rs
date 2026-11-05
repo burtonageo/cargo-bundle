@@ -42,7 +42,7 @@ pub fn setup_example_binary(name: &str) {
 
 /// Writes a package whose `[package.metadata.bundle]` table holds `bundle`,
 /// and returns a runner for `cargo bundle` in `dir`.
-pub fn project(dir: &Path, bundle: &str) -> impl Fn(&[&str], &Path) -> Output {
+pub fn project(dir: &Path, bundle: &str) -> impl Fn(&[&str], &Path) -> Output + use<> {
     fs::create_dir_all(dir.join("src")).unwrap();
     fs::write(dir.join("src/main.rs"), "fn main() {}\n").unwrap();
     fs::write(

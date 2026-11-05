@@ -395,7 +395,7 @@ mod tests {
         locs.insert("fr".to_string(), LinuxDesktopLocale::default());
         locs.insert("de".to_string(), LinuxDesktopLocale::default());
         let table = LinuxDesktopLocalizations::new(&locs);
-        let sorted: Vec<_> = table.sorted_locales().keys().copied().collect();
+        let sorted: Vec<_> = table.sorted_locales().into_keys().collect();
         assert_eq!(sorted, vec!["de", "fr"]);
     }
 
