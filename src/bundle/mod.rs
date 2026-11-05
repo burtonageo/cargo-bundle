@@ -2,8 +2,8 @@ mod apk_bundle;
 mod category;
 mod common;
 mod dmg_bundle;
-#[cfg(unix)]
 mod dmg_finder;
+mod hfs_image;
 mod ios_bundle;
 mod ipa_bundle;
 mod linux;
