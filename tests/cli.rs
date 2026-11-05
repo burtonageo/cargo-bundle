@@ -124,3 +124,14 @@ fn notarization_that_cannot_succeed_is_refused_before_anything_is_written() {
     // The setting only concerns macOS output; other formats ignore it.
     succeeded(&bundle(&["--format", "deb"], &binary));
 }
+
+#[test]
+fn rpm_is_reported_as_unimplemented_instead_of_panicking() {
+    let temp = tempfile::tempdir().unwrap();
+    let bundle = project(temp.path(), "");
+    let binary = temp.path().join("prebuilt");
+    fs::write(&binary, "binary").unwrap();
+    let output = bundle(&["--format", "rpm"], &binary);
+    assert_eq!(output.status.code(), Some(1), "an error, not a panic (101)");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("not implemented"));
+}
