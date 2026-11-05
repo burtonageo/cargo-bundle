@@ -174,7 +174,7 @@ fn safe_term_attr<T: term::Terminal + ?Sized>(
     }
 }
 
-fn print_progress(step: &str, msg: &str) -> crate::Result<()> {
+pub fn print_progress(step: &str, msg: &str) -> crate::Result<()> {
     if let Some(mut output) = term::stderr() {
         safe_term_attr(&mut output, term::Attr::Bold)?;
         if output.supports_color() {

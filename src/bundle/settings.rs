@@ -208,6 +208,8 @@ struct BundleSettings {
     appimage_metainfo_path: Option<String>,
     /// SquashFS compression codec: `"gzip"` (default), `"lz4"`, `"lzo"`, or `"none"`.
     appimage_compression: Option<String>,
+    /// ELF runtime to put in front of the AppImage instead of the official one.
+    appimage_runtime: Option<PathBuf>,
     deb_depends: Option<Vec<String>>,
     /// Linux-only packaging configuration.
     linux: Option<LinuxSettings>,
@@ -723,6 +725,11 @@ impl Settings {
         self.bundle_settings.appimage_compression.as_deref()
     }
 
+    /// Runtime to use instead of the downloaded official one.
+    pub fn appimage_runtime(&self) -> Option<&Path> {
+        self.bundle_settings.appimage_runtime.as_deref()
+    }
+
     /// `StartupWMClass` for the `.desktop` entry.
     pub fn linux_startup_wm_class(&self) -> Option<&str> {
         self.bundle_settings
@@ -1210,6 +1217,7 @@ mod tests {
             identifier = "com.example.appimage"
             appimage_metainfo_path = "assets/metainfo.xml"
             appimage_compression = "lz4"
+            appimage_runtime = "runtime/appimage-runtime"
 
             [linux]
             startup_wm_class = "myapp"
@@ -1227,6 +1235,10 @@ mod tests {
             Some("assets/metainfo.xml")
         );
         assert_eq!(bundle.appimage_compression.as_deref(), Some("lz4"));
+        assert_eq!(
+            bundle.appimage_runtime.as_deref(),
+            Some(std::path::Path::new("runtime/appimage-runtime"))
+        );
         assert_eq!(
             bundle.linux.as_ref().unwrap().startup_wm_class.as_deref(),
             Some("myapp")

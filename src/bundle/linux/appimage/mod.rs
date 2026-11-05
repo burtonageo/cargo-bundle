@@ -1,20 +1,10 @@
 //! Type-2 AppImage bundler.
 //!
-//! # Format
-//!
-//! A type-2 AppImage is:
-//!   `[ELF type2 runtime][SquashFS 4.0 payload]`
-//!
-//! The runtime (from the AppImage project) mounts the SquashFS with FUSE and
-//! executes `AppRun` at the root of the resulting AppDir. The payload is a
-//! standard little-endian SquashFS 4.0 image; gzip compression is used for
-//! maximum compatibility with older kernels / squashfuse builds.
-//!
-//! # SquashFS strategy
-//!
-//! SquashFS images are assembled by the pure-Rust [`appimage`] crate. No
-//! external `mksquashfs` binary is required; the official runtime is downloaded
-//! and cached automatically for the target architecture.
+//! An AppImage is `[ELF runtime][SquashFS payload]`. The payload is the AppDir
+//! below, assembled in pure Rust by the [`appimage`] crate, so no `mksquashfs`
+//! is needed. The runtime opens the payload and runs `AppRun`; see [`runtime`]
+//! for where it comes from. The finished image replaces any earlier one only
+//! when it reads back as a valid AppImage.
 //!
 //! # Layout
 //!
@@ -44,6 +34,9 @@ use std::path::PathBuf;
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let context = AppImageContext::new(settings)?;
+    // Fail on a bad runtime or compression before any work is done.
+    let runtime = runtime::read(settings, context.architecture)?;
+    let compression = compression(settings)?;
 
     let package_name = context
         .package_path
@@ -53,15 +46,12 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     common::print_bundling(&package_name)?;
 
     context.clean_previous_build()?;
-
     let app_directory = AppDirectory::build(settings, &context)?;
-    let architecture = arch::determine_appimage_architecture(settings.binary_arch())?;
-    let runtime_bytes = runtime::read(architecture)?;
-    appimage::AppImage::pack(&app_directory.path)
-        .runtime(runtime_bytes)
-        .compression(compression(settings)?)
+    let app_dir = appimage::AppDir::open(&app_directory.path)?;
+    appimage::Packer::new(&app_dir, &runtime)
+        .compression(compression)
+        .existing(appimage::ExistingFiles::Replace)
         .write_to(&context.package_path)
-        .map_err(anyhow::Error::from)
         .with_context(|| format!("Failed to assemble {}", context.package_path.display()))?;
 
     Ok(vec![context.package_path.clone()])

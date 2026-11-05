@@ -9,40 +9,8 @@ use std::{
     process::{Command, Output},
 };
 
-/// Writes a package whose `[package.metadata.bundle]` table holds `bundle`,
-/// and returns a runner for `cargo bundle` in `dir`.
-fn project(dir: &Path, bundle: &str) -> impl Fn(&[&str], &Path) -> Output {
-    fs::create_dir_all(dir.join("src")).unwrap();
-    fs::write(dir.join("src/main.rs"), "fn main() {}\n").unwrap();
-    fs::write(
-        dir.join("Cargo.toml"),
-        format!(
-            "[package]\nname = \"postcard\"\nversion = \"1.2.3\"\nedition = \"2024\"\n\
-             [package.metadata.bundle]\nname = \"Post Card\"\nidentifier = \"com.example.postcard\"\n\
-             {bundle}"
-        ),
-    )
-    .unwrap();
-    let dir = dir.to_owned();
-    move |args, binary| {
-        Command::new(env!("CARGO_BIN_EXE_cargo-bundle"))
-            .arg("bundle")
-            .args(args)
-            .arg("--binary-path")
-            .arg(binary)
-            .current_dir(&dir)
-            .output()
-            .unwrap()
-    }
-}
-
-fn succeeded(output: &Output) {
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
+mod common;
+use common::{project, succeeded};
 
 /// A self-signed code-signing identity exported as an unprotected PKCS#12 file.
 fn write_identity(path: &Path) {
