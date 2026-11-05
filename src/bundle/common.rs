@@ -4,6 +4,29 @@ use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 
+/// Parses the SVG file at `path`.
+pub fn load_svg(path: &Path) -> crate::Result<resvg::usvg::Tree> {
+    let data = fs::read(path).with_context(|| format!("Failed to read SVG {path:?}"))?;
+    resvg::usvg::Tree::from_data(&data, &resvg::usvg::Options::default())
+        .with_context(|| format!("Failed to parse SVG {path:?}"))
+}
+
+/// Renders `tree`, stretched to fill `width` by `height` pixels.
+pub fn render_svg(
+    tree: &resvg::usvg::Tree,
+    width: u32,
+    height: u32,
+) -> crate::Result<resvg::tiny_skia::Pixmap> {
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
+        .with_context(|| format!("Cannot render a {width}x{height} image"))?;
+    let transform = resvg::tiny_skia::Transform::from_scale(
+        width as f32 / tree.size().width(),
+        height as f32 / tree.size().height(),
+    );
+    resvg::render(tree, transform, &mut pixmap.as_mut());
+    Ok(pixmap)
+}
+
 /// Rejects names that cannot be used as one file name in every output
 /// directory: empty names, separators, `.` and `..`.
 pub fn validate_bundle_name(name: &str) -> crate::Result<()> {

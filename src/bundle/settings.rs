@@ -147,8 +147,17 @@ impl BundleSettings {
         if let Some(locales) = self.osx.as_ref().and_then(|o| o.localizations.as_ref()) {
             validate_locale_codes(locales).context("Invalid osx.localizations")?;
         }
+        if let Some(locales) = self.ios.as_ref().and_then(|i| i.localizations.as_ref()) {
+            validate_locale_codes(locales).context("Invalid ios.localizations")?;
+        }
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IosSettings {
+    localizations: Option<HashMap<String, HashMap<String, String>>>,
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize)]
@@ -176,6 +185,8 @@ struct BundleSettings {
     /// macOS-only packaging configuration.
     #[serde(alias = "macos")]
     osx: Option<OsxSettings>,
+    /// iOS-only packaging configuration.
+    ios: Option<IosSettings>,
     /// Android-only packaging configuration.
     #[serde(default)]
     android: AndroidSettings,
@@ -765,6 +776,15 @@ impl Settings {
             .osx
             .as_ref()
             .and_then(|osx| osx.localizations.as_ref())
+            .map(AppleLocalizations::new)
+    }
+
+    /// iOS localizations: `*.lproj/InfoPlist.strings` at the root of the app.
+    pub fn ios_localizations(&self) -> Option<AppleLocalizations<'_>> {
+        self.bundle_settings
+            .ios
+            .as_ref()
+            .and_then(|ios| ios.localizations.as_ref())
             .map(AppleLocalizations::new)
     }
 

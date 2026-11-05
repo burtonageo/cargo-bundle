@@ -24,8 +24,6 @@ use crate::Settings;
 use anyhow::Context;
 use image::imageops::FilterType::Lanczos3;
 use image::{self, GenericImageView};
-use resvg::tiny_skia::{Pixmap, Transform};
-use resvg::usvg::{Options, Tree};
 use std::cmp::min;
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -495,12 +493,7 @@ fn create_icns_from_svg(
     resources_dir: &Path,
     dest_path: &Path,
 ) -> crate::Result<()> {
-    let svg_data = fs::read_to_string(svg_path)
-        .with_context(|| format!("Failed to read SVG file {svg_path:?}"))?;
-
-    let opt = Options::default();
-    let tree =
-        Tree::from_data(svg_data.as_bytes(), &opt).with_context(|| "Failed to parse SVG data")?;
+    let tree = common::load_svg(svg_path)?;
 
     let mut family = icns::IconFamily::new();
 
@@ -520,16 +513,7 @@ fn create_icns_from_svg(
 
     for &(size, scale) in sizes {
         let pixel_size = size * scale;
-        let mut pixmap = Pixmap::new(pixel_size, pixel_size)
-            .with_context(|| format!("Failed to create {pixel_size}x{pixel_size} pixmap"))?;
-        resvg::render(
-            &tree,
-            Transform::from_scale(
-                pixel_size as f32 / tree.size().width(),
-                pixel_size as f32 / tree.size().height(),
-            ),
-            &mut pixmap.as_mut(),
-        );
+        let pixmap = common::render_svg(&tree, pixel_size, pixel_size)?;
 
         let png_data = pixmap
             .encode_png()

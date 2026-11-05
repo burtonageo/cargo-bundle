@@ -9,10 +9,6 @@ use crate::bundle::{Settings, common};
 use anyhow::Context;
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
-use resvg::{
-    tiny_skia::{Pixmap, Transform},
-    usvg::{Options, Tree},
-};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
@@ -171,25 +167,8 @@ impl<'a> AppDirectory<'a> {
     }
 
     fn rasterize_svg_icon(&self, icon_path: &Path, binary_name: &str) -> crate::Result<()> {
-        let svg_data = fs::read_to_string(icon_path)
-            .with_context(|| format!("Failed to read SVG icon {icon_path:?}"))?;
-
-        let render_options = Options::default();
-        let tree = Tree::from_data(svg_data.as_bytes(), &render_options)
-            .with_context(|| "Failed to parse SVG for .DirIcon")?;
-
-        let pixel_size: u32 = 256;
-        let mut pixel_map = Pixmap::new(pixel_size, pixel_size)
-            .with_context(|| "Failed to create pixmap for .DirIcon")?;
-
-        resvg::render(
-            &tree,
-            Transform::from_scale(
-                pixel_size as f32 / tree.size().width(),
-                pixel_size as f32 / tree.size().height(),
-            ),
-            &mut pixel_map.as_mut(),
-        );
+        let tree = common::load_svg(icon_path)?;
+        let pixel_map = common::render_svg(&tree, 256, 256)?;
 
         pixel_map
             .save_png(self.path.join(".DirIcon"))

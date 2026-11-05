@@ -201,6 +201,96 @@ fn ipa_wraps_the_signed_app_and_keeps_the_previous_archive_on_failure() {
     assert_eq!(fs::read(&ipa).unwrap(), before);
 }
 
+/// Rewrites the bundle name in the manifest written by `project`.
+fn rename(dir: &Path, name: &str) {
+    let manifest = fs::read_to_string(dir.join("Cargo.toml")).unwrap();
+    fs::write(dir.join("Cargo.toml"), manifest.replace("Post Card", name)).unwrap();
+}
+
+#[test]
+fn ios_bundle_escapes_metadata_and_seals_localizations_and_svg_icons() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path();
+    write_identity(&dir.join("identity.p12"));
+    let run = project(
+        dir,
+        "icon = [\"icon.svg\"]\napple_signing_p12 = \"identity.p12\"\n\
+         [package.metadata.bundle.ios.localizations.fr]\nCFBundleDisplayName = \"Poisson & frites\"\n",
+    );
+    // `<` and `>` cannot be in a file name on Windows.
+    let name = if cfg!(windows) {
+        "Fish & Chips"
+    } else {
+        "Fish & <Chips>"
+    };
+    rename(dir, name);
+    fs::write(
+        dir.join("icon.svg"),
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="#c00"/></svg>"##,
+    )
+    .unwrap();
+    let binary = dir.join("prebuilt");
+    fs::write(&binary, macho(Platform::IOs)).unwrap();
+    succeeded(&run(
+        &["--format", "ios", "--target", "aarch64-apple-ios"],
+        &binary,
+    ));
+
+    let app = dir.join(format!(
+        "target/aarch64-apple-ios/debug/bundle/ios/{name}.app"
+    ));
+    let info = plist_file(&app.join("Info.plist"));
+    assert_eq!(info["CFBundleDisplayName"].as_string(), Some(name));
+    assert_eq!(
+        info["CFBundleIdentifier"].as_string(),
+        Some("com.example.postcard")
+    );
+    let icons: Vec<_> = info["CFBundleIconFiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|icon| icon.as_string().unwrap())
+        .collect();
+    assert!(icons.contains(&"icon_1024x1024.png") && icons.contains(&"icon_60x60.png"));
+    for icon in &icons {
+        let (width, height) = image::image_dimensions(app.join(icon)).unwrap();
+        assert_eq!(format!("icon_{width}x{height}.png"), *icon);
+    }
+    let strings = fs::read_to_string(app.join("fr.lproj/InfoPlist.strings")).unwrap();
+    assert_eq!(strings, "\"CFBundleDisplayName\" = \"Poisson & frites\";\n");
+
+    let resources = plist_file(&app.join("_CodeSignature/CodeResources"));
+    let sealed = resources["files2"].as_dictionary().unwrap();
+    // Info.plist is sealed by its own slot in the signature, not CodeResources.
+    for file in ["fr.lproj/InfoPlist.strings", "icon_1024x1024.png"] {
+        assert!(sealed.contains_key(file), "{file} is not sealed");
+    }
+}
+
+#[test]
+fn ios_requires_a_bundle_identifier() {
+    let temp = tempfile::tempdir().unwrap();
+    let run = project(temp.path(), "");
+    let manifest = fs::read_to_string(temp.path().join("Cargo.toml")).unwrap();
+    fs::write(
+        temp.path().join("Cargo.toml"),
+        manifest.replace("identifier = \"com.example.postcard\"\n", ""),
+    )
+    .unwrap();
+    let binary = temp.path().join("prebuilt");
+    fs::write(&binary, "binary").unwrap();
+    let output = run(
+        &["--format", "ios", "--target", "aarch64-apple-ios"],
+        &binary,
+    );
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("needs a bundle identifier"),
+        "{}",
+        stderr(&output)
+    );
+}
+
 #[test]
 fn ipa_requires_an_ios_device_target() {
     let temp = tempfile::tempdir().unwrap();

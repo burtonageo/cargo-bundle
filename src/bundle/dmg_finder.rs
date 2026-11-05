@@ -1,3 +1,4 @@
+use super::common;
 use crate::Settings;
 use anyhow::Context;
 use dmg_layout::{
@@ -9,8 +10,7 @@ use ds_parser::{
     WindowBounds, write,
 };
 use fstool::fs::hfs_plus::HfsPlus;
-use resvg::tiny_skia::Pixmap;
-use resvg::usvg::{Options, Transform, Tree};
+use resvg::usvg::Tree;
 use std::fs;
 use std::path::Path;
 use tiff::encoder::{Rational, TiffEncoder, colortype};
@@ -38,10 +38,7 @@ pub(super) fn prepare(
     let Some(background_path) = settings.osx_dmg_background() else {
         return Ok(None);
     };
-    let svg_data = fs::read(background_path)
-        .with_context(|| format!("Failed to read DMG background {background_path:?}"))?;
-    let tree = Tree::from_data(&svg_data, &Options::default())
-        .with_context(|| format!("Failed to parse DMG background SVG {background_path:?}"))?;
+    let tree = common::load_svg(background_path)?;
 
     let decoration = Decoration {
         window_size: (tree.size().width() as u32, tree.size().height() as u32),
@@ -81,19 +78,12 @@ pub(super) fn ds_store(
 }
 
 fn render_background(tree: &Tree, output_path: &Path) -> crate::Result<()> {
-    let mut pixmap = Pixmap::new(
+    // Rendered at twice the window size so it stays sharp on Retina displays.
+    let pixmap = common::render_svg(
+        tree,
         tree.size().width() as u32 * 2,
         tree.size().height() as u32 * 2,
-    )
-    .with_context(|| "Failed to allocate pixmap for DMG background")?;
-    resvg::render(
-        tree,
-        Transform::from_scale(
-            pixmap.width() as f32 / tree.size().width(),
-            pixmap.height() as f32 / tree.size().height(),
-        ),
-        &mut pixmap.as_mut(),
-    );
+    )?;
 
     let mut file = fs::File::create(output_path)
         .with_context(|| format!("Failed to create {output_path:?}"))?;
