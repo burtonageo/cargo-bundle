@@ -12,9 +12,11 @@ use target_build_utils::TargetInfo;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackageType {
+    AndroidApk,
     OsxBundle,
     OsxDmg,
     IosBundle,
+    IosIpa,
     WindowsMsi,
     WxsMsi,
     WindowsBundle,
@@ -61,8 +63,10 @@ impl PackageType {
     pub fn from_short_name(name: &str) -> Option<PackageType> {
         // Other types we may eventually want to support: apk
         match name {
+            "apk" => Some(PackageType::AndroidApk),
             "deb" => Some(PackageType::Deb),
             "ios" => Some(PackageType::IosBundle),
+            "ipa" => Some(PackageType::IosIpa),
             "msi" => Some(PackageType::WindowsMsi),
             "wxsmsi" => Some(PackageType::WxsMsi),
             "osx" => Some(PackageType::OsxBundle),
@@ -76,8 +80,10 @@ impl PackageType {
 
     pub const fn short_name(&self) -> &'static str {
         match *self {
+            PackageType::AndroidApk => "apk",
             PackageType::Deb => "deb",
             PackageType::IosBundle => "ios",
+            PackageType::IosIpa => "ipa",
             PackageType::WindowsMsi => "msi",
             PackageType::WxsMsi => "wxsmsi",
             PackageType::OsxBundle => "osx",
@@ -90,7 +96,7 @@ impl PackageType {
 
     pub const fn all() -> &'static [&'static str] {
         &[
-            "deb", "ios", "msi", "wxsmsi", "osx", "dmg", "rpm", "appimage", "exe",
+            "apk", "deb", "ios", "ipa", "msi", "wxsmsi", "osx", "dmg", "rpm", "appimage", "exe",
         ]
     }
 }
@@ -169,6 +175,22 @@ struct OsxSettings {
     dmg_background: Option<PathBuf>,
 }
 
+/// Android-only packaging configuration.
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AndroidSettings {
+    /// `android:versionCode`; defaults to 1.
+    pub version_code: Option<u32>,
+    pub min_sdk: Option<u32>,
+    pub target_sdk: Option<u32>,
+    /// Extra permissions, such as `android.permission.INTERNET`.
+    #[serde(default)]
+    pub permissions: Vec<String>,
+    /// PEM file with the private key and certificate used to sign the APK.
+    /// The APK is left unsigned, and cannot be installed, without it.
+    pub signing_key: Option<PathBuf>,
+}
+
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BundleSettings {
@@ -192,6 +214,9 @@ struct BundleSettings {
     /// macOS-only packaging configuration.
     #[serde(alias = "macos")]
     osx: Option<OsxSettings>,
+    /// Android-only packaging configuration.
+    #[serde(default)]
+    android: AndroidSettings,
     /// PKCS#12 certificate used by the pure-Rust Apple signing backend.
     /// The bundle is left unsigned when this is not configured.
     apple_signing_p12: Option<PathBuf>,
@@ -203,6 +228,8 @@ struct BundleSettings {
     apple_signing_entitlements: Option<PathBuf>,
     /// Enable the hardened runtime in Apple code signatures.
     apple_signing_hardened_runtime: Option<bool>,
+    /// Provisioning profile copied unchanged into macOS and iOS bundles.
+    apple_provisioning_profile: Option<PathBuf>,
     /// Optional Authenticode configuration for `.exe` and `.msi` output.
     windows_signing: Option<WindowsSigningSettings>,
     /// Optional keyless Sigstore configuration for Linux release artifacts.
@@ -505,6 +532,7 @@ impl Settings {
             };
             match target_os {
                 "macos" => Ok(vec![PackageType::OsxBundle, PackageType::OsxDmg]),
+                "android" => Ok(vec![PackageType::AndroidApk]),
                 "ios" => Ok(vec![PackageType::IosBundle]),
                 "linux" => Ok(vec![PackageType::Deb, PackageType::AppImage]), // TODO: Do Rpm too, once it's implemented.
                 "windows" => Ok(vec![PackageType::WindowsMsi, PackageType::WindowsBundle]),
@@ -788,6 +816,11 @@ impl Settings {
             .and_then(|osx| osx.dmg_background.as_deref())
     }
 
+    /// Android-only packaging configuration.
+    pub fn android(&self) -> &AndroidSettings {
+        &self.bundle_settings.android
+    }
+
     /// PKCS#12 certificate used by the pure-Rust Apple signing backend.
     pub fn apple_signing_p12(&self) -> Option<&Path> {
         self.bundle_settings.apple_signing_p12.as_deref()
@@ -813,6 +846,11 @@ impl Settings {
         self.bundle_settings
             .apple_signing_hardened_runtime
             .unwrap_or(false)
+    }
+
+    /// Provisioning profile embedded in macOS and iOS bundles before signing.
+    pub fn apple_provisioning_profile(&self) -> Option<&Path> {
+        self.bundle_settings.apple_provisioning_profile.as_deref()
     }
 
     /// Authenticode configuration, when Windows signing has been requested.
@@ -978,6 +1016,7 @@ mod tests {
             r#"
                 apple_signing_p12 = "certs/apple.p12"
                 apple_signing_password_env = "APPLE_SIGNING_PASSWORD"
+                apple_provisioning_profile = "profiles/app.profile"
 
                 [windows_signing]
                 certificate_path = "certs/windows.p12"
@@ -992,6 +1031,10 @@ mod tests {
         assert_eq!(
             bundle.apple_signing_p12,
             Some(PathBuf::from("certs/apple.p12"))
+        );
+        assert_eq!(
+            bundle.apple_provisioning_profile,
+            Some(PathBuf::from("profiles/app.profile"))
         );
         assert_eq!(
             bundle
@@ -1068,6 +1111,39 @@ mod tests {
         let all = PackageType::all();
         assert!(all.contains(&"dmg"), "dmg missing from PackageType::all()");
         assert!(all.contains(&"exe"), "exe missing from PackageType::all()");
+    }
+
+    #[test]
+    fn every_listed_package_type_round_trips() {
+        use super::PackageType;
+        for name in PackageType::all() {
+            let package_type = PackageType::from_short_name(name).unwrap();
+            assert_eq!(package_type.short_name(), *name);
+        }
+        assert!(PackageType::all().contains(&"apk") && PackageType::all().contains(&"ipa"));
+    }
+
+    #[test]
+    fn android_settings_parse_with_defaults_and_reject_unknown_keys() {
+        let bundle: BundleSettings = toml::from_str(
+            r#"
+                [android]
+                version_code = 7
+                min_sdk = 24
+                permissions = ["android.permission.INTERNET"]
+                signing_key = "keys/release.pem"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(bundle.android.version_code, Some(7));
+        assert_eq!(bundle.android.min_sdk, Some(24));
+        assert_eq!(bundle.android.target_sdk, None);
+        assert_eq!(bundle.android.permissions, ["android.permission.INTERNET"]);
+        assert_eq!(bundle.android.signing_key, Some("keys/release.pem".into()));
+
+        let defaults: BundleSettings = toml::from_str("name = \"App\"").unwrap();
+        assert!(defaults.android.permissions.is_empty());
+        assert!(toml::from_str::<BundleSettings>("[android]\nversion = 1").is_err());
     }
 
     #[test]

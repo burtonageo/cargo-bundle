@@ -63,6 +63,19 @@ pub fn copy_file(from: &Path, to: &Path) -> crate::Result<()> {
     Ok(())
 }
 
+/// Joins a relative path's components with `/`, as archive formats require.
+pub fn archive_path(path: &Path) -> crate::Result<String> {
+    let parts = path
+        .components()
+        .map(|part| {
+            part.as_os_str()
+                .to_str()
+                .with_context(|| format!("{path:?} is not valid UTF-8"))
+        })
+        .collect::<crate::Result<Vec<_>>>()?;
+    Ok(parts.join("/"))
+}
+
 /// Reads a regular file into memory
 pub fn read_file(file: &Path) -> crate::Result<String> {
     if !file.exists() {

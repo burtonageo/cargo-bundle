@@ -86,6 +86,10 @@ pub fn bundle_project_at(settings: &Settings, output_dir: &Path) -> crate::Resul
         add_rpath(&bundle_directory, settings)?;
     }
 
+    signing::embed_apple_provisioning_profile(
+        settings,
+        &bundle_directory.join("embedded.provisionprofile"),
+    )?;
     signing::sign_apple_path(settings, &app_bundle_path)?;
 
     Ok(app_bundle_path)
