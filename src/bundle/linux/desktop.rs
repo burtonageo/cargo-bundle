@@ -1,9 +1,9 @@
 //! FreeDesktop `.desktop` Application entry generation.
 
 use crate::bundle::localization::{LinuxDesktopLocalizations, escape_desktop_value};
-use crate::bundle::settings::DesktopAction;
+use crate::bundle::settings::{ActionId, DesktopAction};
 use crate::bundle::{Settings, common};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
@@ -31,7 +31,7 @@ struct DesktopEntryInput<'a> {
     localizations: Option<LinuxDesktopLocalizations<'a>>,
     startup_wm_class: Option<&'a str>,
     appimage_version: Option<&'a str>,
-    actions: Option<&'a HashMap<String, DesktopAction>>,
+    actions: Option<&'a BTreeMap<ActionId, DesktopAction>>,
 }
 
 /// Render a FreeDesktop `.desktop` Application entry as a string.
@@ -100,35 +100,23 @@ fn render_desktop_entry(input: &DesktopEntryInput<'_>) -> String {
         writeln!(out).unwrap();
     }
 
-    // Desktop Actions: `Actions=` list in the main group (sorted for stable
-    // diffs), then one `[Desktop Action <id>]` group per action.
-    let sorted_actions: BTreeMap<&str, &DesktopAction> = input
-        .actions
-        .into_iter()
-        .flatten()
-        .map(|(id, action)| (id.as_str(), action))
-        .collect();
-
-    if !sorted_actions.is_empty() {
+    // Desktop Actions: the `Actions=` list in the main group, then one
+    // `[Desktop Action <id>]` group per action. Both are in sorted order.
+    let actions = input.actions.filter(|actions| !actions.is_empty());
+    if let Some(actions) = actions {
         write!(out, "Actions=").unwrap();
-        for id in sorted_actions.keys() {
+        for id in actions.keys() {
             write!(out, "{id};").unwrap();
         }
         writeln!(out).unwrap();
     }
 
-    for (id, action) in &sorted_actions {
+    for (id, action) in actions.into_iter().flatten() {
         writeln!(out).unwrap();
         writeln!(out, "[Desktop Action {id}]").unwrap();
         writeln!(out, "Name={}", escape_desktop_value(&action.name)).unwrap();
-        if let Some(localized) = &action.name_localized {
-            let sorted: BTreeMap<&str, &String> = localized
-                .iter()
-                .map(|(locale, name)| (locale.as_str(), name))
-                .collect();
-            for (locale, name) in sorted {
-                writeln!(out, "Name[{locale}]={}", escape_desktop_value(name)).unwrap();
-            }
+        for (locale, name) in action.name_localized.iter().flat_map(|names| names.iter()) {
+            writeln!(out, "Name[{locale}]={}", escape_desktop_value(name)).unwrap();
         }
         let exec = action.exec.as_deref().unwrap_or(input.bin_name);
         writeln!(out, "Exec={exec}").unwrap();
@@ -192,8 +180,7 @@ pub fn generate_desktop_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bundle::localization::{DesktopKeywords, LinuxDesktopLocale};
-    use std::collections::HashMap;
+    use crate::bundle::localization::{DesktopKeywords, LinuxDesktopLocale, Locales};
 
     #[test]
     fn desktop_entry_basic_without_localizations() {
@@ -247,9 +234,9 @@ mod tests {
 
     #[test]
     fn desktop_entry_with_multiple_locales() {
-        let mut locs = HashMap::new();
+        let mut locs = Locales::default();
         locs.insert(
-            "fr".to_string(),
+            "fr",
             LinuxDesktopLocale {
                 icon: None,
                 name: Some("Mon App".into()),
@@ -262,7 +249,7 @@ mod tests {
             },
         );
         locs.insert(
-            "de".to_string(),
+            "de",
             LinuxDesktopLocale {
                 icon: None,
                 name: Some("Meine App".into()),
@@ -272,7 +259,7 @@ mod tests {
             },
         );
         locs.insert(
-            "pt_BR".to_string(),
+            "pt_BR",
             LinuxDesktopLocale {
                 icon: None,
                 name: Some("Meu App".into()),
@@ -313,9 +300,9 @@ mod tests {
 
     #[test]
     fn desktop_entry_prefers_en_for_unlocalized_generic_name() {
-        let mut locs = HashMap::new();
+        let mut locs = Locales::default();
         locs.insert(
-            "fr".to_string(),
+            "fr",
             LinuxDesktopLocale {
                 icon: None,
                 name: Some("Mon App".into()),
@@ -325,7 +312,7 @@ mod tests {
             },
         );
         locs.insert(
-            "en".to_string(),
+            "en",
             LinuxDesktopLocale {
                 icon: None,
                 name: Some("My App".into()),
@@ -356,9 +343,9 @@ mod tests {
 
     #[test]
     fn desktop_entry_escapes_values_and_keyword_semicolons() {
-        let mut locs = HashMap::new();
+        let mut locs = Locales::default();
         locs.insert(
-            "fr".to_string(),
+            "fr",
             LinuxDesktopLocale {
                 icon: None,
                 name: Some("App\\Name".into()),
@@ -391,22 +378,25 @@ mod tests {
 
     #[test]
     fn locales_are_sorted() {
-        let mut locs = HashMap::new();
-        locs.insert("fr".to_string(), LinuxDesktopLocale::default());
-        locs.insert("de".to_string(), LinuxDesktopLocale::default());
+        let mut locs = Locales::default();
+        locs.insert("fr", LinuxDesktopLocale::default());
+        locs.insert("de", LinuxDesktopLocale::default());
         let table = LinuxDesktopLocalizations::new(&locs);
-        let sorted: Vec<_> = table.sorted_locales().keys().copied().collect();
+        let sorted: Vec<_> = table
+            .locales()
+            .map(|(locale, _)| locale.to_string())
+            .collect();
         assert_eq!(sorted, vec!["de", "fr"]);
     }
 
     #[test]
     fn desktop_entry_wm_class_version_and_actions() {
-        let mut name_localized = HashMap::new();
-        name_localized.insert("fr".to_string(), "Nouvelle fenetre".to_string());
+        let mut name_localized = Locales::default();
+        name_localized.insert("fr", "Nouvelle fenetre".to_string());
 
-        let mut actions = HashMap::new();
+        let mut actions = BTreeMap::new();
         actions.insert(
-            "new-window".to_string(),
+            "new-window".to_string().try_into().unwrap(),
             DesktopAction {
                 name: "New Window".to_string(),
                 exec: Some("myapp --new-window".to_string()),
@@ -415,7 +405,7 @@ mod tests {
             },
         );
         actions.insert(
-            "about".to_string(),
+            "about".to_string().try_into().unwrap(),
             DesktopAction {
                 name: "About".to_string(),
                 exec: None,
@@ -458,9 +448,9 @@ mod tests {
 
     #[test]
     fn locale_encoding_part_is_stripped() {
-        let mut locs = HashMap::new();
+        let mut locs = Locales::default();
         locs.insert(
-            "fr.UTF-8".to_string(),
+            "fr.UTF-8",
             LinuxDesktopLocale {
                 icon: Some("myapp-fr".into()),
                 name: Some("Mon App".into()),
