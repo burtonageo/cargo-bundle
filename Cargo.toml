@@ -55,6 +55,7 @@ windows-signing = ["dep:osslsigncode"]
 
 [dependencies]
 anyhow = "1.0.102"
+apk = { package = "rust-apk", version = "1.0.0", default-features = false }
 ar = "0.9.0"
 cab = "0.6.0"
 cargo_metadata = "0.23.1"
@@ -89,22 +90,22 @@ tiff = "0.11.3"
 toml = "0.9.8"
 uuid = { version = "1.22.0", features = ["v5"] }
 walkdir = "2.5.0"
+zip = { version = "2.6.1", default-features = false, features = ["deflate"] }
 alias_record = "0.3.0"
 appimage = { package = "appimage-rs", version = "0.1.0" }
 apple-codesign = { version = "0.29.0", default-features = false }
 osslsigncode = { version = "0.1.2", optional = true }
-sigstore = { version = "0.14.0", default-features = false, features = [
-    "bundle",
-    "native-tls",
-    "sigstore-trust-root",
-] }
+sigstore-sign = { version = "0.15.1", default-features = false, features = ["native-tls", "tuf", "aws-lc-rs"] }
+tokio = { version = "1", default-features = false, features = ["rt"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 resvg = "0.45"
 winres-edit = "0.2.0"
 
 [dev-dependencies]
+p12 = "0.6.3"
 winit = "0.30.13"
+x509-certificate = "0.24.0"
 
 [[example]]
 name = "hello"

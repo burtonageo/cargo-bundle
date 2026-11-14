@@ -1,9 +1,11 @@
+mod apk_bundle;
 mod category;
 mod common;
 mod dmg_bundle;
 #[cfg(unix)]
 mod dmg_finder;
 mod ios_bundle;
+mod ipa_bundle;
 mod linux;
 mod localization;
 mod msi_bundle;
@@ -22,9 +24,11 @@ pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for package_type in settings.package_types()? {
         let mut package_paths = match package_type {
+            PackageType::AndroidApk => apk_bundle::bundle_project(&settings)?,
             PackageType::OsxBundle => osx_bundle::bundle_project(&settings)?,
             PackageType::OsxDmg => dmg_bundle::bundle_project(&settings)?,
             PackageType::IosBundle => ios_bundle::bundle_project(&settings)?,
+            PackageType::IosIpa => ipa_bundle::bundle_project(&settings)?,
             PackageType::WindowsMsi => msi_bundle::bundle_project(&settings)?,
             PackageType::WxsMsi => wxsmsi_bundle::bundle_project(&settings)?,
             PackageType::WindowsBundle => windows::exe_bundle::bundle_project(&settings)?,

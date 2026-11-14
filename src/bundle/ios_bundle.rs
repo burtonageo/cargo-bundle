@@ -20,14 +20,17 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
+    let base_dir = settings.project_out_directory().join("bundle/ios");
+    Ok(vec![bundle_project_at(settings, &base_dir)?])
+}
+
+/// Build and sign `<bundle name>.app` inside `output_dir`.
+pub fn bundle_project_at(settings: &Settings, output_dir: &Path) -> crate::Result<PathBuf> {
     common::print_warning("iOS bundle support is still experimental.")?;
 
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
-    let bundle_dir = settings
-        .project_out_directory()
-        .join("bundle/ios")
-        .join(&app_bundle_name);
+    let bundle_dir = output_dir.join(&app_bundle_name);
     if bundle_dir.exists() {
         fs::remove_dir_all(&bundle_dir)
             .with_context(|| format!("Failed to remove old {app_bundle_name}"))?;
@@ -49,8 +52,12 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let bin_path = bundle_dir.join(settings.binary_name());
     common::copy_file(settings.binary_path(), &bin_path)
         .with_context(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
+    signing::embed_apple_provisioning_profile(
+        settings,
+        &bundle_dir.join("embedded.mobileprovision"),
+    )?;
     signing::sign_apple_path(settings, &bundle_dir)?;
-    Ok(vec![bundle_dir])
+    Ok(bundle_dir)
 }
 
 /// Generate the icon files and store them under the `bundle_dir`.
