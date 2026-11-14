@@ -16,8 +16,11 @@ use image::{self, GenericImageView};
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::Write;
 use std::path::{Path, PathBuf};
+
+/// Pixel sizes of the icons rendered from an SVG: every size iPhone and iPad
+/// ask for, from the 20pt notification icon to the 1024px App Store icon.
+const SVG_ICON_SIZES: [u32; 13] = [20, 29, 40, 58, 60, 76, 80, 87, 120, 152, 167, 180, 1024];
 
 pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
     let base_dir = settings.project_out_directory().join("bundle/ios");
@@ -27,6 +30,7 @@ pub fn bundle_project(settings: &Settings) -> crate::Result<Vec<PathBuf>> {
 /// Build and sign `<bundle name>.app` inside `output_dir`.
 pub fn bundle_project_at(settings: &Settings, output_dir: &Path) -> crate::Result<PathBuf> {
     common::print_warning("iOS bundle support is still experimental.")?;
+    validate_bundle_identifier(&settings.bundle_identifier())?;
 
     let app_bundle_name = format!("{}.app", settings.bundle_name());
     common::print_bundling(&app_bundle_name)?;
@@ -47,11 +51,22 @@ pub fn bundle_project_at(settings: &Settings, output_dir: &Path) -> crate::Resul
 
     let icon_filenames =
         generate_icon_files(&bundle_dir, settings).with_context(|| "Failed to create app icons")?;
-    generate_info_plist(&bundle_dir, settings, &icon_filenames)
+    write_info_plist(&bundle_dir, settings, &icon_filenames)
         .with_context(|| "Failed to create Info.plist")?;
+    if let Some(localizations) = settings.ios_localizations() {
+        localizations
+            .write_to_directory(&bundle_dir)
+            .with_context(|| "Failed to write iOS localizations")?;
+    }
     let bin_path = bundle_dir.join(settings.binary_name());
     common::copy_file(settings.binary_path(), &bin_path)
         .with_context(|| format!("Failed to copy binary from {:?}", settings.binary_path()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&bin_path, fs::Permissions::from_mode(0o755))?;
+    }
+    // Everything the signature should seal must be in place before this point.
     signing::embed_apple_provisioning_profile(
         settings,
         &bundle_dir.join("embedded.mobileprovision"),
@@ -60,8 +75,40 @@ pub fn bundle_project_at(settings: &Settings, output_dir: &Path) -> crate::Resul
     Ok(bundle_dir)
 }
 
+/// An unset identifier is empty, and a device refuses to install such an app.
+fn validate_bundle_identifier(identifier: &str) -> crate::Result<()> {
+    let valid = identifier.split('.').all(|part| {
+        !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    });
+    anyhow::ensure!(
+        valid,
+        "iOS needs a bundle identifier of dot-separated parts made of letters, digits and \
+         hyphens, not {identifier:?}; set `identifier` in package.metadata.bundle"
+    );
+    Ok(())
+}
+
 /// Generate the icon files and store them under the `bundle_dir`.
 fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<Vec<String>> {
+    let icons = settings.icon_files().collect::<crate::Result<Vec<_>>>()?;
+
+    // As on macOS, the first SVG is the source of truth for every size.
+    if let Some(svg) = icons
+        .iter()
+        .find(|icon| icon.extension() == Some(OsStr::new("svg")))
+    {
+        let tree = common::load_svg(svg)?;
+        let mut filenames = Vec::new();
+        for size in SVG_ICON_SIZES {
+            let filename = format!("icon_{size}x{size}.png");
+            common::render_svg(&tree, size, size)?
+                .save_png(bundle_dir.join(&filename))
+                .with_context(|| format!("Failed to write {filename}"))?;
+            filenames.push(filename);
+        }
+        return Ok(filenames);
+    }
+
     let mut filenames = Vec::new();
     {
         let mut get_dest_path = |width: u32, height: u32, is_retina: bool| {
@@ -77,29 +124,27 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<
         };
         let mut sizes = BTreeSet::new();
         // Prefer PNG files.
-        for icon_path in settings.icon_files() {
-            let icon_path = icon_path?;
+        for icon_path in &icons {
             if icon_path.extension() != Some(OsStr::new("png")) {
                 continue;
             }
-            let img = image::ImageReader::open(&icon_path)?
+            let img = image::ImageReader::open(icon_path)?
                 .with_guessed_format()?
                 .decode()?;
             let (width, height) = img.dimensions();
-            let is_retina = common::is_retina(&icon_path);
+            let is_retina = common::is_retina(icon_path);
             if !sizes.contains(&(width, height, is_retina)) {
                 sizes.insert((width, height, is_retina));
                 let dest_path = get_dest_path(width, height, is_retina);
-                common::copy_file(&icon_path, &dest_path)?;
+                common::copy_file(icon_path, &dest_path)?;
             }
         }
         // Fall back to non-PNG files for any missing sizes.
-        for icon_path in settings.icon_files() {
-            let icon_path = icon_path?;
+        for icon_path in &icons {
             if icon_path.extension() == Some(OsStr::new("png")) {
                 continue;
             } else if icon_path.extension() == Some(OsStr::new("icns")) {
-                let icon_family = icns::IconFamily::read(File::open(&icon_path)?)?;
+                let icon_family = icns::IconFamily::read(File::open(icon_path)?)?;
                 for icon_type in icon_family.available_icons() {
                     let width = icon_type.screen_width();
                     let height = icon_type.screen_height();
@@ -111,12 +156,10 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<
                         icon.write_png(File::create(dest_path)?)?;
                     }
                 }
-            } else if icon_path.extension() == Some(OsStr::new("svg")) {
-                // TODO: convert svg to appropriate format?
             } else {
-                let icon = image::open(&icon_path)?;
+                let icon = image::open(icon_path)?;
                 let (width, height) = icon.dimensions();
-                let is_retina = common::is_retina(&icon_path);
+                let is_retina = common::is_retina(icon_path);
                 if !sizes.contains(&(width, height, is_retina)) {
                     sizes.insert((width, height, is_retina));
                     let dest_path = get_dest_path(width, height, is_retina);
@@ -129,69 +172,35 @@ fn generate_icon_files(bundle_dir: &Path, settings: &Settings) -> crate::Result<
     Ok(filenames)
 }
 
-fn generate_info_plist(
+fn write_info_plist(
     bundle_dir: &Path,
     settings: &Settings,
-    icon_filenames: &Vec<String>,
+    icon_filenames: &[String],
 ) -> crate::Result<()> {
-    let file = &mut common::create_file(&bundle_dir.join("Info.plist"))?;
-    write!(
-        file,
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
-            <!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \
-            \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
-            <plist version=\"1.0\">\n\
-            <dict>\n"
-    )?;
+    use plist::{Dictionary, Value};
 
-    write!(
-        file,
-        "  <key>CFBundleIdentifier</key>\n  <string>{}</string>\n",
-        settings.bundle_identifier()
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleDisplayName</key>\n  <string>{}</string>\n",
-        settings.bundle_name()
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleName</key>\n  <string>{}</string>\n",
-        settings.bundle_name()
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleExecutable</key>\n  <string>{}</string>\n",
-        settings.binary_name()
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleVersion</key>\n  <string>{}</string>\n",
-        settings.version_string()
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleShortVersionString</key>\n  <string>{}</string>\n",
-        settings.version_string()
-    )?;
-    write!(
-        file,
-        "  <key>CFBundleDevelopmentRegion</key>\n  <string>en_US</string>\n"
-    )?;
-    write!(
-        file,
-        "  <key>UILaunchStoryboardName</key>\n  <string></string>\n"
-    )?;
-
+    let version = settings.version_string().to_string();
+    let mut info = Dictionary::new();
+    info.insert(
+        "CFBundleIdentifier".into(),
+        settings.bundle_identifier().into_owned().into(),
+    );
+    info.insert("CFBundleDisplayName".into(), settings.bundle_name().into());
+    info.insert("CFBundleName".into(), settings.bundle_name().into());
+    info.insert("CFBundleExecutable".into(), settings.binary_name().into());
+    info.insert("CFBundleVersion".into(), version.clone().into());
+    info.insert("CFBundleShortVersionString".into(), version.into());
+    info.insert("CFBundleDevelopmentRegion".into(), "en_US".into());
+    info.insert("UILaunchStoryboardName".into(), "".into());
     if !icon_filenames.is_empty() {
-        write!(file, "  <key>CFBundleIconFiles</key>\n  <array>\n")?;
-        for filename in icon_filenames {
-            writeln!(file, "    <string>{filename}</string>")?;
-        }
-        writeln!(file, "  </array>")?;
+        let icons = icon_filenames
+            .iter()
+            .map(|name| name.as_str().into())
+            .collect();
+        info.insert("CFBundleIconFiles".into(), Value::Array(icons));
     }
-    write!(file, "  <key>LSRequiresIPhoneOS</key>\n  <true/>\n")?;
-    write!(file, "</dict>\n</plist>\n")?;
-    file.flush()?;
-    Ok(())
+    info.insert("LSRequiresIPhoneOS".into(), true.into());
+    Value::Dictionary(info)
+        .to_file_xml(bundle_dir.join("Info.plist"))
+        .context("Failed to write Info.plist")
 }

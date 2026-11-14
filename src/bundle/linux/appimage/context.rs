@@ -11,6 +11,7 @@ pub(super) struct AppImageContext {
     pub(super) package_directory: PathBuf,
     pub(super) package_path: PathBuf,
     pub(super) app_directory_path: PathBuf,
+    pub(super) architecture: &'static str,
 }
 
 impl AppImageContext {
@@ -33,6 +34,7 @@ impl AppImageContext {
             package_directory,
             package_path,
             app_directory_path,
+            architecture,
         })
     }
 
@@ -40,9 +42,6 @@ impl AppImageContext {
         if self.package_directory.exists() {
             fs::remove_dir_all(&self.package_directory)
                 .with_context(|| "Failed to remove old package directory")?;
-        }
-        if self.package_path.exists() {
-            let _ = fs::remove_file(&self.package_path);
         }
         Ok(())
     }

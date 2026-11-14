@@ -2,8 +2,8 @@ mod apk_bundle;
 mod category;
 mod common;
 mod dmg_bundle;
-#[cfg(unix)]
 mod dmg_finder;
+mod hfs_image;
 mod ios_bundle;
 mod ipa_bundle;
 mod linux;
@@ -16,13 +16,17 @@ mod windows;
 mod wxsmsi_bundle;
 
 pub use self::common::{print_error, print_finished};
-pub use self::settings::{BuildArtifact, PackageType, Settings};
+pub use self::settings::{BuildArtifact, PackageType, Settings, TargetOs};
 use crate::bundle::linux::{appimage, deb_bundle, rpm_bundle};
 use std::path::PathBuf;
 
 pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
+    let is_macos = |package_type: &PackageType| {
+        matches!(package_type, PackageType::OsxBundle | PackageType::OsxDmg)
+    };
+
     let mut paths = Vec::new();
-    for package_type in settings.package_types()? {
+    for &package_type in settings.package_types() {
         let mut package_paths = match package_type {
             PackageType::AndroidApk => apk_bundle::bundle_project(&settings)?,
             PackageType::OsxBundle => osx_bundle::bundle_project(&settings)?,
@@ -36,6 +40,11 @@ pub fn bundle_project(settings: Settings) -> crate::Result<Vec<PathBuf>> {
             PackageType::Rpm => rpm_bundle::bundle_project(&settings)?,
             PackageType::AppImage => appimage::bundle_project(&settings)?,
         };
+        if is_macos(&package_type) {
+            for path in &package_paths {
+                signing::notarize_apple_path(&settings, path)?;
+            }
+        }
         if matches!(
             package_type,
             PackageType::Deb | PackageType::Rpm | PackageType::AppImage

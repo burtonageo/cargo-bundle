@@ -9,10 +9,6 @@ use crate::bundle::{Settings, common};
 use anyhow::Context;
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
-use resvg::{
-    tiny_skia::{Pixmap, Transform},
-    usvg::{Options, Tree},
-};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
@@ -171,25 +167,8 @@ impl<'a> AppDirectory<'a> {
     }
 
     fn rasterize_svg_icon(&self, icon_path: &Path, binary_name: &str) -> crate::Result<()> {
-        let svg_data = fs::read_to_string(icon_path)
-            .with_context(|| format!("Failed to read SVG icon {icon_path:?}"))?;
-
-        let render_options = Options::default();
-        let tree = Tree::from_data(svg_data.as_bytes(), &render_options)
-            .with_context(|| "Failed to parse SVG for .DirIcon")?;
-
-        let pixel_size: u32 = 256;
-        let mut pixel_map = Pixmap::new(pixel_size, pixel_size)
-            .with_context(|| "Failed to create pixmap for .DirIcon")?;
-
-        resvg::render(
-            &tree,
-            Transform::from_scale(
-                pixel_size as f32 / tree.size().width(),
-                pixel_size as f32 / tree.size().height(),
-            ),
-            &mut pixel_map.as_mut(),
-        );
+        let tree = common::load_svg(icon_path)?;
+        let pixel_map = common::render_svg(&tree, 256, 256)?;
 
         pixel_map
             .save_png(self.path.join(".DirIcon"))
@@ -382,7 +361,7 @@ fn copy_metainfo_with_localizations(
 
                     // Emit one localized sibling per locale.
                     if let Some(locs) = localizations {
-                        for (locale, locale_entry) in locs.sorted_locales() {
+                        for (locale, locale_entry) in locs.locales() {
                             let translation = match translation_key.as_str() {
                                 "Name" => locale_entry.name.as_deref(),
                                 "Comment" => locale_entry.comment.as_deref(),
@@ -393,7 +372,8 @@ fn copy_metainfo_with_localizations(
                                 continue;
                             };
                             let mut localized_start = BytesStart::new(tag_name.clone());
-                            localized_start.push_attribute(("xml:lang", locale));
+                            localized_start
+                                .push_attribute(("xml:lang", locale.to_string().as_str()));
                             writer
                                 .write_event(Event::Start(localized_start))
                                 .map_err(anyhow::Error::msg)?;
@@ -576,7 +556,6 @@ fn parse_icon_directory_area(name: &str) -> Option<u64> {
 mod tests {
     use super::{copy_metainfo_with_localizations, parse_icon_directory_area};
     use crate::bundle::localization::{LinuxDesktopLocale, LinuxDesktopLocalizations};
-    use std::collections::HashMap;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -610,9 +589,9 @@ mod tests {
         .unwrap();
         let destination = NamedTempFile::new().unwrap();
 
-        let mut locale_map = HashMap::new();
+        let mut locale_map = crate::bundle::localization::Locales::default();
         locale_map.insert(
-            "fr".to_string(),
+            "fr",
             LinuxDesktopLocale {
                 name: Some("Mon App".to_string()),
                 comment: None,

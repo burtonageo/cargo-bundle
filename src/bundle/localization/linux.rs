@@ -1,8 +1,7 @@
 //! FreeDesktop `.desktop` file localization.
 
-use super::{FALLBACK_LOCALE_PREFERENCE, sorted_locales};
+use super::{FALLBACK_LOCALE_PREFERENCE, Locales};
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fmt::Write;
 
 /// Keywords for a FreeDesktop `.desktop` entry (`localestring(s)`).
@@ -37,20 +36,31 @@ pub struct LinuxDesktopLocale {
     pub icon: Option<String>,
 }
 
+impl LinuxDesktopLocale {
+    /// Replace the fields `other` sets; fields it leaves out keep their value.
+    pub fn overlay(&mut self, other: Self) {
+        self.name = other.name.or(self.name.take());
+        self.generic_name = other.generic_name.or(self.generic_name.take());
+        self.comment = other.comment.or(self.comment.take());
+        self.keywords = other.keywords.or(self.keywords.take());
+        self.icon = other.icon.or(self.icon.take());
+    }
+}
+
 /// Locale-keyed FreeDesktop desktop strings for Linux packages.
 #[derive(Clone, Copy, Debug)]
 pub struct LinuxDesktopLocalizations<'a> {
-    locale_mapping: &'a HashMap<String, LinuxDesktopLocale>,
+    locale_mapping: &'a Locales<LinuxDesktopLocale>,
 }
 
 impl<'a> LinuxDesktopLocalizations<'a> {
-    pub fn new(locale_mapping: &'a HashMap<String, LinuxDesktopLocale>) -> Self {
+    pub fn new(locale_mapping: &'a Locales<LinuxDesktopLocale>) -> Self {
         Self { locale_mapping }
     }
 
-    /// Locales sorted by code for deterministic artifact output.
-    pub fn sorted_locales(&self) -> std::collections::BTreeMap<&'a str, &'a LinuxDesktopLocale> {
-        sorted_locales(self.locale_mapping)
+    /// The locales in sorted order.
+    pub fn locales(&self) -> impl Iterator<Item = (&'a super::Locale, &'a LinuxDesktopLocale)> {
+        self.locale_mapping.iter()
     }
 
     /// Look up a non-empty string field with `C` to `en` to first-sorted-locale fallback.
@@ -68,16 +78,8 @@ impl<'a> LinuxDesktopLocalizations<'a> {
     ) -> Option<&'a T> {
         FALLBACK_LOCALE_PREFERENCE
             .iter()
-            .find_map(|preferred_locale| {
-                self.locale_mapping
-                    .get(*preferred_locale)
-                    .and_then(&extract_field)
-            })
-            .or_else(move || {
-                self.sorted_locales()
-                    .values()
-                    .find_map(|locale_data| extract_field(locale_data))
-            })
+            .find_map(|preferred| self.locale_mapping.get(preferred).and_then(&extract_field))
+            .or_else(|| self.locale_mapping.values().find_map(&extract_field))
     }
 
     /// Look up Keywords with the same fallback preference as string fields.
@@ -129,23 +131,24 @@ impl<'a> LinuxDesktopLocalizations<'a> {
     }
 
     fn append_localized_entries(&self, output_buffer: &mut String) {
-        for (locale_code, locale_data) in self.sorted_locales() {
+        for (locale_code, locale_data) in self.locale_mapping.iter() {
+            let locale_code = locale_code.to_string();
             self.append_single_localized_entry(
                 output_buffer,
                 "Name",
-                locale_code,
+                &locale_code,
                 locale_data.name.as_deref(),
             );
             self.append_single_localized_entry(
                 output_buffer,
                 "GenericName",
-                locale_code,
+                &locale_code,
                 locale_data.generic_name.as_deref(),
             );
             self.append_single_localized_entry(
                 output_buffer,
                 "Comment",
-                locale_code,
+                &locale_code,
                 locale_data.comment.as_deref(),
             );
 
@@ -160,7 +163,7 @@ impl<'a> LinuxDesktopLocalizations<'a> {
             self.append_single_localized_entry(
                 output_buffer,
                 "Icon",
-                locale_code,
+                &locale_code,
                 locale_data.icon.as_deref(),
             );
         }
@@ -265,9 +268,9 @@ mod tests {
 
     #[test]
     fn append_desktop_keys_sorted_locales() {
-        let mut locale_mapping = HashMap::new();
+        let mut locale_mapping = Locales::default();
         locale_mapping.insert(
-            "fr".to_string(),
+            "fr",
             LinuxDesktopLocale {
                 icon: None,
                 name: Some("Mon App".into()),
@@ -280,7 +283,7 @@ mod tests {
             },
         );
         locale_mapping.insert(
-            "de".to_string(),
+            "de",
             LinuxDesktopLocale {
                 icon: None,
                 name: Some("Meine App".into()),
@@ -305,10 +308,10 @@ mod tests {
     }
 
     #[test]
-    fn fallback_prefers_en_over_first_sorted() {
-        let mut locale_mapping = HashMap::new();
+    fn fallback_prefers_en_even_with_an_encoding_suffix() {
+        let mut locale_mapping = Locales::default();
         locale_mapping.insert(
-            "fr".to_string(),
+            "fr",
             LinuxDesktopLocale {
                 icon: None,
                 generic_name: Some("Utilitaire".into()),
@@ -316,10 +319,18 @@ mod tests {
             },
         );
         locale_mapping.insert(
-            "en".to_string(),
+            "en.UTF-8",
             LinuxDesktopLocale {
                 icon: None,
                 generic_name: Some("Utility".into()),
+                ..Default::default()
+            },
+        );
+        // Sorted first, so it would win if `en.UTF-8` were not recognized as `en`.
+        locale_mapping.insert(
+            "de",
+            LinuxDesktopLocale {
+                generic_name: Some("Dienstprogramm".into()),
                 ..Default::default()
             },
         );
