@@ -2,7 +2,6 @@ mod bundle;
 
 use crate::bundle::{BuildArtifact, PackageType, Settings, bundle_project};
 use anyhow::Result;
-use clap::builder::{PossibleValuesParser, TypedValueParser};
 use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -43,7 +42,7 @@ pub struct Cli {
     pub example: Option<String>,
 
     /// Which bundle format to produce
-    #[arg(short, long, value_name = "FORMAT", value_parser = PossibleValuesParser::new(PackageType::all()).map(|s| PackageType::try_from(s).unwrap()))]
+    #[arg(short, long, value_name = "FORMAT", value_enum)]
     pub format: Option<PackageType>,
 
     /// Build a bundle from a target built in release mode
@@ -105,9 +104,23 @@ fn build_project_if_unbuilt(settings: &Settings) -> crate::Result<()> {
 
 /// Runs a single `cargo build`, optionally for an explicit target triple.
 fn build_target(settings: &Settings, triple: Option<&str>) -> crate::Result<()> {
+    let status = build_command(settings, triple).status()?;
+    if !status.success() {
+        anyhow::bail!(
+            "Result of `cargo build` operation was unsuccessful: {}",
+            status
+        );
+    }
+    Ok(())
+}
+
+fn build_command(settings: &Settings, triple: Option<&str>) -> process::Command {
     let mut cargo =
         process::Command::new(env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo")));
     cargo.arg("build");
+    // Without this, a workspace builds its default members instead of the
+    // package that was asked for.
+    cargo.arg(format!("--package={}", settings.package_name()));
     if let Some(triple) = triple {
         cargo.arg(format!("--target={triple}"));
     }
@@ -115,7 +128,12 @@ fn build_target(settings: &Settings, triple: Option<&str>) -> crate::Result<()> 
         cargo.arg(format!("--features={features}"));
     }
     match settings.build_artifact() {
-        BuildArtifact::Main => {}
+        // An APK packages the package's library, not a binary.
+        BuildArtifact::Main => {
+            if settings.target_os() == bundle::TargetOs::Android {
+                cargo.arg("--lib");
+            }
+        }
         BuildArtifact::Bin(name) => {
             cargo.arg(format!("--bin={name}"));
         }
@@ -139,14 +157,7 @@ fn build_target(settings: &Settings, triple: Option<&str>) -> crate::Result<()> 
     if settings.no_default_features() {
         cargo.arg("--no-default-features");
     }
-    let status = cargo.status()?;
-    if !status.success() {
-        anyhow::bail!(
-            "Result of `cargo build` operation was unsuccessful: {}",
-            status
-        );
-    }
-    Ok(())
+    cargo
 }
 
 /// Merges the per-target binaries into one universal binary with `lipo`.
@@ -200,5 +211,75 @@ fn main() {
     if let Err(error) = run() {
         bundle::print_error(&error).unwrap();
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+    use std::fs;
+
+    /// A workspace whose root is virtual and whose members are `names`.
+    fn workspace(names: &[&str]) -> tempfile::TempDir {
+        let workspace = tempfile::tempdir().unwrap();
+        let members = names
+            .iter()
+            .map(|name| format!("\"{name}\""))
+            .collect::<Vec<_>>();
+        fs::write(
+            workspace.path().join("Cargo.toml"),
+            format!(
+                "[workspace]\nmembers = [{}]\nresolver = \"2\"\n",
+                members.join(", ")
+            ),
+        )
+        .unwrap();
+        for name in names {
+            let package = workspace.path().join(name);
+            fs::create_dir_all(package.join("src")).unwrap();
+            fs::write(package.join("src/main.rs"), "fn main() {}\n").unwrap();
+            fs::write(
+                package.join("Cargo.toml"),
+                format!(
+                    "[package]\nname = \"{name}\"\nversion = \"1.0.0\"\nedition = \"2024\"\n\
+                     [package.metadata.bundle]\nidentifier = \"org.example.{name}\"\n"
+                ),
+            )
+            .unwrap();
+        }
+        workspace
+    }
+
+    #[test]
+    fn the_build_is_limited_to_the_selected_workspace_package() {
+        let workspace = workspace(&["selected", "other"]);
+        let cli = Cli::try_parse_from(["cargo-bundle", "--package", "selected", "--format", "deb"])
+            .unwrap();
+        let settings = Settings::new(workspace.path().to_path_buf(), &cli).unwrap();
+        let arguments: Vec<_> = build_command(&settings, Some("aarch64-unknown-linux-gnu"))
+            .get_args()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            arguments,
+            [
+                "build",
+                "--package=selected",
+                "--target=aarch64-unknown-linux-gnu"
+            ]
+        );
+    }
+
+    #[test]
+    fn unknown_formats_are_rejected_with_the_list_of_valid_ones() {
+        let error = Cli::try_parse_from(["cargo-bundle", "--format", "zip"])
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(
+            error.contains("appimage") && error.contains("ipa"),
+            "{error}"
+        );
     }
 }

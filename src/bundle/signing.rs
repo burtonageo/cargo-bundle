@@ -1,5 +1,6 @@
 //! Optional platform code-signing helpers.
 
+use super::settings::Notarization;
 use crate::Settings;
 use anyhow::Context;
 use std::path::Path;
@@ -64,6 +65,40 @@ fn entitlements_xml(path: &Path) -> crate::Result<String> {
     let mut xml = Vec::new();
     entitlements.to_writer_xml(&mut xml)?;
     Ok(String::from_utf8(xml)?)
+}
+
+/// Submit a signed app or DMG to Apple, wait for the verdict, and staple the
+/// ticket so the result also works offline.
+pub fn notarize_apple_path(settings: &Settings, path: &Path) -> crate::Result<()> {
+    match settings.notarization() {
+        Some(notarization) => notarize(notarization, path),
+        None => Ok(()),
+    }
+}
+
+fn notarize(notarization: &Notarization, path: &Path) -> crate::Result<()> {
+    use apple_codesign::{NotarizationUpload, Notarizer, stapling::Stapler};
+
+    let notarizer = Notarizer::from_api_key(&notarization.api_key)
+        .map_err(|error| anyhow::anyhow!("Failed to load the notarization API key: {error}"))?;
+    let upload = notarizer
+        .notarize_path(path, None)
+        .map_err(|error| anyhow::anyhow!("Failed to submit {path:?} for notarization: {error}"))?;
+    if let NotarizationUpload::UploadId(id) = upload {
+        eprintln!("Apple notarization submission ID: {id}");
+        let verdict = notarizer
+            .wait_on_notarization_and_fetch_log(&id, notarization.timeout)
+            .map_err(|error| anyhow::anyhow!("Notarization of {path:?} failed: {error}"))?;
+        verdict.into_result().map_err(|error| {
+            anyhow::anyhow!("Apple rejected {path:?} (submission {id}): {error}")
+        })?;
+    }
+    let stapler = Stapler::new()
+        .map_err(|error| anyhow::anyhow!("Failed to set up the ticket stapler: {error}"))?;
+    stapler
+        .staple_path(path)
+        .map_err(|error| anyhow::anyhow!("Failed to staple the ticket to {path:?}: {error}"))?;
+    Ok(())
 }
 
 /// Copy the configured provisioning profile to `destination` inside a bundle.

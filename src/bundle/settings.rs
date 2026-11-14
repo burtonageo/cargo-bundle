@@ -1,103 +1,115 @@
 use super::category::AppCategory;
-use super::common::print_warning;
-use super::localization::{LinuxDesktopLocale, LinuxDesktopLocalizations, OsxLocalizations};
+use super::common::{BundleName, print_warning};
+use super::localization::{
+    AppleLocalizations, LinuxDesktopLocale, LinuxDesktopLocalizations, Locales,
+};
 use cargo_metadata::{Metadata, MetadataCommand, Package, TargetKind};
-use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fmt::Display;
+use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::time::Duration;
 use target_build_utils::TargetInfo;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PackageType {
-    AndroidApk,
-    OsxBundle,
-    OsxDmg,
-    IosBundle,
-    IosIpa,
-    WindowsMsi,
-    WxsMsi,
-    WindowsBundle,
-    Deb,
-    Rpm,
-    AppImage,
-}
+mod localization_files;
+mod platform;
 
-impl std::str::FromStr for PackageType {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        PackageType::try_from(s)
-    }
+/// A bundle format. The names double as the values of `--format`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
+pub enum PackageType {
+    #[value(name = "apk")]
+    AndroidApk,
+    #[value(name = "osx")]
+    OsxBundle,
+    #[value(name = "dmg")]
+    OsxDmg,
+    #[value(name = "ios")]
+    IosBundle,
+    #[value(name = "ipa")]
+    IosIpa,
+    #[value(name = "msi")]
+    WindowsMsi,
+    #[value(name = "wxsmsi")]
+    WxsMsi,
+    #[value(name = "exe")]
+    WindowsBundle,
+    #[value(name = "deb")]
+    Deb,
+    #[value(name = "rpm")]
+    Rpm,
+    #[value(name = "appimage")]
+    AppImage,
 }
 
 impl std::fmt::Display for PackageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.short_name())
-    }
-}
-
-impl TryFrom<&str> for PackageType {
-    type Error = anyhow::Error;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        PackageType::from_short_name(s).ok_or_else(|| {
-            let all = PackageType::all()
-                .iter()
-                .map(|&s| s.to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            anyhow::anyhow!("Unsupported package type: '{s}'. Supported types are: {all}")
-        })
-    }
-}
-
-impl TryFrom<String> for PackageType {
-    type Error = anyhow::Error;
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        PackageType::try_from(s.as_str())
+        let value = clap::ValueEnum::to_possible_value(self).expect("no variant is skipped");
+        f.write_str(value.get_name())
     }
 }
 
 impl PackageType {
-    pub fn from_short_name(name: &str) -> Option<PackageType> {
-        // Other types we may eventually want to support: apk
-        match name {
-            "apk" => Some(PackageType::AndroidApk),
-            "deb" => Some(PackageType::Deb),
-            "ios" => Some(PackageType::IosBundle),
-            "ipa" => Some(PackageType::IosIpa),
-            "msi" => Some(PackageType::WindowsMsi),
-            "wxsmsi" => Some(PackageType::WxsMsi),
-            "osx" => Some(PackageType::OsxBundle),
-            "dmg" => Some(PackageType::OsxDmg),
-            "rpm" => Some(PackageType::Rpm),
-            "appimage" => Some(PackageType::AppImage),
-            "exe" => Some(PackageType::WindowsBundle),
-            _ => None,
+    /// The platform this format is for. An APK is not named here: it needs an
+    /// Android ABI, which only `--target` can give.
+    fn native_os(self) -> Option<TargetOs> {
+        match self {
+            Self::AndroidApk => None,
+            Self::OsxBundle | Self::OsxDmg => Some(TargetOs::MacOs),
+            Self::IosBundle | Self::IosIpa => Some(TargetOs::Ios),
+            Self::WindowsMsi | Self::WxsMsi | Self::WindowsBundle => Some(TargetOs::Windows),
+            Self::Deb | Self::Rpm | Self::AppImage => Some(TargetOs::Linux),
         }
     }
+}
 
-    pub const fn short_name(&self) -> &'static str {
-        match *self {
-            PackageType::AndroidApk => "apk",
-            PackageType::Deb => "deb",
-            PackageType::IosBundle => "ios",
-            PackageType::IosIpa => "ipa",
-            PackageType::WindowsMsi => "msi",
-            PackageType::WxsMsi => "wxsmsi",
-            PackageType::OsxBundle => "osx",
-            PackageType::OsxDmg => "dmg",
-            PackageType::Rpm => "rpm",
-            PackageType::AppImage => "appimage",
-            PackageType::WindowsBundle => "exe",
+/// An operating system cargo-bundle can package for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TargetOs {
+    Linux,
+    MacOs,
+    Windows,
+    Ios,
+    Android,
+}
+
+impl TargetOs {
+    pub const ALL: [Self; 5] = [
+        Self::Linux,
+        Self::MacOs,
+        Self::Windows,
+        Self::Ios,
+        Self::Android,
+    ];
+
+    /// The formats built when `--format` is not given.
+    pub fn default_formats(self) -> Vec<PackageType> {
+        match self {
+            Self::MacOs => vec![PackageType::OsxBundle, PackageType::OsxDmg],
+            Self::Android => vec![PackageType::AndroidApk],
+            Self::Ios => vec![PackageType::IosBundle],
+            // TODO: Do Rpm too, once it's implemented.
+            Self::Linux => vec![PackageType::Deb, PackageType::AppImage],
+            Self::Windows => vec![PackageType::WindowsMsi, PackageType::WindowsBundle],
         }
     }
+}
 
-    pub const fn all() -> &'static [&'static str] {
-        &[
-            "apk", "deb", "ios", "ipa", "msi", "wxsmsi", "osx", "dmg", "rpm", "appimage", "exe",
-        ]
+impl FromStr for TargetOs {
+    type Err = anyhow::Error;
+
+    /// Accepts Rust's `target_os` names.
+    fn from_str(os: &str) -> Result<Self, Self::Err> {
+        match os {
+            "linux" => Ok(Self::Linux),
+            "macos" => Ok(Self::MacOs),
+            "windows" => Ok(Self::Windows),
+            "ios" => Ok(Self::Ios),
+            "android" => Ok(Self::Android),
+            os => anyhow::bail!("Native {os} bundles not yet supported."),
+        }
     }
 }
 
@@ -106,6 +118,30 @@ pub enum BuildArtifact {
     Main,
     Bin(String),
     Example(String),
+}
+
+/// The identifier of a desktop action, which becomes the name of its
+/// `[Desktop Action ...]` group: letters, digits and `-`.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize)]
+#[serde(try_from = "String")]
+pub struct ActionId(String);
+
+impl TryFrom<String> for ActionId {
+    type Error = anyhow::Error;
+
+    fn try_from(id: String) -> Result<Self, Self::Error> {
+        anyhow::ensure!(
+            !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'),
+            "Invalid desktop action identifier {id:?}: use letters, digits and `-`"
+        );
+        Ok(Self(id))
+    }
+}
+
+impl std::fmt::Display for ActionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
 }
 
 /// A single FreeDesktop desktop action.
@@ -125,7 +161,7 @@ pub struct DesktopAction {
 
     /// Per-locale names.
     #[serde(rename = "NameLocalized", default)]
-    pub name_localized: Option<HashMap<String, String>>, // local code to translation
+    pub name_localized: Option<Locales<String>>,
 }
 
 /// Windows Authenticode signing configuration. This is available only with
@@ -153,31 +189,28 @@ pub struct LinuxSigningSettings {
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
 struct LinuxSettings {
     mime_types: Option<Vec<String>>,
     exec_args: Option<String>,
     use_terminal: Option<bool>,
-    localizations: Option<HashMap<String, LinuxDesktopLocale>>,
+    localizations: Option<Locales<LinuxDesktopLocale>>,
     startup_wm_class: Option<String>,
-    desktop_actions: Option<HashMap<String, DesktopAction>>,
+    desktop_actions: Option<BTreeMap<ActionId, DesktopAction>>,
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
 struct OsxSettings {
     frameworks: Option<Vec<String>>,
     plugins: Option<Vec<String>>,
     minimum_system_version: Option<String>,
     url_schemes: Option<Vec<String>>,
     info_plist_exts: Option<Vec<String>>,
-    localizations: Option<HashMap<String, HashMap<String, String>>>,
+    localizations: Option<Locales<BTreeMap<String, String>>>,
     dmg_background: Option<PathBuf>,
 }
 
 /// Android-only packaging configuration.
 #[derive(Clone, Debug, Default, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct AndroidSettings {
     /// `android:versionCode`; defaults to 1.
     pub version_code: Option<u32>,
@@ -186,16 +219,47 @@ pub struct AndroidSettings {
     /// Extra permissions, such as `android.permission.INTERNET`.
     #[serde(default)]
     pub permissions: Vec<String>,
+    /// A complete `AndroidManifest.xml` used instead of the generated
+    /// NativeActivity one, relative to the package manifest.
+    pub manifest: Option<PathBuf>,
     /// PEM file with the private key and certificate used to sign the APK.
     /// The APK is left unsigned, and cannot be installed, without it.
     pub signing_key: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
+struct IosSettings {
+    localizations: Option<Locales<BTreeMap<String, String>>>,
+}
+
+/// The SquashFS compression of an AppImage.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AppImageCompression {
+    /// The most compatible.
+    #[default]
+    Gzip,
+    Lz4,
+    Lzo,
+    None,
+}
+
+/// Apple notarization of macOS apps and disk images. It exists only when the
+/// request can succeed: Apple accepts hardened-runtime, timestamped code from
+/// a signing certificate.
+#[derive(Clone, Debug)]
+pub struct Notarization {
+    pub api_key: PathBuf,
+    pub timeout: Duration,
+}
+
+#[derive(Clone, Debug, Default, serde::Deserialize)]
 struct BundleSettings {
+    /// TOML files with platform localization tables, relative to the package
+    /// manifest.
+    localization_files: Option<Vec<PathBuf>>,
     // General settings:
-    name: Option<String>,
+    name: Option<BundleName>,
     identifier: Option<String>,
     icon: Option<Vec<String>>,
     version: Option<String>,
@@ -206,14 +270,17 @@ struct BundleSettings {
     long_description: Option<String>,
     /// Path to an AppStream metainfo XML file to bundle in the AppImage.
     appimage_metainfo_path: Option<String>,
-    /// SquashFS compression codec: `"gzip"` (default), `"lz4"`, `"lzo"`, or `"none"`.
-    appimage_compression: Option<String>,
+    appimage_compression: Option<AppImageCompression>,
+    /// ELF runtime to put in front of the AppImage instead of the official one.
+    appimage_runtime: Option<PathBuf>,
     deb_depends: Option<Vec<String>>,
     /// Linux-only packaging configuration.
     linux: Option<LinuxSettings>,
     /// macOS-only packaging configuration.
     #[serde(alias = "macos")]
     osx: Option<OsxSettings>,
+    /// iOS-only packaging configuration.
+    ios: Option<IosSettings>,
     /// Android-only packaging configuration.
     #[serde(default)]
     android: AndroidSettings,
@@ -230,6 +297,10 @@ struct BundleSettings {
     apple_signing_hardened_runtime: Option<bool>,
     /// Provisioning profile copied unchanged into macOS and iOS bundles.
     apple_provisioning_profile: Option<PathBuf>,
+    /// App Store Connect API key used to notarize macOS apps and disk images.
+    apple_notarization_api_key: Option<PathBuf>,
+    /// Seconds to wait for Apple's verdict; defaults to 600.
+    apple_notarization_timeout: Option<NonZeroU64>,
     /// Optional Authenticode configuration for `.exe` and `.msi` output.
     windows_signing: Option<WindowsSigningSettings>,
     /// Optional keyless Sigstore configuration for Linux release artifacts.
@@ -239,10 +310,48 @@ struct BundleSettings {
     example: Option<HashMap<String, BundleSettings>>,
 }
 
+impl BundleSettings {
+    /// The notarization to run for `formats`. Asking for one Apple would
+    /// reject, or for an iOS format, is an error rather than a late failure.
+    fn notarization(&self, formats: &[PackageType]) -> crate::Result<Option<Notarization>> {
+        let Some(api_key) = &self.apple_notarization_api_key else {
+            return Ok(None);
+        };
+        anyhow::ensure!(
+            !formats
+                .iter()
+                .any(|f| matches!(f, PackageType::IosBundle | PackageType::IosIpa)),
+            "Apple notarization is supported for macOS bundles and DMGs, not iOS bundles or IPAs"
+        );
+        if !formats
+            .iter()
+            .any(|f| matches!(f, PackageType::OsxBundle | PackageType::OsxDmg))
+        {
+            return Ok(None);
+        }
+        anyhow::ensure!(
+            self.apple_signing_p12.is_some()
+                && self.apple_signing_hardened_runtime == Some(true)
+                && self.apple_signing_timestamp_url.is_some(),
+            "Apple notarization requires apple_signing_p12, apple_signing_hardened_runtime = true \
+             and apple_signing_timestamp_url"
+        );
+        let seconds = self.apple_notarization_timeout.map_or(600, NonZeroU64::get);
+        Ok(Some(Notarization {
+            api_key: api_key.clone(),
+            timeout: Duration::from_secs(seconds),
+        }))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Settings {
     package: cargo_metadata::Package,
-    package_type: Option<PackageType>, // If `None`, use the default package type for this os
+    /// The formats to build: the requested one, else the defaults for the OS.
+    package_types: Vec<PackageType>,
+    target_os: TargetOs,
+    bundle_name: BundleName,
+    notarization: Option<Notarization>,
     /// Explicit target triples; empty means "build for the host". More than
     /// one produces a universal binary combined with `lipo` (macOS only).
     targets: Vec<(String, TargetInfo)>,
@@ -297,9 +406,40 @@ impl Settings {
             .map(|triple| Ok((triple.to_string(), TargetInfo::from_str(triple)?)))
             .collect::<crate::Result<Vec<_>>>()?;
         let features = cli.features.as_ref().map(|features| features.into());
+        let mut systems = targets
+            .iter()
+            .map(|(_, info)| info.target_os().parse::<TargetOs>());
+        let target_os = match systems.next() {
+            Some(first) => {
+                let first = first?;
+                for other in systems {
+                    anyhow::ensure!(
+                        other? == first,
+                        "All target triples must use the same operating system"
+                    );
+                }
+                first
+            }
+            // A format names its own platform, so `--format dmg` on Linux reads
+            // the macOS settings. The host decides only when nothing else does.
+            None => match package_type.and_then(PackageType::native_os) {
+                Some(os) => os,
+                None => std::env::consts::OS.parse()?,
+            },
+        };
+        anyhow::ensure!(
+            targets.len() < 2 || target_os == TargetOs::MacOs,
+            "Multiple target triples are supported only for universal macOS bundles"
+        );
+        let package_types = package_type.map_or_else(|| target_os.default_formats(), |f| vec![f]);
+        anyhow::ensure!(
+            !package_types.contains(&PackageType::AndroidApk) || target_os == TargetOs::Android,
+            "APK packaging requires an Android target, e.g. --target aarch64-linux-android"
+        );
+        let builds_apk = package_types.contains(&PackageType::AndroidApk);
         let cargo_settings = load_metadata(&current_dir)?;
         let package = Settings::find_bundle_package(cli.package.as_deref(), &cargo_settings)?;
-        let bundle_settings = Settings::bundle_settings_of_package(package)?;
+        let bundle_settings = Settings::bundle_settings_of_package(package, target_os)?;
         let workspace_dir = Settings::get_workspace_dir(current_dir.clone());
         // With multiple targets the per-target binaries are combined into a
         // universal binary living under its own `universal` directory.
@@ -310,7 +450,32 @@ impl Settings {
         };
         let target_dir =
             Settings::get_target_dir(&workspace_dir, target_dir_name, &profile, &build_artifact);
-        let (bundle_settings, mut binary_name) = match &build_artifact {
+        let (mut bundle_settings, mut binary_name) = match &build_artifact {
+            // An APK packages the package's `cdylib`, which cargo names
+            // `lib<name>.so`, or the prebuilt library given with `--binary-path`.
+            BuildArtifact::Main if builds_apk => {
+                let name = match &cli.binary_path {
+                    Some(path) => path
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .ok_or_else(|| anyhow::anyhow!("Invalid --binary-path {path:?}"))?,
+                    None => {
+                        let library = package
+                            .targets
+                            .iter()
+                            .find(|target| {
+                                target.crate_types.iter().any(|kind| kind.to_string() == "cdylib")
+                            })
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "APK packaging requires a [lib] target with crate-type = [\"cdylib\"]"
+                                )
+                            })?;
+                        format!("lib{}.so", library.name.replace('-', "_"))
+                    }
+                };
+                (bundle_settings, name)
+            }
             BuildArtifact::Main => {
                 if let Some(target) = package
                     .targets
@@ -331,13 +496,23 @@ impl Settings {
                 name.clone(),
             ),
         };
-        let binary_extension = match package_type {
-            Some(PackageType::WindowsMsi)
-            | Some(PackageType::WxsMsi)
-            | Some(PackageType::WindowsBundle) => ".exe",
-            _ => "",
-        };
-        binary_name += binary_extension;
+        localization_files::load(
+            &mut bundle_settings,
+            package
+                .manifest_path
+                .as_std_path()
+                .parent()
+                .unwrap_or(Path::new(".")),
+            target_os,
+        )?;
+        if package_types.iter().any(|t| {
+            matches!(
+                t,
+                PackageType::WindowsMsi | PackageType::WxsMsi | PackageType::WindowsBundle
+            )
+        }) {
+            binary_name += ".exe";
+        }
         let prebuilt_binary = cli.binary_path.is_some();
         let binary_path = if let Some(path) = &cli.binary_path {
             let path = if path.is_absolute() {
@@ -371,9 +546,17 @@ impl Settings {
         } else {
             Vec::new()
         };
+        let bundle_name = match &bundle_settings.name {
+            Some(name) => name.clone(),
+            None => package.name.to_string().try_into()?,
+        };
+        let notarization = bundle_settings.notarization(&package_types)?;
         Ok(Settings {
             package: package.clone(),
-            package_type,
+            package_types,
+            target_os,
+            bundle_name,
+            notarization,
             targets,
             features,
             build_artifact,
@@ -416,7 +599,7 @@ impl Settings {
 
         let target_dir = cargo.output().ok().and_then(|output| {
             let json_string = String::from_utf8(output.stdout).ok()?;
-            let json: Value = serde_json::from_str(&json_string).ok()?;
+            let json: serde_json::Value = serde_json::from_str(&json_string).ok()?;
             Some(PathBuf::from(json.get("target_directory")?.as_str()?))
         });
 
@@ -474,9 +657,12 @@ impl Settings {
         }
     }
 
-    fn bundle_settings_of_package(package: &Package) -> crate::Result<BundleSettings> {
+    fn bundle_settings_of_package(
+        package: &Package,
+        target_os: TargetOs,
+    ) -> crate::Result<BundleSettings> {
         if let Some(bundle) = package.metadata.get("bundle") {
-            return Ok(serde_json::from_value::<BundleSettings>(bundle.clone())?);
+            return platform::parse(bundle, target_os);
         }
         print_warning(&format!(
             "No [package.metadata.bundle] section in package \"{}\"",
@@ -500,6 +686,16 @@ impl Settings {
         }
     }
 
+    /// The operating system being targeted: the first `--target`'s, else the host's.
+    pub fn target_os(&self) -> TargetOs {
+        self.target_os
+    }
+
+    /// The Cargo package being bundled.
+    pub fn package_name(&self) -> &str {
+        &self.package.name
+    }
+
     /// Returns the file name of the binary being bundled.
     pub fn binary_name(&self) -> &str {
         &self.binary_name
@@ -516,29 +712,10 @@ impl Settings {
         self.prebuilt_binary
     }
 
-    /// If a specific package type was specified by the command-line, returns
-    /// that package type; otherwise, if a target triple was specified by the
-    /// command-line, returns the native package type(s) for that target;
-    /// otherwise, returns the native package type(s) for the host platform.
-    /// Fails if the host/target's native package type is not supported.
-    pub fn package_types(&self) -> crate::Result<Vec<PackageType>> {
-        if let Some(package_type) = self.package_type {
-            Ok(vec![package_type])
-        } else {
-            let target_os = if let Some((_, info)) = self.targets.first() {
-                info.target_os()
-            } else {
-                std::env::consts::OS
-            };
-            match target_os {
-                "macos" => Ok(vec![PackageType::OsxBundle, PackageType::OsxDmg]),
-                "android" => Ok(vec![PackageType::AndroidApk]),
-                "ios" => Ok(vec![PackageType::IosBundle]),
-                "linux" => Ok(vec![PackageType::Deb, PackageType::AppImage]), // TODO: Do Rpm too, once it's implemented.
-                "windows" => Ok(vec![PackageType::WindowsMsi, PackageType::WindowsBundle]),
-                os => anyhow::bail!("Native {} bundles not yet supported.", os),
-            }
-        }
+    /// The formats to build: the one given with `--format`, else the native
+    /// ones of the target (or host) operating system.
+    pub fn package_types(&self) -> &[PackageType] {
+        &self.package_types
     }
 
     /// Every target triple requested on the command line; empty when
@@ -579,10 +756,7 @@ impl Settings {
     }
 
     pub fn bundle_name(&self) -> &str {
-        self.bundle_settings
-            .name
-            .as_ref()
-            .unwrap_or(&self.package.name)
+        &self.bundle_name
     }
 
     pub fn bundle_identifier(&self) -> Cow<'_, str> {
@@ -719,8 +893,15 @@ impl Settings {
     }
 
     /// SquashFS compression codec: `"gzip"` (default), `"lz4"`, `"lzo"`, or `"none"`.
-    pub fn appimage_compression(&self) -> Option<&str> {
-        self.bundle_settings.appimage_compression.as_deref()
+    pub fn appimage_compression(&self) -> AppImageCompression {
+        self.bundle_settings
+            .appimage_compression
+            .unwrap_or_default()
+    }
+
+    /// Runtime to use instead of the downloaded official one.
+    pub fn appimage_runtime(&self) -> Option<&Path> {
+        self.bundle_settings.appimage_runtime.as_deref()
     }
 
     /// `StartupWMClass` for the `.desktop` entry.
@@ -732,7 +913,7 @@ impl Settings {
     }
 
     /// Desktop actions to emit as `[Desktop Action <id>]` groups.
-    pub fn linux_desktop_actions(&self) -> Option<&HashMap<String, DesktopAction>> {
+    pub fn linux_desktop_actions(&self) -> Option<&BTreeMap<ActionId, DesktopAction>> {
         self.bundle_settings
             .linux
             .as_ref()
@@ -782,15 +963,24 @@ impl Settings {
         )
     }
 
-    /// macOS localizations as an [`OsxLocalizations`] wrapper.
+    /// macOS localizations as an [`AppleLocalizations`] wrapper.
     ///
     /// Writes `*.lproj/InfoPlist.strings` under the Resources directory.
-    pub fn osx_localizations(&self) -> Option<OsxLocalizations<'_>> {
+    pub fn osx_localizations(&self) -> Option<AppleLocalizations<'_>> {
         self.bundle_settings
             .osx
             .as_ref()
             .and_then(|osx| osx.localizations.as_ref())
-            .map(OsxLocalizations::new)
+            .map(AppleLocalizations::new)
+    }
+
+    /// iOS localizations: `*.lproj/InfoPlist.strings` at the root of the app.
+    pub fn ios_localizations(&self) -> Option<AppleLocalizations<'_>> {
+        self.bundle_settings
+            .ios
+            .as_ref()
+            .and_then(|ios| ios.localizations.as_ref())
+            .map(AppleLocalizations::new)
     }
 
     /// Linux desktop localizations as a [`LinuxDesktopLocalizations`] wrapper.
@@ -846,6 +1036,11 @@ impl Settings {
         self.bundle_settings
             .apple_signing_hardened_runtime
             .unwrap_or(false)
+    }
+
+    /// The notarization to run on macOS output, if one is configured.
+    pub fn notarization(&self) -> Option<&Notarization> {
+        self.notarization.as_ref()
     }
 
     /// Provisioning profile embedded in macOS and iOS bundles before signing.
@@ -950,7 +1145,11 @@ impl Iterator for ResourcePaths<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppCategory, BundleSettings};
+    use super::{ActionId, AppCategory, AppImageCompression, BundleSettings};
+
+    fn strict(toml: &str) -> crate::Result<BundleSettings> {
+        super::platform::strict(toml::de::Deserializer::parse(toml)?)
+    }
     use crate::bundle::localization::DesktopKeywords;
     use std::path::PathBuf;
 
@@ -966,7 +1165,7 @@ mod tests {
             simple application.\n\
             \"\"\"\n";
         let bundle: BundleSettings = toml::from_str(toml_str).unwrap();
-        assert_eq!(bundle.name, Some("Example Application".to_string()));
+        assert_eq!(bundle.name.as_deref(), Some("Example Application"));
         assert_eq!(bundle.identifier, Some("com.example.app".to_string()));
         assert_eq!(bundle.icon, None);
         assert_eq!(bundle.version, None);
@@ -1004,10 +1203,8 @@ mod tests {
             bundle.osx.unwrap().frameworks,
             Some(vec!["WebKit.framework".into()])
         );
-        assert!(toml::from_str::<BundleSettings>("frameworks = [\"WebKit.framework\"]").is_err());
-        assert!(
-            toml::from_str::<BundleSettings>("osx_frameworks = [\"WebKit.framework\"]").is_err()
-        );
+        assert!(strict("frameworks = [\"WebKit.framework\"]").is_err());
+        assert!(strict("osx_frameworks = [\"WebKit.framework\"]").is_err());
     }
 
     #[test]
@@ -1068,59 +1265,34 @@ mod tests {
         let bins = bundle.bin.as_ref().unwrap();
         assert!(bins.contains_key("foo"));
         let foo: &BundleSettings = bins.get("foo").unwrap();
-        assert_eq!(foo.name, Some("Foo App".to_string()));
+        assert_eq!(foo.name.as_deref(), Some("Foo App"));
         assert!(bins.contains_key("bar"));
         let bar: &BundleSettings = bins.get("bar").unwrap();
-        assert_eq!(bar.name, Some("Bar App".to_string()));
+        assert_eq!(bar.name.as_deref(), Some("Bar App"));
 
         let examples = bundle.example.as_ref().unwrap();
         assert!(examples.contains_key("baz"));
         let baz: &BundleSettings = examples.get("baz").unwrap();
-        assert_eq!(baz.name, Some("Baz Example".to_string()));
+        assert_eq!(baz.name.as_deref(), Some("Baz Example"));
     }
 
     #[test]
-    fn dmg_round_trip() {
+    fn every_format_round_trips_through_its_name() {
         use super::PackageType;
-
+        use clap::ValueEnum;
+        let names: Vec<_> = PackageType::value_variants()
+            .iter()
+            .map(PackageType::to_string)
+            .collect();
         assert_eq!(
-            PackageType::from_short_name("dmg"),
-            Some(PackageType::OsxDmg)
+            names,
+            [
+                "apk", "osx", "dmg", "ios", "ipa", "msi", "wxsmsi", "exe", "deb", "rpm", "appimage"
+            ]
         );
-
-        assert_eq!(PackageType::OsxDmg.short_name(), "dmg");
-        assert_eq!(PackageType::OsxDmg.to_string(), "dmg");
-    }
-
-    #[test]
-    fn exe_round_trip() {
-        use super::PackageType;
-
-        assert_eq!(
-            PackageType::from_short_name("exe"),
-            Some(PackageType::WindowsBundle)
-        );
-
-        assert_eq!(PackageType::WindowsBundle.short_name(), "exe");
-        assert_eq!(PackageType::WindowsBundle.to_string(), "exe");
-    }
-
-    #[test]
-    fn all_package_types_are_listed() {
-        use super::PackageType;
-        let all = PackageType::all();
-        assert!(all.contains(&"dmg"), "dmg missing from PackageType::all()");
-        assert!(all.contains(&"exe"), "exe missing from PackageType::all()");
-    }
-
-    #[test]
-    fn every_listed_package_type_round_trips() {
-        use super::PackageType;
-        for name in PackageType::all() {
-            let package_type = PackageType::from_short_name(name).unwrap();
-            assert_eq!(package_type.short_name(), *name);
+        for (variant, name) in PackageType::value_variants().iter().zip(&names) {
+            assert_eq!(PackageType::from_str(name, false), Ok(*variant));
         }
-        assert!(PackageType::all().contains(&"apk") && PackageType::all().contains(&"ipa"));
     }
 
     #[test]
@@ -1143,7 +1315,7 @@ mod tests {
 
         let defaults: BundleSettings = toml::from_str("name = \"App\"").unwrap();
         assert!(defaults.android.permissions.is_empty());
-        assert!(toml::from_str::<BundleSettings>("[android]\nversion = 1").is_err());
+        assert!(strict("[android]\nversio = 1").is_err());
     }
 
     #[test]
@@ -1210,6 +1382,7 @@ mod tests {
             identifier = "com.example.appimage"
             appimage_metainfo_path = "assets/metainfo.xml"
             appimage_compression = "lz4"
+            appimage_runtime = "runtime/appimage-runtime"
 
             [linux]
             startup_wm_class = "myapp"
@@ -1226,14 +1399,18 @@ mod tests {
             bundle.appimage_metainfo_path.as_deref(),
             Some("assets/metainfo.xml")
         );
-        assert_eq!(bundle.appimage_compression.as_deref(), Some("lz4"));
+        assert_eq!(bundle.appimage_compression, Some(AppImageCompression::Lz4));
+        assert_eq!(
+            bundle.appimage_runtime.as_deref(),
+            Some(std::path::Path::new("runtime/appimage-runtime"))
+        );
         assert_eq!(
             bundle.linux.as_ref().unwrap().startup_wm_class.as_deref(),
             Some("myapp")
         );
 
         let actions = bundle.linux.unwrap().desktop_actions.unwrap();
-        let action = &actions["new-window"];
+        let action = &actions[&ActionId::try_from("new-window".to_string()).unwrap()];
         assert_eq!(action.name, "New Window");
         assert_eq!(action.exec.as_deref(), Some("myapp --new-window"));
         assert!(action.icon.is_none());

@@ -4,6 +4,59 @@ use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 
+/// Parses the SVG file at `path`.
+pub fn load_svg(path: &Path) -> crate::Result<resvg::usvg::Tree> {
+    let data = fs::read(path).with_context(|| format!("Failed to read SVG {path:?}"))?;
+    resvg::usvg::Tree::from_data(&data, &resvg::usvg::Options::default())
+        .with_context(|| format!("Failed to parse SVG {path:?}"))
+}
+
+/// Renders `tree`, stretched to fill `width` by `height` pixels.
+pub fn render_svg(
+    tree: &resvg::usvg::Tree,
+    width: u32,
+    height: u32,
+) -> crate::Result<resvg::tiny_skia::Pixmap> {
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
+        .with_context(|| format!("Cannot render a {width}x{height} image"))?;
+    let transform = resvg::tiny_skia::Transform::from_scale(
+        width as f32 / tree.size().width(),
+        height as f32 / tree.size().height(),
+    );
+    resvg::render(tree, transform, &mut pixmap.as_mut());
+    Ok(pixmap)
+}
+
+/// A bundle name: usable as one file name in every output directory, so not
+/// empty, not `.` or `..`, and without separators.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(try_from = "String")]
+pub struct BundleName(String);
+
+impl TryFrom<String> for BundleName {
+    type Error = anyhow::Error;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        let single_component = matches!(
+            Path::new(&name).components().collect::<Vec<_>>().as_slice(),
+            [Component::Normal(_)]
+        );
+        anyhow::ensure!(
+            single_component && !name.contains(['/', '\\', '\0']),
+            "The bundle name {name:?} must be a single file name; set `name` in package.metadata.bundle"
+        );
+        Ok(Self(name))
+    }
+}
+
+impl std::ops::Deref for BundleName {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Returns true if the path has a filename indicating that it is a high-desity
 /// "retina" icon.  Specifically, returns true the the file stem ends with
 /// "@2x" (a convention specified by the [Apple developer docs](
@@ -174,7 +227,7 @@ fn safe_term_attr<T: term::Terminal + ?Sized>(
     }
 }
 
-fn print_progress(step: &str, msg: &str) -> crate::Result<()> {
+pub fn print_progress(step: &str, msg: &str) -> crate::Result<()> {
     if let Some(mut output) = term::stderr() {
         safe_term_attr(&mut output, term::Attr::Bold)?;
         if output.supports_color() {
@@ -204,7 +257,9 @@ pub fn print_warning(message: &str) -> crate::Result<()> {
             output.fg(term::color::YELLOW)?;
         }
         write!(output, "warning:")?;
-        output.reset()?;
+        if output.supports_reset() {
+            output.reset()?;
+        }
         writeln!(output, " {message}")?;
         output.flush()?;
         Ok(())
@@ -256,10 +311,22 @@ pub fn print_error(error: &anyhow::Error) -> crate::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{copy_dir, create_file, is_retina, read_file, resource_relpath, symlink_file};
+    use super::{
+        BundleName, copy_dir, create_file, is_retina, read_file, resource_relpath, symlink_file,
+    };
 
     use std::io::Write;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn bundle_names_are_single_file_names() {
+        for name in ["Post Card", "Café", "a.b", ".hidden"] {
+            assert!(BundleName::try_from(name.to_string()).is_ok(), "{name}");
+        }
+        for name in ["", ".", "..", "../x", "a/b", "a\\b", "/abs", "x\0y"] {
+            assert!(BundleName::try_from(name.to_string()).is_err(), "{name:?}");
+        }
+    }
 
     #[test]
     fn create_file_with_parent_dirs() {

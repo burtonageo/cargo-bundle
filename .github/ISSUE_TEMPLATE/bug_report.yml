@@ -1,0 +1,24 @@
+name: Bug report
+description: A build, bundle, or installer did not work as expected.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Version and platform
+      description: cargo-bundle version or commit, Rust version, host OS, and target triple.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduce the problem
+      description: Exact command and a small project or relevant Cargo.toml metadata.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+      description: Include the complete error output and format. Remove private data from logs.
+    validations:
+      required: true

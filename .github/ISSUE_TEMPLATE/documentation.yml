@@ -1,0 +1,17 @@
+name: Documentation
+description: Report a missing explanation, incorrect example, or unclear page.
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page or section
+      description: A URL, file path, or heading.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What were you trying to do?
+      description: Describe the missing or incorrect information. Include your version if an example failed.
+    validations:
+      required: true
